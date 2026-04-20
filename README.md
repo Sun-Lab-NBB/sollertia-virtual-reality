@@ -416,15 +416,18 @@ Editor programmatically. The following tools are available through the bridge:
 
 Claude Code skills and AI development assets for this project are distributed through two marketplaces:
 
-- [sollertia](https://github.com/Sun-Lab-NBB/sollertia) marketplace: Provides MCP server registration and
-  configuration-specific skills via the **configuration** plugin. Install this plugin to register the
-  sollertia-shared-assets MCP server (which relays commands to the McpBridge) with compatible MCP clients.
+- [sollertia](https://github.com/Sun-Lab-NBB/sollertia) marketplace:
+    - **assets** plugin — registers the `sollertia-shared-assets` MCP server (which also relays commands to the
+      Unity Editor's `McpBridge`) and provides skills for authoring task template YAMLs and experiment configurations.
+    - **unity** plugin — provides skills that drive Unity Editor operations through the `McpBridge` relay (prefab
+      generation, scene management, Play Mode control, asset enumeration, MQTT topic reference, Display rig setup,
+      and segment prefab authoring).
 - [ataraxis](https://github.com/Sun-Lab-NBB/ataraxis) marketplace: Provides shared development skills that enforce
   coding conventions (C# style, README style, commit messages) and general-purpose codebase exploration tools via the
   **automation** plugin.
 
-Install both marketplace plugins to make all associated skills and development tools available to compatible AI coding
-agents.
+Install all three plugins (`assets`, `unity`, and `automation`) to make the full skill set available to compatible AI
+coding agents. The `unity` plugin depends on the `assets` plugin for the backing MCP server.
 
 ___
 
