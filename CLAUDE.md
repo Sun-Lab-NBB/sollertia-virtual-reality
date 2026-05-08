@@ -167,7 +167,7 @@ visual cue sequences while receiving stimuli based on behavior.
 - **MQTT integration**: Type-safe channels for communication with sollertia-experiment
 - **Configuration**: YAML-based task templates loaded at runtime
 - **Prefab generation**: `CreateTask` editor tool and `McpBridge` relay create task prefabs from template files
-- **Editor MCP bridge**: HTTP listener on `localhost:8090` that exposes 10 Unity Editor operations to MCP clients
+- **Editor MCP bridge**: HTTP listener on `localhost:8090` that exposes 12 Unity Editor operations to MCP clients
 
 ### Key patterns
 
@@ -208,9 +208,12 @@ generation and validation surface.
 ### Validating templates against prefabs
 
 The `unity:task-prefabs` skill owns `validate_prefab_against_template_tool`, which is the **only** mechanism for
-verifying that segment prefab zone positions match template values. Use it after any template or segment prefab change.
-Do not attempt to reconstruct validation by reading prefab YAML manually — the MCP validator is the single source of
-truth.
+verifying that prefabs match the template. The validator reports per-cue prefab existence plus per-segment match flags
+for cue ordering, segment Z-length, and zone positions. Use it after any template or segment prefab change. Do not
+attempt to reconstruct validation by reading prefab YAML manually — the MCP validator is the single source of truth.
+Existing cue and segment prefabs are reused by `generate_task_prefab_tool`; force regeneration after a template edit
+by deleting the affected prefabs via `delete_unity_asset_tool` (also owned by `/task-prefabs`) before re-running
+generation.
 
 ## Creating new tasks
 
@@ -221,7 +224,8 @@ truth.
 
 ## Testing workflow
 
-1. Open a scene containing the task prefab via `/scenes` (`open_scene_tool`)
+1. Open a scene containing the task prefab via `/scenes` (`open_scene_tool`; pass `unsaved_changes="save"` or
+   `"discard"` if the active scene is dirty — the tool returns an error otherwise so the user can choose)
 2. Assign an Actor in the Task Inspector
 3. Configure displays via `Window → Gimbl` (opens Settings, Actor, and Displays panels — see `/scene-setup`)
 4. Use `SimulatedLinearTreadmill` for manual testing without hardware (see `/scene-setup`)

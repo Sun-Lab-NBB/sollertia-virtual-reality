@@ -271,7 +271,8 @@ See existing configuration files in `Assets/InfiniteCorridorTask/Configurations/
 ***Note,*** the [sollertia-shared-assets](https://github.com/Sun-Lab-NBB/sollertia-shared-assets) MCP server provides a
 `validate_prefab_against_template` tool that validates configuration template files against existing prefabs via the
 McpBridge. Developers and AI agents are highly encouraged to use this tool when creating or modifying configuration
-files to ensure zone positions, segment lengths, and other spatial parameters match the actual prefab state.
+files. The validator reports per-cue prefab existence and per-segment match flags for cue ordering, segment Z-length,
+and zone positions, so spatial drift between template and prefab surfaces immediately.
 
 #### 'CreateTask' Tab
 
@@ -399,18 +400,20 @@ Unity Editor loads. This bridge enables AI agents (via the
 [sollertia-shared-assets](https://github.com/Sun-Lab-NBB/sollertia-shared-assets) MCP server) to control the Unity
 Editor programmatically. The following tools are available through the bridge:
 
-| Tool                              | Description                                                        |
-|-----------------------------------|--------------------------------------------------------------------|
-| `generate_task_prefab`            | Creates a task prefab from a YAML template                         |
-| `inspect_prefab`                  | Returns hierarchy, components, and zone details of a prefab        |
-| `validate_prefab_against_template`| Validates that prefab zone positions match the template            |
-| `list_unity_assets`               | Lists Unity assets by type within a search path                    |
-| `list_scenes`                     | Lists all scene assets and identifies the active scene             |
-| `open_scene`                      | Opens a scene in the Editor                                        |
-| `create_scene`                    | Creates a new scene from the ExperimentTemplate                    |
-| `enter_play_mode`                 | Enters Play Mode                                                   |
-| `exit_play_mode`                  | Exits Play Mode                                                    |
-| `get_play_state`                  | Returns the current play state and active scene name               |
+| Tool                              | Description                                                                            |
+|-----------------------------------|----------------------------------------------------------------------------------------|
+| `generate_task_prefab`            | Creates a task prefab from a YAML template                                             |
+| `inspect_prefab`                  | Returns hierarchy, components, and zone details of a prefab                            |
+| `validate_prefab_against_template`| Validates cue inventory, segment geometry, cue ordering, and zone positions            |
+| `delete_unity_asset`              | Deletes a regenerable asset under InfiniteCorridorTask or Scenes (protects hand-authored assets) |
+| `list_unity_assets`               | Lists Unity assets by type within a search path                                        |
+| `list_scenes`                     | Lists all scene assets and identifies the active scene                                 |
+| `open_scene`                      | Opens a scene in the Editor with explicit unsaved-edits handling                       |
+| `create_scene`                    | Creates a new scene from the ExperimentTemplate with explicit unsaved-edits handling   |
+| `inspect_scene`                   | Returns the active scene's metadata, dirty flag, and recursive root hierarchy          |
+| `enter_play_mode`                 | Enters Play Mode                                                                       |
+| `exit_play_mode`                  | Exits Play Mode                                                                        |
+| `get_play_state`                  | Returns the current play state and active scene name                                   |
 
 ### AI-Assisted Development
 
