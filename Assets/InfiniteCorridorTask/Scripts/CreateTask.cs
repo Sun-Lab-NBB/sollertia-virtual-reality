@@ -3,6 +3,7 @@
 /// </summary>
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using SL.Config;
@@ -19,6 +20,67 @@ public static class CreateTask
 {
     /// <summary>The tolerance for comparing measured prefab lengths against configured lengths.</summary>
     private const float LengthComparisonEpsilon = 0.01f;
+
+    /// <summary>
+    /// Formats a cue's centimeter length as the suffix used in cue prefab and material filenames.
+    /// Returns a culture-invariant string with up to two decimals and no trailing zeros (e.g., "30", "37.5").
+    /// </summary>
+    /// <param name="lengthCm">The cue length in centimeters.</param>
+    /// <returns>The length label used inside ``Cue_{name}_{label}cm`` asset filenames.</returns>
+    public static string FormatCueLengthLabel(float lengthCm) =>
+        lengthCm.ToString("0.##", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Computes the canonical prefab name for a segment from its cue sequence and the per-cue lengths.
+    /// Pattern: ``Segment_<lowercase-named-cues>[_g]_<total-length>cm``. The cue letters concatenate the
+    /// sequence in order, excluding any cue named ``Gray`` (treated as a structural separator). When the
+    /// sequence interleaves any Gray cue, an ``_g`` marker is inserted between the letters and the length
+    /// so layouts with and without Gray separators are visually distinct (e.g., ``Segment_abcd_200cm`` vs
+    /// ``Segment_abcd_g_240cm``). The total length sums every cue in the sequence — Gray separators
+    /// included — so asymmetric cue layouts still yield distinct identifiers.
+    /// </summary>
+    /// <param name="segment">The segment whose canonical name is computed.</param>
+    /// <param name="cueMap">A name-keyed lookup of the cues referenced by ``segment.cueSequence``.</param>
+    /// <returns>The canonical segment prefab name (without the ``.prefab`` extension).</returns>
+    public static string CanonicalSegmentName(Segment segment, Dictionary<string, Cue> cueMap)
+    {
+        bool hasGray = segment.cueSequence.Any(name => string.Equals(name, "Gray", StringComparison.Ordinal));
+        string letters = string.Concat(
+            segment
+                .cueSequence.Where(name => !string.Equals(name, "Gray", StringComparison.Ordinal))
+                .Select(name => name.ToLowerInvariant())
+        );
+        float totalLengthCm = segment.cueSequence.Sum(name => cueMap[name].lengthCm);
+        string graySuffix = hasGray ? "_g" : string.Empty;
+        return $"Segment_{letters}{graySuffix}_{FormatCueLengthLabel(totalLengthCm)}cm";
+    }
+
+    /// <summary>
+    /// Verifies every segment in the template uses the canonical ``Segment_<letters>_<length>cm`` naming.
+    /// Logs an error for each mismatch and returns false when any segment fails the check. Runs before any
+    /// prefab is built so callers can fail fast on a misnamed template.
+    /// </summary>
+    /// <param name="template">The loaded task template.</param>
+    /// <returns>True when every segment name matches the canonical name, false otherwise.</returns>
+    private static bool ValidateSegmentNaming(TaskTemplate template)
+    {
+        Dictionary<string, Cue> cueMap = template.GetCueByName();
+        bool valid = true;
+        foreach (Segment segment in template.segments)
+        {
+            string expected = CanonicalSegmentName(segment, cueMap);
+            if (!string.Equals(segment.name, expected, StringComparison.Ordinal))
+            {
+                Debug.LogError(
+                    $"ValidateSegmentNaming: Segment '{segment.name}' does not match canonical naming. "
+                        + $"Expected '{expected}'. Update the template (and any trial_structures.*.segment_name "
+                        + "references) to use the canonical name."
+                );
+                valid = false;
+            }
+        }
+        return valid;
+    }
 
     /// <summary>Creates a new Task prefab from a selected YAML configuration file via the Editor menu.</summary>
     [MenuItem("CreateTask/New Task")]
@@ -75,6 +137,14 @@ public static class CreateTask
         catch (Exception exception)
         {
             return $"error: {exception.Message}";
+        }
+
+        // Rejects templates that do not use canonical Segment_<letters>_<length>cm naming before any
+        // prefab work begins so the caller sees the expected names without partially generated assets.
+        if (!ValidateSegmentNaming(template))
+        {
+            return "error: One or more segments do not use the canonical Segment_<letters>_<length>cm naming. "
+                + "See console for the expected names.";
         }
 
         // Builds cue and segment prefabs from template data when they do not already exist
@@ -234,7 +304,11 @@ public static class CreateTask
 
         foreach (Cue cue in template.cues)
         {
-            string cuePrefabPath = Path.Combine(cuesPath, $"Cue_{cue.name}.prefab");
+            // Encodes the cue length in the asset filenames so cues that share a letter across templates
+            // (e.g., A at 30 cm in MF vs A at 40 cm in SSO) resolve to distinct prefabs and materials.
+            string lengthLabel = FormatCueLengthLabel(cue.lengthCm);
+            string cueAssetStem = $"Cue_{cue.name}_{lengthLabel}cm";
+            string cuePrefabPath = Path.Combine(cuesPath, $"{cueAssetStem}.prefab");
 
             if (AssetDatabase.LoadAssetAtPath<GameObject>(cuePrefabPath) != null)
             {
@@ -244,7 +318,7 @@ public static class CreateTask
             float lengthUnity = cue.LengthUnity(cmPerUnit);
 
             // Creates or loads the cue material
-            string materialPath = Path.Combine(materialsPath, $"Cue_{cue.name}.mat");
+            string materialPath = Path.Combine(materialsPath, $"{cueAssetStem}.mat");
             Material cueMaterial = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
 
             if (cueMaterial == null)
@@ -257,13 +331,13 @@ public static class CreateTask
                 }
 
                 cueMaterial = new Material(Shader.Find("Standard"));
-                cueMaterial.name = $"Cue_{cue.name}";
+                cueMaterial.name = cueAssetStem;
                 cueMaterial.SetTexture("_MainTex", texture);
                 AssetDatabase.CreateAsset(cueMaterial, materialPath);
             }
 
             // Creates cue GameObject with Left and Right Quad children
-            GameObject cueGameObject = new GameObject($"Cue_{cue.name}");
+            GameObject cueGameObject = new GameObject(cueAssetStem);
 
             GameObject right = new GameObject("Right");
             right.transform.SetParent(cueGameObject.transform);
@@ -354,7 +428,8 @@ public static class CreateTask
                 Cue cue = cueMap[cueName];
                 float cueLengthUnity = cue.LengthUnity(cmPerUnit);
 
-                string cuePrefabPath = Path.Combine(cuesPath, $"Cue_{cueName}.prefab");
+                string lengthLabel = FormatCueLengthLabel(cue.lengthCm);
+                string cuePrefabPath = Path.Combine(cuesPath, $"Cue_{cueName}_{lengthLabel}cm.prefab");
                 GameObject cuePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(cuePrefabPath);
 
                 if (cuePrefab == null)

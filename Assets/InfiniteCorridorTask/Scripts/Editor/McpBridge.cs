@@ -54,7 +54,8 @@ public static class McpBridge
 
     /// <summary>The HTTP listener instance.</summary>
     private static HttpListener _listener;
-    private static readonly ConcurrentQueue<HttpListenerContext> _pendingContexts = new ConcurrentQueue<HttpListenerContext>();
+    private static readonly ConcurrentQueue<HttpListenerContext> _pendingContexts =
+        new ConcurrentQueue<HttpListenerContext>();
 
     /// <summary>Starts the HTTP listener and registers the editor update callback.</summary>
     static McpBridge()
@@ -310,10 +311,13 @@ public static class McpBridge
         float[] expectedSegmentLengthsUnity = template.GetSegmentLengthsUnity();
 
         // Reports cue prefab existence on disk so callers can spot missing assets without walking each segment.
+        // Mirrors the length-suffixed path produced by CreateTask.BuildCuePrefabs so cues that share a letter
+        // across templates resolve to distinct assets.
         List<Dictionary<string, object>> cuePrefabResults = new List<Dictionary<string, object>>();
         foreach (Cue cue in template.cues)
         {
-            string cuePrefabPath = Path.Combine(cuesPath, $"Cue_{cue.name}.prefab");
+            string lengthLabel = CreateTask.FormatCueLengthLabel(cue.lengthCm);
+            string cuePrefabPath = Path.Combine(cuesPath, $"Cue_{cue.name}_{lengthLabel}cm.prefab");
             bool exists = AssetDatabase.LoadAssetAtPath<GameObject>(cuePrefabPath) != null;
             cuePrefabResults.Add(
                 new Dictionary<string, object>
