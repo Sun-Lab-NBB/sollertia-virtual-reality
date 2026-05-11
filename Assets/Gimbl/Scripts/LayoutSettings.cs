@@ -1,6 +1,7 @@
 /// <summary>
 /// Provides GUI layout configuration for Gimbl editor windows.
 /// </summary>
+#if UNITY_EDITOR
 using UnityEngine;
 
 namespace Gimbl;
@@ -99,3 +100,4 @@ public static class LayoutSettings
     /// <summary>The main box style instance for primary content.</summary>
     public static readonly MainBox MainBoxStyle = new MainBox();
 }
+#endif
