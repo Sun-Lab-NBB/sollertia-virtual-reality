@@ -150,9 +150,9 @@ public partial class ActorObject : MonoBehaviour
 
             foreach (GameObject trackObject in GameObject.FindGameObjectsWithTag("TrackCam"))
             {
-                if (trackObject.TryGetComponent<Camera>(out Camera trackCamera))
+                if (trackObject.TryGetComponent<Camera>(out Camera existingCamera))
                 {
-                    usedDisplays.Add(trackCamera.targetDisplay);
+                    usedDisplays.Add(existingCamera.targetDisplay);
                 }
             }
 
@@ -192,7 +192,7 @@ public partial class ActorObject : MonoBehaviour
             PerspectiveProjection perspectiveProjection = GetComponentInChildren<PerspectiveProjection>();
             if (perspectiveProjection != null)
             {
-                perspectiveProjection.transform.parent.transform.SetParent(parent: null);
+                perspectiveProjection.transform.parent.transform.SetParent(parent: null, worldPositionStays: true);
             }
 
             Undo.DestroyObjectImmediate(gameObject);

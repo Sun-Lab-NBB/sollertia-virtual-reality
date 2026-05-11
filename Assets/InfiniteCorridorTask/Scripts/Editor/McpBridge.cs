@@ -6,6 +6,7 @@
 /// to the corresponding Unity Editor API and returns a JSON result.
 /// </summary>
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -53,6 +54,7 @@ public static class McpBridge
 
     /// <summary>The HTTP listener instance.</summary>
     private static HttpListener _listener;
+    private static readonly ConcurrentQueue<HttpListenerContext> _pendingContexts = new ConcurrentQueue<HttpListenerContext>();
 
     /// <summary>Starts the HTTP listener and registers the editor update callback.</summary>
     static McpBridge()
@@ -60,10 +62,19 @@ public static class McpBridge
         try
         {
             _listener = new HttpListener();
+            // Registers all three loopback hostnames because HttpListener performs exact
+            // host-header matching: a client requesting "localhost" is rejected by 127.0.0.1
+            // and [::1] prefixes, even though they resolve to the same socket. The explicit
+            // numeric prefixes also work around Mono's IPv6-only resolution of "localhost".
+            _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+            _listener.Prefixes.Add($"http://[::1]:{Port}/");
             _listener.Prefixes.Add($"http://localhost:{Port}/");
             _listener.Start();
+            _listener.BeginGetContext(OnContextReceived, null);
             EditorApplication.update += Poll;
-            Debug.Log($"McpBridge: Listening on http://localhost:{Port}/");
+            Debug.Log(
+                $"McpBridge: Listening on http://127.0.0.1:{Port}/, http://[::1]:{Port}/, and http://localhost:{Port}/"
+            );
         }
         catch (Exception exception)
         {
@@ -71,23 +82,40 @@ public static class McpBridge
         }
     }
 
-    /// <summary>Checks for pending HTTP requests each editor frame and dispatches them.</summary>
-    private static void Poll()
+    /// <summary>Thread-pool callback that captures a completed request and re-arms the listener.</summary>
+    /// <param name="asyncResult">The asynchronous result for the completed BeginGetContext call.</param>
+    private static void OnContextReceived(IAsyncResult asyncResult)
     {
         if (_listener == null || !_listener.IsListening)
         {
             return;
         }
 
-        while (_listener.IsListening)
+        try
         {
-            IAsyncResult asyncResult = _listener.BeginGetContext(null, null);
-            if (!asyncResult.AsyncWaitHandle.WaitOne(0))
-            {
-                break;
-            }
-
             HttpListenerContext context = _listener.EndGetContext(asyncResult);
+            _pendingContexts.Enqueue(context);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError($"McpBridge: EndGetContext failed: {exception.Message}");
+        }
+
+        try
+        {
+            _listener.BeginGetContext(OnContextReceived, null);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError($"McpBridge: Failed to re-arm listener: {exception.Message}");
+        }
+    }
+
+    /// <summary>Drains queued HTTP requests on the editor thread and dispatches each one.</summary>
+    private static void Poll()
+    {
+        while (_pendingContexts.TryDequeue(out HttpListenerContext context))
+        {
             HandleRequest(context);
         }
     }

@@ -8,8 +8,8 @@
 /// occupancy duration, the boundary is disarmed. If the animal leaves early, the boundary remains armed.
 /// The parent StimulusTriggerZone reads the boundaryDisarmed state to determine collision behavior.
 /// </summary>
-using System.Diagnostics;
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace SL.Tasks;
 
