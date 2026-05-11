@@ -30,11 +30,11 @@ cues:
     texture: "Cue 002 - 4x1.png"
 
 segments:
-  - name: "Segment_abc_g_240cm"
+  - name: "Segment_abc_g_240cm_r180cm"
     cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
     transition_probabilities: [0.5, 0.5]
 
-  - name: "Segment_abdc_g_320cm"
+  - name: "Segment_abdc_g_320cm_r260cm"
     cue_sequence: ["A", "Gray", "B", "Gray", "D", "Gray", "C", "Gray"]
     transition_probabilities: [0.5, 0.5]
 
@@ -46,7 +46,7 @@ vr_environment:
 
 trial_structures:
   ABC:
-    segment_name: "Segment_abc_g_240cm"
+    segment_name: "Segment_abc_g_240cm_r180cm"
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
@@ -54,7 +54,7 @@ trial_structures:
     trigger_type: "lick"
 
   ABDC:
-    segment_name: "Segment_abdc_g_320cm"
+    segment_name: "Segment_abdc_g_320cm_r260cm"
     stimulus_trigger_zone_start_cm: 248.0
     stimulus_trigger_zone_end_cm: 272.0
     stimulus_location_cm: 268.0

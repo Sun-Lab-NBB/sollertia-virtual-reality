@@ -28,7 +28,7 @@ cues:
     texture: "Cue 002 - 2x1 repeat.png"
 
 segments:
-  - name: "Segment_abcd_g_240cm"
+  - name: "Segment_abcd_g_240cm_r225cm"
     cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray", "D", "Gray"]
 
 vr_environment:
@@ -39,7 +39,7 @@ vr_environment:
 
 trial_structures:
   ABCD:
-    segment_name: "Segment_abcd_g_240cm"
+    segment_name: "Segment_abcd_g_240cm_r225cm"
     stimulus_trigger_zone_start_cm: 218.0
     stimulus_trigger_zone_end_cm: 232.0
     stimulus_location_cm: 228.675

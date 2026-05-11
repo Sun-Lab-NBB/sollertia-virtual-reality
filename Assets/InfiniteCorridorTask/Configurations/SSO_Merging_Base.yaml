@@ -40,7 +40,7 @@ cues:
     texture: "Cue 014 - 4x1.png"
 
 segments:
-  - name: "Segment_agfe_g_320cm"
+  - name: "Segment_agfe_g_320cm_r180cm"
     cue_sequence: ["A", "Gray", "G", "Gray", "F", "Gray", "E", "Gray"]
 
 vr_environment:
@@ -51,7 +51,7 @@ vr_environment:
 
 trial_structures:
   AGFE:
-    segment_name: "Segment_agfe_g_320cm"
+    segment_name: "Segment_agfe_g_320cm_r180cm"
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0

@@ -31,19 +31,25 @@ public static class CreateTask
         lengthCm.ToString("0.##", CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Computes the canonical prefab name for a segment from its cue sequence and the per-cue lengths.
-    /// Pattern: ``Segment_<lowercase-named-cues>[_g]_<total-length>cm``. The cue letters concatenate the
-    /// sequence in order, excluding any cue named ``Gray`` (treated as a structural separator). When the
-    /// sequence interleaves any Gray cue, an ``_g`` marker is inserted between the letters and the length
-    /// so layouts with and without Gray separators are visually distinct (e.g., ``Segment_abcd_200cm`` vs
-    /// ``Segment_abcd_g_240cm``). The total length sums every cue in the sequence — Gray separators
-    /// included — so asymmetric cue layouts still yield distinct identifiers.
+    /// Computes the canonical prefab name for a segment from its cue sequence, total length, and (when
+    /// the segment has an associated trial structure) the trigger zone configuration baked into the prefab.
+    /// Pattern: ``Segment_<lowercase-named-cues>[_g]_<total-length>cm[_<r|o><zone-center>cm]``. The cue
+    /// letters concatenate the sequence in order, excluding any cue named ``Gray`` (treated as a structural
+    /// separator). The ``_g`` marker appears when any Gray cue interleaves the sequence so layouts with
+    /// and without Gray separators are visually distinct. The total length sums every cue in the sequence
+    /// — Gray separators included — so asymmetric cue layouts still yield distinct identifiers. When a
+    /// trial structure references the segment, a zone marker is appended: ``r`` for lick (reward) zones,
+    /// ``o`` for occupancy (aversion) zones, followed by the zone center in centimeters. This ensures two
+    /// segments that share cue geometry but differ in trigger type or zone placement resolve to distinct
+    /// prefabs (e.g., ``Segment_abcd_g_240cm_r225cm`` vs ``Segment_abcd_g_240cm_r105cm``).
     /// </summary>
     /// <param name="segment">The segment whose canonical name is computed.</param>
-    /// <param name="cueMap">A name-keyed lookup of the cues referenced by ``segment.cueSequence``.</param>
+    /// <param name="template">The task template owning the segment; consulted for cue lengths and any
+    /// trial structure referencing the segment.</param>
     /// <returns>The canonical segment prefab name (without the ``.prefab`` extension).</returns>
-    public static string CanonicalSegmentName(Segment segment, Dictionary<string, Cue> cueMap)
+    public static string CanonicalSegmentName(Segment segment, TaskTemplate template)
     {
+        Dictionary<string, Cue> cueMap = template.GetCueByName();
         bool hasGray = segment.cueSequence.Any(name => string.Equals(name, "Gray", StringComparison.Ordinal));
         string letters = string.Concat(
             segment
@@ -52,7 +58,17 @@ public static class CreateTask
         );
         float totalLengthCm = segment.cueSequence.Sum(name => cueMap[name].lengthCm);
         string graySuffix = hasGray ? "_g" : string.Empty;
-        return $"Segment_{letters}{graySuffix}_{FormatCueLengthLabel(totalLengthCm)}cm";
+        string baseName = $"Segment_{letters}{graySuffix}_{FormatCueLengthLabel(totalLengthCm)}cm";
+
+        TrialStructure trial = template.GetTrialStructureForSegment(segment.name);
+        if (trial == null)
+        {
+            return baseName;
+        }
+
+        string typeMarker = string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal) ? "o" : "r";
+        float zoneCenterCm = (trial.stimulusTriggerZoneStartCm + trial.stimulusTriggerZoneEndCm) / 2f;
+        return $"{baseName}_{typeMarker}{FormatCueLengthLabel(zoneCenterCm)}cm";
     }
 
     /// <summary>
@@ -64,11 +80,10 @@ public static class CreateTask
     /// <returns>True when every segment name matches the canonical name, false otherwise.</returns>
     private static bool ValidateSegmentNaming(TaskTemplate template)
     {
-        Dictionary<string, Cue> cueMap = template.GetCueByName();
         bool valid = true;
         foreach (Segment segment in template.segments)
         {
-            string expected = CanonicalSegmentName(segment, cueMap);
+            string expected = CanonicalSegmentName(segment, template);
             if (!string.Equals(segment.name, expected, StringComparison.Ordinal))
             {
                 Debug.LogError(

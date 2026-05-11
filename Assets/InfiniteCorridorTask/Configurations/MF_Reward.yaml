@@ -44,7 +44,7 @@ cues:
     texture: "Cue 005 - 2x1 repeat.png"
 
 segments:
-  - name: "Segment_abcdefgh_400cm"
+  - name: "Segment_abcdefgh_400cm_r375cm"
     cue_sequence: ["A", "B", "C", "D", "E", "F", "G", "H"]
 
 vr_environment:
@@ -55,7 +55,7 @@ vr_environment:
 
 trial_structures:
   cyclic_8_cue:
-    segment_name: "Segment_abcdefgh_400cm"
+    segment_name: "Segment_abcdefgh_400cm_r375cm"
     stimulus_trigger_zone_start_cm: 357.5
     stimulus_trigger_zone_end_cm: 392.5
     stimulus_location_cm: 388.5
