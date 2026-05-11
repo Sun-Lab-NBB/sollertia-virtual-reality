@@ -96,7 +96,5 @@ crashlytics-build.properties
 /Assets/VRSettings/Displays/*
 !/Assets/VRSettings/Displays/Display.asset*
 
-
-# /Assets/Scenes/*
-!/Assets/Scenes/ExperimentTemplate.scenetemplate*
-!/Assets/Scenes/ExperimentTemplate.unity*
+# Scenes, generated task prefabs, generated cue prefabs, and authored segment prefabs are all
+# tracked so a fresh checkout reconstitutes the full asset graph required by every committed scene.
