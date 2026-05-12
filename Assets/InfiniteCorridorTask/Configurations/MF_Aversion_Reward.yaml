@@ -4,8 +4,6 @@
 #          Segment EFGH with the rewarding stimulus (water) trigger zone in cue H.
 # Related: MF_Reward (the base version of this task that only includes the reward zone)
 
-cue_offset_cm: 10.0
-
 cues:
   - name: "Gray" # There isn't actually any gray regions in this task
     code: 0
@@ -44,34 +42,30 @@ cues:
     length_cm: 50.0
     texture: "Cue 005 - 2x1 repeat.png"
 
-segments:
-  - name: "abcd"
-    cue_sequence: ["A", "B", "C", "D"]
-    transition_probabilities: [0.0, 1.0]
-
-  - name: "efgh"
-    cue_sequence: ["E", "F", "G", "H"]
-    transition_probabilities: [1.0, 0.0]
-
 vr_environment:
   corridor_spacing_cm: 20.0
   segments_per_corridor: 3
   padding_prefab_name: "Padding"
   cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
 
 trial_structures:
   ABCD:
-    segment_name: "abcd"
+    cue_sequence: ["A", "B", "C", "D"]
     stimulus_trigger_zone_start_cm: 107.5
     stimulus_trigger_zone_end_cm: 142.5
     stimulus_location_cm: 157.5
     show_stimulus_collision_boundary: false
     trigger_type: "occupancy"
+    transitions:
+      EFGH: 1.0
 
   EFGH:
-    segment_name: "efgh"
+    cue_sequence: ["E", "F", "G", "H"]
     stimulus_trigger_zone_start_cm: 157.5
     stimulus_trigger_zone_end_cm: 192.5
     stimulus_location_cm: 188.5
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
+    transitions:
+      ABCD: 1.0

@@ -3,8 +3,6 @@
 # Layout:  Segment A-Gray-B-Gray-C-Gray-D-Gray (8 cues x 30 cm = 240 cm) with reward trigger zone in the last Gray (after D).
 # Related: MF_Reward_Shift (same geometry with the reward trigger zone moved to the middle Gray between B and C).
 
-cue_offset_cm: 10.0
-
 cues:
   - name: "Gray"
     code: 0
@@ -27,19 +25,16 @@ cues:
     length_cm: 30.0
     texture: "Cue 002 - 2x1 repeat.png"
 
-segments:
-  - name: "abcd"
-    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray", "D", "Gray"]
-
 vr_environment:
   corridor_spacing_cm: 20.0
   segments_per_corridor: 3
   padding_prefab_name: "Padding"
   cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
 
 trial_structures:
   ABCD:
-    segment_name: "abcd"
+    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray", "D", "Gray"]
     stimulus_trigger_zone_start_cm: 218.0
     stimulus_trigger_zone_end_cm: 232.0
     stimulus_location_cm: 228.675

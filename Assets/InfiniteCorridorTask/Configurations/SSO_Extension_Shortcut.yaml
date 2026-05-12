@@ -5,8 +5,6 @@
 #          Segment ABDC with the rewarding stimulus (water) trigger zone in cue C.
 # Related: SSO_Shared_Base (ABC base training), SSO_Shortcut_Base (ABDC base training)
 
-cue_offset_cm: 10.0
-
 cues:
   - name: "Gray"
     code: 0
@@ -29,34 +27,32 @@ cues:
     length_cm: 40.0
     texture: "Cue 002 - 4x1.png"
 
-segments:
-  - name: "abc"
-    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
-    transition_probabilities: [0.5, 0.5]
-
-  - name: "abdc"
-    cue_sequence: ["A", "Gray", "B", "Gray", "D", "Gray", "C", "Gray"]
-    transition_probabilities: [0.5, 0.5]
-
 vr_environment:
   corridor_spacing_cm: 20.0
   segments_per_corridor: 3
   padding_prefab_name: "Padding"
   cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
 
 trial_structures:
   ABC:
-    segment_name: "abc"
+    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
+    transitions:
+      ABC: 0.5
+      ABDC: 0.5
 
   ABDC:
-    segment_name: "abdc"
+    cue_sequence: ["A", "Gray", "B", "Gray", "D", "Gray", "C", "Gray"]
     stimulus_trigger_zone_start_cm: 248.0
     stimulus_trigger_zone_end_cm: 272.0
     stimulus_location_cm: 268.0
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
+    transitions:
+      ABC: 0.5
+      ABDC: 0.5

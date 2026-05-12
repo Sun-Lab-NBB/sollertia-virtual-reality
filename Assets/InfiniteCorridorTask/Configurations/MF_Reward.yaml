@@ -3,8 +3,6 @@
 # Layout:  Segment ABCDEFGH with the rewarding stimulus (water) trigger zone in cue H.
 # Related: MF_Aversion_Reward (extends the task to allow studying both reward and aversion coding).
 
-cue_offset_cm: 10.0
-
 cues:
   - name: "Gray" # This is a placeholder, the task does not use Gray cues.
     code: 0
@@ -43,19 +41,16 @@ cues:
     length_cm: 50.0
     texture: "Cue 005 - 2x1 repeat.png"
 
-segments:
-  - name: "abcdefgh"
-    cue_sequence: ["A", "B", "C", "D", "E", "F", "G", "H"]
-
 vr_environment:
   corridor_spacing_cm: 20.0
   segments_per_corridor: 3
   padding_prefab_name: "Padding"
   cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
 
 trial_structures:
   cyclic_8_cue:
-    segment_name: "abcdefgh"
+    cue_sequence: ["A", "B", "C", "D", "E", "F", "G", "H"]
     stimulus_trigger_zone_start_cm: 357.5
     stimulus_trigger_zone_end_cm: 392.5
     stimulus_location_cm: 388.5

@@ -2,19 +2,20 @@
 /// Provides the TrialStructure class that defines the spatial configuration of a trial structure for Unity prefabs.
 /// </summary>
 using System;
+using System.Collections.Generic;
 
 namespace SL.Config
 {
     /// <summary>
     /// Defines the spatial configuration of a trial structure for Unity prefabs.
-    /// Contains segment mapping, zone positions, and visibility settings.
-    /// This mirrors the TrialStructure class from sollertia-shared-assets task_template_data module.
+    /// Contains the trial's cue sequence, zone positions, optional transition probabilities, and visibility settings.
+    /// This mirrors the TrialStructure class from sollertia-shared-assets vr_configuration module.
     /// </summary>
     [Serializable]
     public class TrialStructure
     {
-        /// <summary>The name of the Unity Segment this trial structure is based on.</summary>
-        public string segmentName;
+        /// <summary>The ordered sequence of cue names that comprise this trial's segment.</summary>
+        public List<string> cueSequence;
 
         /// <summary>The position of the trial stimulus trigger zone starting boundary, in centimeters.</summary>
         public float stimulusTriggerZoneStartCm;
@@ -39,5 +40,16 @@ namespace SL.Config
         /// and OccupancyGuidanceZone children.
         /// </summary>
         public string triggerType;
+
+        /// <summary>
+        /// The optional probability distribution over the trial names that may follow this trial during corridor
+        /// traversal. Keys must reference other trial names defined on the same TaskTemplate. If provided, the
+        /// values must sum to 1.0. Sparse: omitted keys carry implicit zero probability. When null or empty, the
+        /// Task samples the next trial uniformly at random over all defined trial names.
+        /// </summary>
+        public Dictionary<string, float> transitions;
+
+        /// <summary>Determines whether transition probabilities are defined for this trial.</summary>
+        public bool HasTransitions => transitions != null && transitions.Count > 0;
     }
 }

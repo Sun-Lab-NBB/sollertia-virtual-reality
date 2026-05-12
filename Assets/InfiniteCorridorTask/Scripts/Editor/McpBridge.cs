@@ -334,72 +334,69 @@ namespace SL.Tasks
                 );
             }
 
-            List<Dictionary<string, object>> segmentResults = new List<Dictionary<string, object>>();
-            for (int segmentIndex = 0; segmentIndex < template.segments.Count; segmentIndex++)
+            List<Dictionary<string, object>> trialResults = new List<Dictionary<string, object>>();
+            string[] trialNames = template.GetTrialNames();
+            for (int trialIndex = 0; trialIndex < trialNames.Length; trialIndex++)
             {
-                Segment segment = template.segments[segmentIndex];
-                // Templates carry only the segment base name; the prefab on disk uses the canonical
-                // geometry-and-zone-encoded form computed from the full template state.
-                string canonicalSegmentName = CreateTask.CanonicalSegmentName(segment, template);
+                string trialName = trialNames[trialIndex];
+                TrialStructure trial = template.trialStructures[trialName];
+                // Templates do not carry a segment name field; the canonical prefab name is derived from the
+                // trial's cue sequence and trigger zone configuration.
+                string canonicalSegmentName = CreateTask.CanonicalSegmentName(trial, template);
                 string segmentPath = Path.Combine(prefabsPath, $"{canonicalSegmentName}.prefab");
                 GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(segmentPath);
 
-                Dictionary<string, object> segmentResult = new Dictionary<string, object>
+                Dictionary<string, object> trialResult = new Dictionary<string, object>
                 {
-                    { "segment", segment.name },
+                    { "trial", trialName },
                     { "canonical_name", canonicalSegmentName },
                     { "prefab_exists", prefab != null },
                 };
 
                 if (prefab == null)
                 {
-                    segmentResults.Add(segmentResult);
+                    trialResults.Add(trialResult);
                     continue;
                 }
 
-                // Compares the cue ordering encoded in the prefab against the template's cue sequence.
+                // Compares the cue ordering encoded in the prefab against the trial's cue sequence.
                 List<string> actualCueOrder = GetCueOrderFromSegmentPrefab(prefab);
-                segmentResult["cue_order"] = actualCueOrder;
-                segmentResult["expected_cue_order"] = segment.cueSequence;
-                segmentResult["cue_order_match"] = actualCueOrder.SequenceEqual(segment.cueSequence);
+                trialResult["cue_order"] = actualCueOrder;
+                trialResult["expected_cue_order"] = trial.cueSequence;
+                trialResult["cue_order_match"] = actualCueOrder.SequenceEqual(trial.cueSequence);
 
                 // Compares the prefab's measured z-axis length against the configured cue-sum length.
                 float measuredLengthUnity = Utility.GetPrefabLength(prefab);
-                float expectedLengthUnity = expectedSegmentLengthsUnity[segmentIndex];
-                segmentResult["segment_length_unity"] = measuredLengthUnity;
-                segmentResult["expected_segment_length_unity"] = expectedLengthUnity;
-                segmentResult["segment_length_match"] =
+                float expectedLengthUnity = expectedSegmentLengthsUnity[trialIndex];
+                trialResult["segment_length_unity"] = measuredLengthUnity;
+                trialResult["expected_segment_length_unity"] = expectedLengthUnity;
+                trialResult["segment_length_match"] =
                     Mathf.Abs(measuredLengthUnity - expectedLengthUnity) < LengthComparisonEpsilon;
 
-                // Compares the StimulusTriggerZone position and size against the trial structure if one exists.
-                TrialStructure trial = template.GetTrialStructureForSegment(segment.name);
-                if (trial != null)
+                // Compares the StimulusTriggerZone position and size against the trial's expected values.
+                StimulusTriggerZone zone = prefab.GetComponentInChildren<StimulusTriggerZone>();
+                trialResult["has_zone"] = zone != null;
+
+                if (zone != null)
                 {
-                    StimulusTriggerZone zone = prefab.GetComponentInChildren<StimulusTriggerZone>();
-                    segmentResult["has_zone"] = zone != null;
+                    float actualZ = zone.transform.localPosition.z;
+                    BoxCollider collider = zone.GetComponent<BoxCollider>();
+                    float actualSize = collider != null ? collider.size.z : 0f;
 
-                    if (zone != null)
-                    {
-                        float actualZ = zone.transform.localPosition.z;
-                        BoxCollider collider = zone.GetComponent<BoxCollider>();
-                        float actualSize = collider != null ? collider.size.z : 0f;
+                    float expectedCenter =
+                        (trial.stimulusTriggerZoneStartCm + trial.stimulusTriggerZoneEndCm) / (2f * cmPerUnit);
+                    float expectedSize =
+                        (trial.stimulusTriggerZoneEndCm - trial.stimulusTriggerZoneStartCm) / cmPerUnit;
 
-                        float expectedCenter =
-                            (trial.stimulusTriggerZoneStartCm + trial.stimulusTriggerZoneEndCm) / (2f * cmPerUnit);
-                        float expectedSize =
-                            (trial.stimulusTriggerZoneEndCm - trial.stimulusTriggerZoneStartCm) / cmPerUnit;
-
-                        segmentResult["zone_z"] = actualZ;
-                        segmentResult["expected_zone_z"] = expectedCenter;
-                        segmentResult["zone_size"] = actualSize;
-                        segmentResult["expected_zone_size"] = expectedSize;
-                        segmentResult["zone_z_match"] = Mathf.Abs(actualZ - expectedCenter) < LengthComparisonEpsilon;
-                        segmentResult["zone_size_match"] =
-                            Mathf.Abs(actualSize - expectedSize) < LengthComparisonEpsilon;
-                    }
+                    trialResult["zone_z"] = actualZ;
+                    trialResult["expected_zone_z"] = expectedCenter;
+                    trialResult["zone_size"] = actualSize;
+                    trialResult["expected_zone_size"] = expectedSize;
+                    trialResult["zone_z_match"] = Mathf.Abs(actualZ - expectedCenter) < LengthComparisonEpsilon;
+                    trialResult["zone_size_match"] = Mathf.Abs(actualSize - expectedSize) < LengthComparisonEpsilon;
                 }
 
-                segmentResults.Add(segmentResult);
+                trialResults.Add(trialResult);
             }
 
             return Ok(
@@ -407,7 +404,7 @@ namespace SL.Tasks
                 {
                     { "template_name", templateName },
                     { "cue_prefabs", cuePrefabResults },
-                    { "segments", segmentResults },
+                    { "trials", trialResults },
                 }
             );
         }

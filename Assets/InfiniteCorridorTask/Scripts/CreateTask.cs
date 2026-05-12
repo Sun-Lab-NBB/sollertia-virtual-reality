@@ -31,83 +31,45 @@ namespace SL.Tasks
             lengthCm.ToString("0.##", CultureInfo.InvariantCulture);
 
         /// <summary>
-        /// Computes the base name a template author writes in a segment's ``name`` field, derived purely from
-        /// the cue sequence. Returns the lowercase concatenation of cue letters in sequence order, with any
-        /// cue named ``Gray`` excluded (treated as a structural separator). This is the human-facing identifier
-        /// that ``trial_structures.*.segment_name`` references and matches the cue-side convention where each
-        /// cue carries a simple ``name`` (e.g., ``"A"``) and only the full prefab name encodes geometry.
+        /// Computes the base name of a trial's segment prefab, derived purely from the cue sequence. Returns the
+        /// lowercase concatenation of cue letters in sequence order, with any cue named ``Gray`` excluded (treated
+        /// as a structural separator). This is the human-facing identifier embedded in the canonical prefab name,
+        /// mirroring the cue-side convention where each cue carries a simple ``name`` (e.g., ``"A"``) and only the
+        /// full prefab name encodes geometry.
         /// </summary>
-        /// <param name="segment">The segment whose base name is computed.</param>
-        /// <returns>The base segment name as it should appear in the template YAML.</returns>
-        public static string BaseSegmentName(Segment segment) =>
+        /// <param name="trial">The trial structure whose base segment name is computed.</param>
+        /// <returns>The base segment name derived from the trial's cue sequence.</returns>
+        public static string BaseSegmentName(TrialStructure trial) =>
             string.Concat(
-                segment
+                trial
                     .cueSequence.Where(name => !string.Equals(name, "Gray", StringComparison.Ordinal))
                     .Select(name => name.ToLowerInvariant())
             );
 
         /// <summary>
-        /// Computes the canonical prefab name for a segment from its base name, total cue length, and (when
-        /// the segment has an associated trial structure) the trigger zone configuration baked into the prefab.
-        /// Pattern: ``Segment_<base-name>[_g]_<total-length>cm[_<r|o><zone-center>cm]``. The ``_g`` marker
-        /// appears when any Gray cue interleaves the sequence so layouts with and without Gray separators are
-        /// visually distinct. The total length sums every cue in the sequence — Gray separators included — so
-        /// asymmetric cue layouts still yield distinct identifiers. When a trial structure references the
-        /// segment, a zone marker is appended: ``r`` for lick (reward) zones, ``o`` for occupancy (aversion)
-        /// zones, followed by the zone center in centimeters. Templates write only the base name; the canonical
-        /// prefab name is computed at generation time, mirroring the cue convention (``Cue_A_30cm.prefab``
-        /// generated from a cue with ``name: "A"`` and ``length_cm: 30``).
+        /// Computes the canonical prefab name for a trial's segment from the trial's cue sequence, total cue
+        /// length, and trigger zone configuration. Pattern:
+        /// ``Segment_<base-name>[_g]_<total-length>cm_<r|o><zone-center>cm``. The ``_g`` marker appears when any
+        /// Gray cue interleaves the sequence so layouts with and without Gray separators are visually distinct.
+        /// The total length sums every cue in the sequence — Gray separators included — so asymmetric cue layouts
+        /// still yield distinct identifiers. The zone marker is ``r`` for lick (reward) zones, ``o`` for
+        /// occupancy (aversion) zones, followed by the zone center in centimeters.
         /// </summary>
-        /// <param name="segment">The segment whose canonical name is computed.</param>
-        /// <param name="template">The task template owning the segment; consulted for cue lengths and any
-        /// trial structure referencing the segment.</param>
+        /// <param name="trial">The trial structure whose canonical segment name is computed.</param>
+        /// <param name="template">The task template owning the trial; consulted for cue lengths.</param>
         /// <returns>The canonical segment prefab name (without the ``.prefab`` extension).</returns>
-        public static string CanonicalSegmentName(Segment segment, TaskTemplate template)
+        public static string CanonicalSegmentName(TrialStructure trial, TaskTemplate template)
         {
             Dictionary<string, Cue> cueMap = template.GetCueByName();
-            bool hasGray = segment.cueSequence.Any(name => string.Equals(name, "Gray", StringComparison.Ordinal));
-            string letters = BaseSegmentName(segment);
-            float totalLengthCm = segment.cueSequence.Sum(name => cueMap[name].lengthCm);
+            bool hasGray = trial.cueSequence.Any(name => string.Equals(name, "Gray", StringComparison.Ordinal));
+            string letters = BaseSegmentName(trial);
+            float totalLengthCm = trial.cueSequence.Sum(name => cueMap[name].lengthCm);
             string graySuffix = hasGray ? "_g" : string.Empty;
             string geometryName = $"Segment_{letters}{graySuffix}_{FormatCueLengthLabel(totalLengthCm)}cm";
-
-            TrialStructure trial = template.GetTrialStructureForSegment(segment.name);
-            if (trial == null)
-            {
-                return geometryName;
-            }
 
             string typeMarker = string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal) ? "o" : "r";
             float zoneCenterCm = (trial.stimulusTriggerZoneStartCm + trial.stimulusTriggerZoneEndCm) / 2f;
             return $"{geometryName}_{typeMarker}{FormatCueLengthLabel(zoneCenterCm)}cm";
-        }
-
-        /// <summary>
-        /// Verifies every segment in the template uses the base-name convention: ``segment.name`` must equal
-        /// the lowercase concatenation of non-Gray cue letters returned by <see cref="BaseSegmentName"/>.
-        /// Logs an error for each mismatch and returns false when any segment fails the check. Runs before any
-        /// prefab is built so callers can fail fast on a misnamed template.
-        /// </summary>
-        /// <param name="template">The loaded task template.</param>
-        /// <returns>True when every segment name matches its derived base name, false otherwise.</returns>
-        private static bool ValidateSegmentNaming(TaskTemplate template)
-        {
-            bool valid = true;
-            foreach (Segment segment in template.segments)
-            {
-                string expected = BaseSegmentName(segment);
-                if (!string.Equals(segment.name, expected, StringComparison.Ordinal))
-                {
-                    Debug.LogError(
-                        $"ValidateSegmentNaming: Segment '{segment.name}' does not match its base name '{expected}'. "
-                            + "The segment name should be the lowercase concatenation of non-Gray cue letters from "
-                            + "cue_sequence. Update the template (and any trial_structures.*.segment_name references) "
-                            + $"to use '{expected}'."
-                    );
-                    valid = false;
-                }
-            }
-            return valid;
         }
 
         /// <summary>Creates a new Task prefab from a selected YAML configuration file via the Editor menu.</summary>
@@ -177,14 +139,6 @@ namespace SL.Tasks
                 return $"error: {exception.Message}";
             }
 
-            // Rejects templates that do not use canonical Segment_<letters>_<length>cm naming before any
-            // prefab work begins so the caller sees the expected names without partially generated assets.
-            if (!ValidateSegmentNaming(template))
-            {
-                return "error: One or more segments do not use the canonical Segment_<letters>_<length>cm naming. "
-                    + "See console for the expected names.";
-            }
-
             // Builds cue and segment prefabs from template data when they do not already exist
             if (!BuildCuePrefabs(template))
             {
@@ -207,13 +161,16 @@ namespace SL.Tasks
                 return $"error: No padding found at {paddingPath}";
             }
 
-            int segmentCount = template.segments.Count;
+            string[] trialNames = template.GetTrialNames();
+            int trialCount = trialNames.Length;
 
             // Loads segment prefabs by their canonical (geometry-and-zone-encoded) prefab name.
-            GameObject[] segmentPrefabs = new GameObject[segmentCount];
-            for (int i = 0; i < segmentCount; i++)
+            GameObject[] segmentPrefabs = new GameObject[trialCount];
+            TrialStructure[] trials = new TrialStructure[trialCount];
+            for (int i = 0; i < trialCount; i++)
             {
-                string canonicalName = CanonicalSegmentName(template.segments[i], template);
+                trials[i] = template.trialStructures[trialNames[i]];
+                string canonicalName = CanonicalSegmentName(trials[i], template);
                 string segmentPath = Path.Combine(prefabsPath, $"{canonicalName}.prefab");
                 segmentPrefabs[i] = AssetDatabase.LoadAssetAtPath<GameObject>(segmentPath);
 
@@ -227,12 +184,12 @@ namespace SL.Tasks
             float[] measuredSegmentLengths = Utility.GetSegmentLengths(segmentPrefabs);
             float[] segmentLengths = template.GetSegmentLengthsUnity();
 
-            for (int i = 0; i < segmentCount; i++)
+            for (int i = 0; i < trialCount; i++)
             {
                 if (Mathf.Abs(measuredSegmentLengths[i] - segmentLengths[i]) > LengthComparisonEpsilon)
                 {
                     Debug.LogWarning(
-                        $"For {template.segments[i].name}, there is a mismatch between the prefab "
+                        $"For trial {trialNames[i]}, there is a mismatch between the prefab "
                             + $"length ({measuredSegmentLengths[i]}) and the sum of all the cue "
                             + $"lengths ({segmentLengths[i]}). Using {segmentLengths[i]} for the "
                             + "length of the segment."
@@ -257,12 +214,12 @@ namespace SL.Tasks
             float zShift;
 
             // Iterates through all possible corridor combinations
-            for (int i = 0; i < Mathf.Pow(segmentCount, depth); i++)
+            for (int i = 0; i < Mathf.Pow(trialCount, depth); i++)
             {
                 // Generates the combination for the current index
                 for (int j = 0; j < depth; j++)
                 {
-                    corridorSegments[j] = i / (int)Mathf.Pow(segmentCount, depth - j - 1) % segmentCount;
+                    corridorSegments[j] = i / (int)Mathf.Pow(trialCount, depth - j - 1) % trialCount;
                 }
 
                 GameObject corridor = new GameObject($"Corridor{string.Join("", corridorSegments)}");
@@ -294,13 +251,12 @@ namespace SL.Tasks
                     }
                     else
                     {
-                        // For the first segment, sets showBoundary from config's trial visibility
+                        // For the first segment, sets showBoundary from the trial's visibility setting.
                         StimulusTriggerZone stimulusTriggerZone =
                             instance.GetComponentInChildren<StimulusTriggerZone>();
                         if (stimulusTriggerZone != null)
                         {
-                            string segmentName = template.segments[segment].name;
-                            stimulusTriggerZone.showBoundary = template.GetSegmentMarkerVisibility(segmentName);
+                            stimulusTriggerZone.showBoundary = trials[segment].showStimulusCollisionBoundary;
                         }
                     }
 
@@ -480,8 +436,9 @@ namespace SL.Tasks
         }
 
         /// <summary>
-        /// Creates segment prefabs for segments that do not yet have a prefab in the Prefabs directory.
-        /// Each segment prefab contains cue instances, floor, walls, and trigger/reset zones.
+        /// Creates segment prefabs for trials that do not yet have a prefab in the Prefabs directory.
+        /// Each segment prefab contains cue instances, floor, walls, and trigger/reset zones derived from the
+        /// trial structure.
         /// </summary>
         /// <param name="template">The loaded task template.</param>
         /// <returns>True if all segment prefabs were built or already exist, false on error.</returns>
@@ -491,6 +448,7 @@ namespace SL.Tasks
             string cuesPath = "Assets/InfiniteCorridorTask/Cues/";
             string materialsPath = "Assets/InfiniteCorridorTask/Materials/";
             float cmPerUnit = template.vrEnvironment.cmPerUnityUnit;
+            float cueOffsetUnity = template.vrEnvironment.CueOffsetUnity;
             Dictionary<string, Cue> cueMap = template.GetCueByName();
 
             Mesh quadMesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
@@ -517,9 +475,10 @@ namespace SL.Tasks
                 Path.Combine(prefabsPath, "ResetZone.prefab")
             );
 
-            foreach (Segment segment in template.segments)
+            foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
-                string canonicalSegmentName = CanonicalSegmentName(segment, template);
+                TrialStructure trial = trialEntry.Value;
+                string canonicalSegmentName = CanonicalSegmentName(trial, template);
                 string segmentPrefabPath = Path.Combine(prefabsPath, $"{canonicalSegmentName}.prefab");
 
                 if (AssetDatabase.LoadAssetAtPath<GameObject>(segmentPrefabPath) != null)
@@ -528,8 +487,7 @@ namespace SL.Tasks
                 }
 
                 // Calculates total segment length in Unity units
-                float totalLengthUnity = segment.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit));
-                float cueOffsetUnity = template.cueOffsetCm / cmPerUnit;
+                float totalLengthUnity = trial.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit));
 
                 // Creates segment root with cue offset; the root takes the canonical prefab name so the
                 // in-prefab m_Name matches the filename, matching the cue-side convention.
@@ -538,7 +496,7 @@ namespace SL.Tasks
 
                 // Places cue instances along the Z axis
                 float cumulativeZ = 0f;
-                foreach (string cueName in segment.cueSequence)
+                foreach (string cueName in trial.cueSequence)
                 {
                     Cue cue = cueMap[cueName];
                     float cueLengthUnity = cue.LengthUnity(cmPerUnit);
@@ -591,53 +549,47 @@ namespace SL.Tasks
                 rightWall.AddComponent<MeshFilter>().sharedMesh = quadMesh;
                 rightWall.AddComponent<MeshRenderer>().sharedMaterial = wallMaterial;
 
-                // Places zones from trial structure
-                TrialStructure trial = template.GetTrialStructureForSegment(segment.name);
+                // Places zones from the trial structure
+                float zoneStartUnity = trial.stimulusTriggerZoneStartCm / cmPerUnit;
+                float zoneEndUnity = trial.stimulusTriggerZoneEndCm / cmPerUnit;
+                float zoneCenterUnity = (zoneStartUnity + zoneEndUnity) / 2f;
+                float zoneSizeUnity = zoneEndUnity - zoneStartUnity;
+                float stimulusLocationUnity = trial.stimulusLocationCm / cmPerUnit;
 
-                if (trial != null)
+                if (string.Equals(trial.triggerType, "lick", StringComparison.Ordinal) && stimulusZonePrefab != null)
                 {
-                    float zoneStartUnity = trial.stimulusTriggerZoneStartCm / cmPerUnit;
-                    float zoneEndUnity = trial.stimulusTriggerZoneEndCm / cmPerUnit;
-                    float zoneCenterUnity = (zoneStartUnity + zoneEndUnity) / 2f;
-                    float zoneSizeUnity = zoneEndUnity - zoneStartUnity;
-                    float stimulusLocationUnity = trial.stimulusLocationCm / cmPerUnit;
+                    PlaceLickZone(
+                        parent: segmentGameObject,
+                        zonePrefab: stimulusZonePrefab,
+                        zoneCenterUnity: zoneCenterUnity,
+                        zoneSizeUnity: zoneSizeUnity,
+                        stimulusLocationUnity: stimulusLocationUnity,
+                        showBoundary: trial.showStimulusCollisionBoundary
+                    );
+                }
+                else if (
+                    string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal)
+                    && occupancyZonePrefab != null
+                )
+                {
+                    PlaceOccupancyZone(
+                        parent: segmentGameObject,
+                        zonePrefab: occupancyZonePrefab,
+                        zoneCenterUnity: zoneCenterUnity,
+                        zoneSizeUnity: zoneSizeUnity,
+                        stimulusLocationUnity: stimulusLocationUnity,
+                        showBoundary: trial.showStimulusCollisionBoundary
+                    );
+                }
 
-                    if (
-                        string.Equals(trial.triggerType, "lick", StringComparison.Ordinal)
-                        && stimulusZonePrefab != null
-                    )
-                    {
-                        PlaceLickZone(
-                            parent: segmentGameObject,
-                            zonePrefab: stimulusZonePrefab,
-                            zoneCenterUnity: zoneCenterUnity,
-                            zoneSizeUnity: zoneSizeUnity,
-                            stimulusLocationUnity: stimulusLocationUnity,
-                            showBoundary: trial.showStimulusCollisionBoundary
-                        );
-                    }
-                    else if (
-                        string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal)
-                        && occupancyZonePrefab != null
-                    )
-                    {
-                        PlaceOccupancyZone(
-                            parent: segmentGameObject,
-                            zonePrefab: occupancyZonePrefab,
-                            zoneCenterUnity: zoneCenterUnity,
-                            zoneSizeUnity: zoneSizeUnity,
-                            stimulusLocationUnity: stimulusLocationUnity,
-                            showBoundary: trial.showStimulusCollisionBoundary
-                        );
-                    }
-
-                    // Places ResetZone at segment start
-                    if (resetZonePrefab != null)
-                    {
-                        GameObject resetZone = PrefabUtility.InstantiatePrefab(resetZonePrefab) as GameObject;
-                        resetZone.transform.SetParent(segmentGameObject.transform);
-                        resetZone.transform.localPosition = new Vector3(0, 0.5f, 1);
-                    }
+                // Places ResetZone at the animal's per-corridor spawn point. The segment root is shifted
+                // upstream by cueOffsetUnity, so a local Z of cueOffsetUnity places the reset zone at
+                // world Z = 0 — exactly where the actor teleports to on every lap restart.
+                if (resetZonePrefab != null)
+                {
+                    GameObject resetZone = PrefabUtility.InstantiatePrefab(resetZonePrefab) as GameObject;
+                    resetZone.transform.SetParent(segmentGameObject.transform);
+                    resetZone.transform.localPosition = new Vector3(0, 0.5f, cueOffsetUnity);
                 }
 
                 PrefabUtility.SaveAsPrefabAsset(segmentGameObject, segmentPrefabPath);

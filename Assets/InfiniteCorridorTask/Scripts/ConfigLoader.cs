@@ -15,6 +15,9 @@ namespace SL.Config
     /// </summary>
     public static class ConfigLoader
     {
+        /// <summary>The tolerance for validating that trial transition probabilities sum to 1.0.</summary>
+        private const float ProbabilitySumTolerance = 0.001f;
+
         /// <summary>Loads a TaskTemplate from a YAML file and derives the template name from the filename.</summary>
         /// <param name="filePath">The absolute path to the YAML template file.</param>
         /// <returns>The parsed template with templateName populated.</returns>
@@ -61,14 +64,14 @@ namespace SL.Config
                 throw new InvalidDataException("No cues defined in template.");
             }
 
-            if (template.segments == null || template.segments.Count == 0)
-            {
-                throw new InvalidDataException("No segments defined in template.");
-            }
-
             if (template.vrEnvironment == null)
             {
                 throw new InvalidDataException("No VR environment configuration defined.");
+            }
+
+            if (template.trialStructures == null || template.trialStructures.Count == 0)
+            {
+                throw new InvalidDataException("No trial structures defined in template.");
             }
 
             // Validates cue codes are unique and within uint8 range
@@ -109,80 +112,75 @@ namespace SL.Config
                 if (!File.Exists(texturePath))
                 {
                     throw new InvalidDataException(
-                        $"Cue '{cue.name}' references texture '{cue.texture}' " + $"but no file found at {texturePath}."
+                        $"Cue '{cue.name}' references texture '{cue.texture}' but no file found at {texturePath}."
                     );
                 }
             }
 
-            // Validates segment cue sequences reference valid cues
-            HashSet<string> segmentNames = new HashSet<string>();
-            foreach (Segment segment in template.segments)
+            // Validates trial structures reference valid cues, valid trigger types, and well-formed transitions.
+            foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
-                segmentNames.Add(segment.name);
+                string trialName = trialEntry.Key;
+                TrialStructure trial = trialEntry.Value;
 
-                if (segment.cueSequence == null || segment.cueSequence.Count == 0)
+                if (trial.cueSequence == null || trial.cueSequence.Count == 0)
                 {
-                    throw new InvalidDataException($"Segment '{segment.name}' has no cue sequence.");
+                    throw new InvalidDataException($"Trial '{trialName}' has no cue sequence.");
                 }
 
-                foreach (string cueName in segment.cueSequence)
+                foreach (string cueName in trial.cueSequence)
                 {
                     if (!seenNames.Contains(cueName))
                     {
-                        throw new InvalidDataException($"Segment '{segment.name}' references unknown cue '{cueName}'.");
+                        throw new InvalidDataException($"Trial '{trialName}' references unknown cue '{cueName}'.");
                     }
                 }
 
-                // Validates transition probabilities sum to 1.0 if provided
-                if (segment.transitionProbabilities != null && segment.transitionProbabilities.Count > 0)
+                if (string.IsNullOrEmpty(trial.triggerType))
                 {
-                    float sum = 0f;
-                    foreach (float probability in segment.transitionProbabilities)
-                    {
-                        sum += probability;
-                    }
+                    throw new InvalidDataException($"Trial '{trialName}' is missing required 'trigger_type' field.");
+                }
 
-                    if (Mathf.Abs(sum - 1.0f) > 0.001f)
-                    {
-                        throw new InvalidDataException(
-                            $"Segment '{segment.name}' transition probabilities sum to {sum}, must be 1.0."
-                        );
-                    }
+                if (
+                    !string.Equals(trial.triggerType, "lick", StringComparison.Ordinal)
+                    && !string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal)
+                )
+                {
+                    throw new InvalidDataException(
+                        $"Trial '{trialName}' has invalid trigger_type '{trial.triggerType}'. "
+                            + "Must be 'lick' or 'occupancy'."
+                    );
                 }
             }
 
-            // Validates trial structures reference valid segments
-            if (template.trialStructures != null)
+            // Validates transitions reference defined trial names and sum to 1.0 when provided.
+            foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
-                foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
+                string trialName = trialEntry.Key;
+                TrialStructure trial = trialEntry.Value;
+
+                if (!trial.HasTransitions)
                 {
-                    string trialName = trialEntry.Key;
-                    TrialStructure trial = trialEntry.Value;
+                    continue;
+                }
 
-                    if (!segmentNames.Contains(trial.segmentName))
+                float probabilitySum = 0f;
+                foreach (KeyValuePair<string, float> transition in trial.transitions)
+                {
+                    if (!template.trialStructures.ContainsKey(transition.Key))
                     {
                         throw new InvalidDataException(
-                            $"Trial '{trialName}' references unknown segment '{trial.segmentName}'."
+                            $"Trial '{trialName}' has a transition to unknown trial '{transition.Key}'."
                         );
                     }
+                    probabilitySum += transition.Value;
+                }
 
-                    if (string.IsNullOrEmpty(trial.triggerType))
-                    {
-                        throw new InvalidDataException(
-                            $"Trial '{trialName}' is missing required 'trigger_type' field."
-                        );
-                    }
-
-                    if (
-                        !string.Equals(trial.triggerType, "lick", StringComparison.Ordinal)
-                        && !string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal)
-                    )
-                    {
-                        throw new InvalidDataException(
-                            $"Trial '{trialName}' has invalid trigger_type '{trial.triggerType}'. "
-                                + "Must be 'lick' or 'occupancy'."
-                        );
-                    }
+                if (Mathf.Abs(probabilitySum - 1.0f) > ProbabilitySumTolerance)
+                {
+                    throw new InvalidDataException(
+                        $"Trial '{trialName}' transition probabilities sum to {probabilitySum}, must be 1.0."
+                    );
                 }
             }
         }

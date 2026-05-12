@@ -3,8 +3,6 @@
 # Layout:  Segment AGFE with the rewarding stimulus (water) trigger zone in cue E.
 # Related: SSO_Shared_Base (ABC base training), SSO_Merging (combined ABC/AGFE trials)
 
-cue_offset_cm: 10.0
-
 cues:
   - name: "Gray"
     code: 0
@@ -39,19 +37,16 @@ cues:
     length_cm: 40.0
     texture: "Cue 014 - 4x1.png"
 
-segments:
-  - name: "agfe"
-    cue_sequence: ["A", "Gray", "G", "Gray", "F", "Gray", "E", "Gray"]
-
 vr_environment:
   corridor_spacing_cm: 20.0
   segments_per_corridor: 3
   padding_prefab_name: "Padding"
   cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
 
 trial_structures:
   AGFE:
-    segment_name: "agfe"
+    cue_sequence: ["A", "Gray", "G", "Gray", "F", "Gray", "E", "Gray"]
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0

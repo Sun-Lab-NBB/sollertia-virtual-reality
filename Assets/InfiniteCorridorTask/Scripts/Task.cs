@@ -20,8 +20,10 @@ namespace SL.Tasks
     /// communication.
     /// </summary>
     /// <remarks>
-    /// A "cue" refers to a visual pattern displayed on the corridor walls. A "segment" is a portion of the
-    /// maze composed of a sequence of cues. A "corridor" is a grouping of adjacent segments forming a visual unit.
+    /// A "cue" refers to a visual pattern displayed on the corridor walls. A "trial" is a named entry in the
+    /// task template's trial_structures dictionary; it carries the trial's cue sequence, trigger zone, and
+    /// optional transition probabilities. A "segment" is the Unity prefab generated for a trial. A "corridor"
+    /// is a grouping of adjacent segments forming a visual unit.
     /// </remarks>
     public class Task : MonoBehaviour
     {
@@ -90,16 +92,22 @@ namespace SL.Tasks
         /// <summary>The number of segments visible in each corridor (corridor depth).</summary>
         private int _depth;
 
-        /// <summary>The total number of unique segment types.</summary>
-        private int _segmentCount;
+        /// <summary>The total number of unique trial types (and the matching segment prefabs).</summary>
+        private int _trialCount;
 
         /// <summary>The loaded task template.</summary>
         private TaskTemplate _template;
 
+        /// <summary>The ordered array of trial names matching the trial_structures dictionary iteration order.</summary>
+        private string[] _trialNames;
+
+        /// <summary>The reverse lookup mapping each trial name to its positional index in <see cref="_trialNames"/>.</summary>
+        private Dictionary<string, int> _trialNameToIndex;
+
         /// <summary>The mapping of cue names to their byte codes.</summary>
         private Dictionary<string, byte> _cueIds;
 
-        /// <summary>The lengths of each segment type in Unity units.</summary>
+        /// <summary>The lengths of each segment type in Unity units, indexed positionally by trial.</summary>
         private float[] _segmentLengths;
 
         /// <summary>The lengths of each cue type in Unity units.</summary>
@@ -176,7 +184,13 @@ namespace SL.Tasks
             }
 
             // Extracts configuration values.
-            _segmentCount = _template.segments.Count;
+            _trialNames = _template.GetTrialNames();
+            _trialCount = _trialNames.Length;
+            _trialNameToIndex = new Dictionary<string, int>(_trialCount);
+            for (int i = 0; i < _trialCount; i++)
+            {
+                _trialNameToIndex[_trialNames[i]] = i;
+            }
             _cueIds = _template.GetCueNameToCode();
             _segmentLengths = _template.GetSegmentLengthsUnity();
             _cueLengths = _template.GetCueLengthsUnity();
@@ -190,12 +204,12 @@ namespace SL.Tasks
             float currentCorridorX = 0;
             float corridorXShift = _template.vrEnvironment.CorridorSpacingUnity;
 
-            for (int i = 0; i < Mathf.Pow(_segmentCount, _depth); i++)
+            for (int i = 0; i < Mathf.Pow(_trialCount, _depth); i++)
             {
                 // Generates segment combination for current corridor index.
                 for (int j = 0; j < _depth; j++)
                 {
-                    corridorSegments[j] = i / (int)Mathf.Pow(_segmentCount, _depth - j - 1) % _segmentCount;
+                    corridorSegments[j] = i / (int)Mathf.Pow(_trialCount, _depth - j - 1) % _trialCount;
                 }
 
                 _corridorMap[string.Join("-", corridorSegments)] = (
@@ -350,29 +364,31 @@ namespace SL.Tasks
             requireWait = false;
         }
 
-        /// <summary>Samples an index from a probability distribution.</summary>
-        /// <param name="probabilities">The array of probabilities that must sum to 1.0.</param>
+        /// <summary>Samples a trial name from a named probability distribution over trial transitions.</summary>
+        /// <param name="transitions">The trial-name keyed transition dictionary; values must sum to 1.0.</param>
         /// <param name="random">The random number generator instance.</param>
-        /// <returns>The sampled index.</returns>
-        private int SampleFromDistribution(float[] probabilities, System.Random random)
+        /// <returns>The sampled trial name.</returns>
+        private string SampleFromTransitions(Dictionary<string, float> transitions, System.Random random)
         {
             float randomValue = (float)random.NextDouble();
             float cumulative = 0f;
+            string lastKey = null;
 
-            for (int i = 0; i < probabilities.Length; i++)
+            foreach (KeyValuePair<string, float> entry in transitions)
             {
-                cumulative += probabilities[i];
+                cumulative += entry.Value;
+                lastKey = entry.Key;
                 if (randomValue < cumulative)
-                    return i;
+                    return entry.Key;
             }
 
-            return probabilities.Length - 1;
+            return lastKey;
         }
 
-        /// <summary>Generates a random sequence of maze segments based on the specified length and optional seed.</summary>
+        /// <summary>Generates a random sequence of trials based on the specified length and optional seed.</summary>
         /// <param name="length">The total desired length of the maze sequence in Unity units.</param>
         /// <param name="seed">The optional seed for random number generator. Use -1 for random seed.</param>
-        /// <returns>A tuple containing (segment indices array, flattened cue codes array).</returns>
+        /// <returns>A tuple containing (trial indices array, flattened cue codes array).</returns>
         private (int[], byte[]) GenerateRandomMaze(float length, int? seed = null)
         {
             float sequenceLength = 0;
@@ -382,28 +398,29 @@ namespace SL.Tasks
             List<int> segmentSequence = new List<int>();
             List<byte> cueSequence = new List<byte>();
 
-            int choice = random.Next(_segmentCount);
+            int choice = random.Next(_trialCount);
 
             while (sequenceLength < length)
             {
                 segmentSequence.Add(choice);
 
-                Segment segment = _template.segments[choice];
-                foreach (string cue in segment.cueSequence)
+                TrialStructure trial = _template.trialStructures[_trialNames[choice]];
+                foreach (string cue in trial.cueSequence)
                 {
                     cueSequence.Add(_cueIds[cue]);
                 }
 
                 sequenceLength += _segmentLengths[choice];
 
-                // Uses transition probabilities if defined, otherwise uniform random.
-                if (segment.HasTransitionProbabilities)
+                // Uses transition probabilities if defined, otherwise uniform random over all trials.
+                if (trial.HasTransitions)
                 {
-                    choice = SampleFromDistribution(segment.transitionProbabilities.ToArray(), random);
+                    string nextTrialName = SampleFromTransitions(trial.transitions, random);
+                    choice = _trialNameToIndex[nextTrialName];
                 }
                 else
                 {
-                    choice = random.Next(_segmentCount);
+                    choice = random.Next(_trialCount);
                 }
             }
 
