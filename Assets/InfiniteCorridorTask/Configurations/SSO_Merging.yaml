@@ -42,11 +42,11 @@ cues:
 
 
 segments:
-  - name: "Segment_abc_g_240cm_r180cm"
+  - name: "abc"
     cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
     transition_probabilities: [0.5, 0.5]
 
-  - name: "Segment_agfe_g_320cm_r180cm"
+  - name: "agfe"
     cue_sequence: ["A", "Gray", "G", "Gray", "F", "Gray", "E", "Gray"]
     transition_probabilities: [0.5, 0.5]
 
@@ -58,14 +58,14 @@ vr_environment:
 
 trial_structures:
   ABC:
-    segment_name: "Segment_abc_g_240cm_r180cm"
+    segment_name: "abc"
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
   AGFE:
-    segment_name: "Segment_agfe_g_320cm_r180cm"
+    segment_name: "agfe"
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0

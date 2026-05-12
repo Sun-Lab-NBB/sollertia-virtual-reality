@@ -41,7 +41,7 @@ cues:
 
 
 segments:
-  - name: "Segment_defg_g_320cm_r260cm"
+  - name: "defg"
     cue_sequence: ["D", "Gray", "E", "Gray", "F", "Gray", "G", "Gray"]
 
 vr_environment:
@@ -52,7 +52,7 @@ vr_environment:
 
 trial_structures:
   DEFG:
-    segment_name: "Segment_defg_g_320cm_r260cm"
+    segment_name: "defg"
     stimulus_trigger_zone_start_cm: 248.0
     stimulus_trigger_zone_end_cm: 272.0
     stimulus_location_cm: 268.0

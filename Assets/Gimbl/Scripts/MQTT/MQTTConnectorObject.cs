@@ -3,25 +3,26 @@
 /// </summary>
 using UnityEngine;
 
-namespace Gimbl;
-
-/// <summary>
-/// Automatically establishes MQTT broker connection when the scene starts.
-/// </summary>
-/// <remarks>
-/// This MonoBehaviour should be attached to a GameObject in scenes that require MQTT connectivity.
-/// It triggers the MQTTClient.Connect() method during OnEnable.
-/// </remarks>
-public class MQTTConnectorObject : MonoBehaviour
+namespace Gimbl
 {
-    /// <summary>Connects to the MQTT broker when the object is enabled.</summary>
-    private void OnEnable()
+    /// <summary>
+    /// Automatically establishes MQTT broker connection when the scene starts.
+    /// </summary>
+    /// <remarks>
+    /// This MonoBehaviour should be attached to a GameObject in scenes that require MQTT connectivity.
+    /// It triggers the MQTTClient.Connect() method during OnEnable.
+    /// </remarks>
+    public class MQTTConnectorObject : MonoBehaviour
     {
-        if (MQTTClient.Instance == null)
+        /// <summary>Connects to the MQTT broker when the object is enabled.</summary>
+        private void OnEnable()
         {
-            Debug.LogError("MQTTConnectorObject: MQTTClient.Instance not available");
-            return;
+            if (MQTTClient.Instance == null)
+            {
+                Debug.LogError("MQTTConnectorObject: MQTTClient.Instance not available");
+                return;
+            }
+            MQTTClient.Instance.Connect(verbose: false);
         }
-        MQTTClient.Instance.Connect(verbose: false);
     }
 }

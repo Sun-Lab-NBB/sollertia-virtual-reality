@@ -45,11 +45,11 @@ cues:
     texture: "Cue 005 - 2x1 repeat.png"
 
 segments:
-  - name: "Segment_abcd_200cm_o125cm"
+  - name: "abcd"
     cue_sequence: ["A", "B", "C", "D"]
     transition_probabilities: [0.0, 1.0]
 
-  - name: "Segment_efgh_200cm_r175cm"
+  - name: "efgh"
     cue_sequence: ["E", "F", "G", "H"]
     transition_probabilities: [1.0, 0.0]
 
@@ -61,7 +61,7 @@ vr_environment:
 
 trial_structures:
   ABCD:
-    segment_name: "Segment_abcd_200cm_o125cm"
+    segment_name: "abcd"
     stimulus_trigger_zone_start_cm: 107.5
     stimulus_trigger_zone_end_cm: 142.5
     stimulus_location_cm: 157.5
@@ -69,7 +69,7 @@ trial_structures:
     trigger_type: "occupancy"
 
   EFGH:
-    segment_name: "Segment_efgh_200cm_r175cm"
+    segment_name: "efgh"
     stimulus_trigger_zone_start_cm: 157.5
     stimulus_trigger_zone_end_cm: 192.5
     stimulus_location_cm: 188.5
