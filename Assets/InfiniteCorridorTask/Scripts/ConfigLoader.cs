@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -17,6 +18,13 @@ namespace SL.Config
     {
         /// <summary>The tolerance for validating that trial transition probabilities sum to 1.0.</summary>
         private const float ProbabilitySumTolerance = 0.001f;
+
+        /// <summary>
+        /// Matches trial names that are safe to embed in generated segment prefab filenames. Restricts trial names
+        /// to ASCII letters, digits, and underscores so the ``TaskName_TrialName`` segment naming scheme cannot be
+        /// corrupted by path separators, whitespace, or punctuation introduced in a template.
+        /// </summary>
+        private static readonly Regex TrialNamePattern = new Regex("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
 
         /// <summary>Loads a TaskTemplate from a YAML file and derives the template name from the filename.</summary>
         /// <param name="filePath">The absolute path to the YAML template file.</param>
@@ -122,6 +130,17 @@ namespace SL.Config
             {
                 string trialName = trialEntry.Key;
                 TrialStructure trial = trialEntry.Value;
+
+                // Trial names are concatenated into segment prefab filenames (``TaskName_TrialName.prefab``), so
+                // operator-controlled punctuation, whitespace, or path separators would corrupt the generated
+                // filesystem layout. Rejects them at load time before any asset path is computed downstream.
+                if (!TrialNamePattern.IsMatch(trialName))
+                {
+                    throw new InvalidDataException(
+                        $"Trial name '{trialName}' is invalid. Trial names must contain only ASCII letters, "
+                            + "digits, and underscores (used in generated segment prefab filenames)."
+                    );
+                }
 
                 if (trial.cueSequence == null || trial.cueSequence.Count == 0)
                 {

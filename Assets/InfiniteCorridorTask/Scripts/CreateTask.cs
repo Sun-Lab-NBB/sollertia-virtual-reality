@@ -31,45 +31,40 @@ namespace SL.Tasks
             lengthCm.ToString("0.##", CultureInfo.InvariantCulture);
 
         /// <summary>
-        /// Computes the base name of a trial's segment prefab, derived purely from the cue sequence. Returns the
-        /// lowercase concatenation of cue letters in sequence order, with any cue named ``Gray`` excluded (treated
-        /// as a structural separator). This is the human-facing identifier embedded in the canonical prefab name,
-        /// mirroring the cue-side convention where each cue carries a simple ``name`` (e.g., ``"A"``) and only the
-        /// full prefab name encodes geometry.
+        /// Computes the canonical prefab name for a trial's segment as ``TemplateName_TrialName``. The template
+        /// name comes from the YAML filename (without extension) and the trial name is the key under
+        /// ``trial_structures`` — both validated for filesystem-safe characters at template load time. Segments
+        /// are therefore globally unique by construction across all templates and trivially identifiable in the
+        /// Project window. Two trials that share identical geometry no longer collapse to a single prefab; the
+        /// always-regenerate build flow makes that a deliberate non-issue.
         /// </summary>
-        /// <param name="trial">The trial structure whose base segment name is computed.</param>
-        /// <returns>The base segment name derived from the trial's cue sequence.</returns>
-        public static string BaseSegmentName(TrialStructure trial) =>
-            string.Concat(
-                trial
-                    .cueSequence.Where(name => !string.Equals(name, "Gray", StringComparison.Ordinal))
-                    .Select(name => name.ToLowerInvariant())
-            );
+        /// <param name="template">The task template owning the trial; supplies the template name.</param>
+        /// <param name="trialName">The trial key under ``trial_structures``.</param>
+        /// <returns>The canonical segment prefab name (without the ``.prefab`` extension).</returns>
+        public static string CanonicalSegmentName(TaskTemplate template, string trialName) =>
+            $"{template.templateName}_{trialName}";
 
         /// <summary>
-        /// Computes the canonical prefab name for a trial's segment from the trial's cue sequence, total cue
-        /// length, and trigger zone configuration. Pattern:
-        /// ``Segment_<base-name>[_g]_<total-length>cm_<r|o><zone-center>cm``. The ``_g`` marker appears when any
-        /// Gray cue interleaves the sequence so layouts with and without Gray separators are visually distinct.
-        /// The total length sums every cue in the sequence — Gray separators included — so asymmetric cue layouts
-        /// still yield distinct identifiers. The zone marker is ``r`` for lick (reward) zones, ``o`` for
-        /// occupancy (aversion) zones, followed by the zone center in centimeters.
+        /// Deletes every segment prefab the supplied template claims ownership of so the subsequent build
+        /// always produces a fresh segment tree, even if trial parameters changed under an unchanged trial
+        /// name. Cue prefabs and cue materials are intentionally **not** removed: they are keyed by cue name
+        /// and length only and are shared by every template that declares a matching cue, so deleting them
+        /// here would clobber assets owned by other templates and invalidate their segment prefabs' cue
+        /// references. Hand-authored prefabs (Padding, ResetZone, StimulusTriggerZone, OccupancyTriggerZone)
+        /// are never derived from template data and are therefore also left untouched.
         /// </summary>
-        /// <param name="trial">The trial structure whose canonical segment name is computed.</param>
-        /// <param name="template">The task template owning the trial; consulted for cue lengths.</param>
-        /// <returns>The canonical segment prefab name (without the ``.prefab`` extension).</returns>
-        public static string CanonicalSegmentName(TrialStructure trial, TaskTemplate template)
+        /// <param name="template">The template whose owned segment prefabs are removed.</param>
+        private static void CleanGeneratedSegments(TaskTemplate template)
         {
-            Dictionary<string, Cue> cueMap = template.GetCueByName();
-            bool hasGray = trial.cueSequence.Any(name => string.Equals(name, "Gray", StringComparison.Ordinal));
-            string letters = BaseSegmentName(trial);
-            float totalLengthCm = trial.cueSequence.Sum(name => cueMap[name].lengthCm);
-            string graySuffix = hasGray ? "_g" : string.Empty;
-            string geometryName = $"Segment_{letters}{graySuffix}_{FormatCueLengthLabel(totalLengthCm)}cm";
+            string prefabsPath = "Assets/InfiniteCorridorTask/Prefabs/";
 
-            string typeMarker = string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal) ? "o" : "r";
-            float zoneCenterCm = (trial.stimulusTriggerZoneStartCm + trial.stimulusTriggerZoneEndCm) / 2f;
-            return $"{geometryName}_{typeMarker}{FormatCueLengthLabel(zoneCenterCm)}cm";
+            foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
+            {
+                string segmentName = CanonicalSegmentName(template, trialEntry.Key);
+                AssetDatabase.DeleteAsset(Path.Combine(prefabsPath, $"{segmentName}.prefab"));
+            }
+
+            AssetDatabase.SaveAssets();
         }
 
         /// <summary>Creates a new Task prefab from a selected YAML configuration file via the Editor menu.</summary>
@@ -139,7 +134,12 @@ namespace SL.Tasks
                 return $"error: {exception.Message}";
             }
 
-            // Builds cue and segment prefabs from template data when they do not already exist
+            // Wipes any segment prefabs this template previously generated so trial-parameter edits never
+            // result in stale segment geometry surviving under an unchanged ``TemplateName_TrialName`` filename.
+            // Cue prefabs and materials are deliberately preserved because they are shared across templates
+            // by cue name and length; ``BuildCuePrefabs`` rebuilds only the cues that are still missing.
+            CleanGeneratedSegments(template);
+
             if (!BuildCuePrefabs(template))
             {
                 return "error: Failed to build cue prefabs.";
@@ -164,13 +164,13 @@ namespace SL.Tasks
             string[] trialNames = template.GetTrialNames();
             int trialCount = trialNames.Length;
 
-            // Loads segment prefabs by their canonical (geometry-and-zone-encoded) prefab name.
+            // Loads segment prefabs by their canonical ``TemplateName_TrialName`` filename.
             GameObject[] segmentPrefabs = new GameObject[trialCount];
             TrialStructure[] trials = new TrialStructure[trialCount];
             for (int i = 0; i < trialCount; i++)
             {
                 trials[i] = template.trialStructures[trialNames[i]];
-                string canonicalName = CanonicalSegmentName(trials[i], template);
+                string canonicalName = CanonicalSegmentName(template, trialNames[i]);
                 string segmentPath = Path.Combine(prefabsPath, $"{canonicalName}.prefab");
                 segmentPrefabs[i] = AssetDatabase.LoadAssetAtPath<GameObject>(segmentPath);
 
@@ -334,11 +334,13 @@ namespace SL.Tasks
         }
 
         /// <summary>
-        /// Creates cue prefabs for cues that do not yet have a prefab in the Cues directory.
-        /// Each cue prefab contains Left and Right Quad children with the cue material applied.
+        /// Creates cue prefabs and accompanying materials for cues that do not yet exist under the
+        /// ``Cues/`` and ``Materials/`` folders. Cue assets are deliberately shared across templates by cue
+        /// name and length, so this method is idempotent: a cue already on disk is left untouched and reused
+        /// by every template that declares it.
         /// </summary>
         /// <param name="template">The loaded task template.</param>
-        /// <returns>True if all cue prefabs were built or already exist, false on error.</returns>
+        /// <returns>True if all required cue prefabs were built or already exist, false on error.</returns>
         private static bool BuildCuePrefabs(TaskTemplate template)
         {
             string cuesPath = "Assets/InfiniteCorridorTask/Cues/";
@@ -436,12 +438,14 @@ namespace SL.Tasks
         }
 
         /// <summary>
-        /// Creates segment prefabs for trials that do not yet have a prefab in the Prefabs directory.
-        /// Each segment prefab contains cue instances, floor, walls, and trigger/reset zones derived from the
-        /// trial structure.
+        /// Creates a segment prefab for every trial structure declared by the template, naming each one
+        /// ``TemplateName_TrialName.prefab``. Each segment prefab contains cue instances, floor, walls, and
+        /// trigger/reset zones derived from the trial structure. Callers must invoke
+        /// ``CleanGeneratedSegments`` first; this method unconditionally writes to the segment prefab path
+        /// and assumes nothing exists at that location.
         /// </summary>
         /// <param name="template">The loaded task template.</param>
-        /// <returns>True if all segment prefabs were built or already exist, false on error.</returns>
+        /// <returns>True if all segment prefabs were built successfully, false on error.</returns>
         private static bool BuildSegmentPrefabs(TaskTemplate template)
         {
             string prefabsPath = "Assets/InfiniteCorridorTask/Prefabs/";
@@ -477,14 +481,10 @@ namespace SL.Tasks
 
             foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
+                string trialName = trialEntry.Key;
                 TrialStructure trial = trialEntry.Value;
-                string canonicalSegmentName = CanonicalSegmentName(trial, template);
+                string canonicalSegmentName = CanonicalSegmentName(template, trialName);
                 string segmentPrefabPath = Path.Combine(prefabsPath, $"{canonicalSegmentName}.prefab");
-
-                if (AssetDatabase.LoadAssetAtPath<GameObject>(segmentPrefabPath) != null)
-                {
-                    continue;
-                }
 
                 // Calculates total segment length in Unity units
                 float totalLengthUnity = trial.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit));

@@ -248,7 +248,9 @@ The structure is:
       and the position of the per-segment ResetZone.
 
 - **trial_structures** *(dict\<string, TrialStructure>)*: Maps trial names to their spatial configurations. Each trial
-  generates a single segment prefab whose name is derived from the cue sequence and trigger zone configuration.
+  generates a single segment prefab named `<template>_<trial>.prefab` (e.g. `MF_Reward_Base_ABCD.prefab`); trial names
+  must therefore match `^[A-Za-z0-9_]+$`. Segment prefabs are always regenerated on each `generate_task_prefab_tool`
+  call so trial-parameter edits take effect without manual prefab deletion.
     - **TrialStructure**
         - **cue_sequence** *(string[])*: The ordered list of cue names that comprise the trial's segment.
         - **stimulus_trigger_zone_start_cm** *(number)*: Start of the stimulus trigger zone in centimeters.

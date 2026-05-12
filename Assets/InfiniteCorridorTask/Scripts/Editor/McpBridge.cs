@@ -340,9 +340,9 @@ namespace SL.Tasks
             {
                 string trialName = trialNames[trialIndex];
                 TrialStructure trial = template.trialStructures[trialName];
-                // Templates do not carry a segment name field; the canonical prefab name is derived from the
-                // trial's cue sequence and trigger zone configuration.
-                string canonicalSegmentName = CreateTask.CanonicalSegmentName(trial, template);
+                // Segment prefab filenames follow ``TemplateName_TrialName`` so the canonical name is derived
+                // directly from the template name and the trial key — no geometry encoding is involved.
+                string canonicalSegmentName = CreateTask.CanonicalSegmentName(template, trialName);
                 string segmentPath = Path.Combine(prefabsPath, $"{canonicalSegmentName}.prefab");
                 GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(segmentPath);
 
