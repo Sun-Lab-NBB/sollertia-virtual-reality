@@ -67,26 +67,156 @@ namespace SL.Tasks
             AssetDatabase.SaveAssets();
         }
 
-        /// <summary>Creates a new Task prefab from a selected YAML configuration file via the Editor menu.</summary>
-        [MenuItem("CreateTask/New Task")]
-        public static void CreateNewTask()
+        /// <summary>
+        /// Scans every template under ``Assets/InfiniteCorridorTask/Configurations/`` and verifies that no
+        /// two templates declare a cue with the same ``(name, lengthCm)`` identity but different textures.
+        /// </summary>
+        /// <remarks>
+        /// Cue prefabs and materials are filesystem-keyed as ``Cue_{name}_{length}cm`` and are deliberately
+        /// shared across templates so generation stays cheap. The shared-asset model breaks down only when
+        /// two templates declare the same cue identity with conflicting textures: whichever template runs
+        /// first wins, the second template silently inherits the wrong texture, and downstream prefabs
+        /// look correct on disk while rendering the wrong cue at runtime. The preflight closes that hole
+        /// by failing the generation request before any cue prefab is written. The check is cheap (one
+        /// YAML deserialization per template; the catalog is small) and runs on every generation call so
+        /// drift introduced between runs is caught at the earliest possible moment.
+        /// </remarks>
+        /// <param name="errorMessage">Receives a human-readable description of every detected conflict on failure.</param>
+        /// <returns>True when no conflicts are detected; false otherwise.</returns>
+        private static bool ValidateCueDefinitionsAcrossTemplates(out string errorMessage)
         {
-            // Opens file dialog for YAML task template file
+            errorMessage = null;
+
             string configurationsDirectory = Path.Combine(
                 Application.dataPath,
                 "InfiniteCorridorTask",
                 "Configurations"
             );
-            string configPath = EditorUtility
-                .OpenFilePanel("Select Task Template YAML", configurationsDirectory, "yaml,yml")
-                .Replace(Application.dataPath, "", StringComparison.Ordinal)
-                .TrimStart('/', '\\');
 
-            if (string.IsNullOrEmpty(configPath))
+            if (!Directory.Exists(configurationsDirectory))
+            {
+                // No configurations folder yet means there are no templates to compare; the per-template
+                // load path will surface a clearer error if the folder is missing for the active request.
+                return true;
+            }
+
+            string[] templateFiles = Directory
+                .GetFiles(configurationsDirectory, "*.yaml", SearchOption.TopDirectoryOnly)
+                .Concat(Directory.GetFiles(configurationsDirectory, "*.yml", SearchOption.TopDirectoryOnly))
+                .ToArray();
+
+            // Maps a canonical cue identity (``cueName|lengthLabel``) to the list of templates that
+            // declare it, capturing each declaration's texture. A list (rather than a single slot) lets
+            // the reporter list every contributing template when three or more templates collide on the
+            // same identity, instead of silently dropping later declarations.
+            Dictionary<string, List<(string Texture, string TemplateName)>> cueDefinitions =
+                new Dictionary<string, List<(string, string)>>();
+
+            foreach (string templateFile in templateFiles)
+            {
+                TaskTemplate template;
+                try
+                {
+                    template = ConfigLoader.LoadTemplate(templateFile);
+                }
+                catch (Exception exception)
+                {
+                    errorMessage =
+                        $"Cross-template cue-texture preflight aborted: failed to load "
+                        + $"'{templateFile}': {exception.Message}";
+                    return false;
+                }
+
+                foreach (Cue cue in template.cues)
+                {
+                    string key = $"{cue.name}|{FormatCueLengthLabel(cue.lengthCm)}cm";
+                    if (!cueDefinitions.TryGetValue(key, out List<(string, string)> declarations))
+                    {
+                        declarations = new List<(string, string)>();
+                        cueDefinitions[key] = declarations;
+                    }
+                    declarations.Add((cue.texture, template.templateName));
+                }
+            }
+
+            List<string> conflicts = new List<string>();
+            foreach (KeyValuePair<string, List<(string Texture, string TemplateName)>> entry in cueDefinitions)
+            {
+                HashSet<string> distinctTextures = new HashSet<string>(
+                    entry.Value.Select(declaration => declaration.Texture),
+                    StringComparer.Ordinal
+                );
+
+                if (distinctTextures.Count <= 1)
+                {
+                    continue;
+                }
+
+                string details = string.Join(
+                    ", ",
+                    entry.Value.Select(declaration => $"{declaration.TemplateName} -> '{declaration.Texture}'")
+                );
+                string identity = entry.Key.Replace("|", " at ");
+                conflicts.Add($"Cue '{identity}': {details}");
+            }
+
+            if (conflicts.Count == 0)
+            {
+                return true;
+            }
+
+            errorMessage =
+                "Cross-template cue-texture conflict detected. The following cue identities are declared "
+                + "with more than one texture across the Configurations catalog; either rename the cue, "
+                + "change its length, or unify the textures before regenerating:\n  - "
+                + string.Join("\n  - ", conflicts);
+            return false;
+        }
+
+        /// <summary>Creates a new Task prefab from a selected YAML configuration file via the Editor menu.</summary>
+        /// <remarks>
+        /// Rejects selections outside ``Assets/InfiniteCorridorTask/Configurations/`` so the Editor surface
+        /// matches the MCP surface (which is already hard-coded to that folder) and so the cross-template
+        /// cue-texture preflight in <see cref="CreateFromTemplate"/> sees every template that can drive
+        /// generation. Constraining the menu also keeps the runtime-resolved ``relativeConfigPath`` stored
+        /// on the Task component well-formed: a YAML selected from outside ``Application.dataPath`` would
+        /// otherwise yield a malformed path that breaks the runtime template lookup later.
+        /// </remarks>
+        [MenuItem("CreateTask/New Task")]
+        public static void CreateNewTask()
+        {
+            // Normalizes to forward slashes so the prefix check works uniformly on Windows, where
+            // ``Path.Combine`` returns mixed separators but ``EditorUtility.OpenFilePanel`` returns
+            // forward slashes per Unity's documented behavior.
+            string dataPath = Application.dataPath.Replace('\\', '/');
+            string configurationsDirectory = Path.Combine(dataPath, "InfiniteCorridorTask", "Configurations")
+                .Replace('\\', '/');
+
+            string absoluteSelectedPath = EditorUtility
+                .OpenFilePanel("Select Task Template YAML", configurationsDirectory, "yaml,yml")
+                .Replace('\\', '/');
+
+            if (string.IsNullOrEmpty(absoluteSelectedPath))
             {
                 Debug.LogError("No configuration YAML file selected.");
                 return;
             }
+
+            // Enforces that templates live under ``Configurations/``. A trailing slash is required so a
+            // sibling directory whose name begins with ``Configurations`` cannot satisfy the prefix.
+            string configurationsPrefix = configurationsDirectory.TrimEnd('/') + "/";
+            if (!absoluteSelectedPath.StartsWith(configurationsPrefix, StringComparison.Ordinal))
+            {
+                Debug.LogError(
+                    $"Selected template '{absoluteSelectedPath}' is outside the canonical Configurations "
+                        + $"directory '{configurationsDirectory}'. Move the template into Configurations/ "
+                        + "before generating; only files under that folder are visible to MCP-driven "
+                        + "generation and to the cross-template cue-texture preflight."
+                );
+                return;
+            }
+
+            string configPath = absoluteSelectedPath.Substring(dataPath.Length).TrimStart('/');
 
             // Opens save file panel for user to specify location and name of prefab
             string tasksDirectory = Path.Combine(Application.dataPath, "InfiniteCorridorTask", "Tasks");
@@ -123,6 +253,16 @@ namespace SL.Tasks
         /// <returns>A status message describing success or the error encountered.</returns>
         public static string CreateFromTemplate(string absoluteTemplatePath, string relativeConfigPath, string savePath)
         {
+            // Runs the cross-template cue-texture preflight before any mutation. Cue prefabs are shared
+            // across templates by ``(name, lengthCm)`` only, so two templates that declare a cue with the
+            // same name and length but different textures would silently overwrite each other depending
+            // on generation order. The preflight aborts here, before ``CleanGeneratedSegments`` or any
+            // cue/segment build runs, so the project state stays consistent until the conflict is resolved.
+            if (!ValidateCueDefinitionsAcrossTemplates(out string preflightError))
+            {
+                return $"error: {preflightError}";
+            }
+
             // Loads and validates task template
             TaskTemplate template;
             try
