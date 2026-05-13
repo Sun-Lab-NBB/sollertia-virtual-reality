@@ -130,6 +130,13 @@ namespace Gimbl
         }
 
         /// <summary>Unsubscribes the message handler and disposes the client on destroy.</summary>
+        /// <remarks>
+        /// Duplicates the cleanup performed by <see cref="OnApplicationQuit"/> because the two lifecycle
+        /// callbacks do not always both fire. A scene transition that destroys this component without
+        /// quitting the application reaches only <c>OnDestroy</c>; a process exit that bypasses scene
+        /// teardown reaches only <c>OnApplicationQuit</c>. The duplicated handler unhook and disposal
+        /// ensure the underlying <see cref="IMqttClient"/> is released in either path.
+        /// </remarks>
         private void OnDestroy()
         {
             if (client != null && _messageReceivedHandler != null)
@@ -213,9 +220,9 @@ namespace Gimbl
             {
                 return client != null && client.IsConnected;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Debug.LogWarning($"MQTTClient.IsConnected check failed: {ex.Message}");
+                Debug.LogWarning($"MQTTClient.IsConnected check failed: {exception.Message}");
                 return false;
             }
         }
@@ -301,9 +308,9 @@ namespace Gimbl
                 await Task.Delay(1000);
                 _startChannel.Send();
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Debug.LogError($"MQTTClient.StartSessionAsync failed: {ex.Message}");
+                Debug.LogError($"MQTTClient.StartSessionAsync failed: {exception.Message}");
             }
         }
 

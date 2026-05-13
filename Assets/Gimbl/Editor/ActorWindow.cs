@@ -42,12 +42,6 @@ namespace Gimbl
         /// <summary>The current editor window instance.</summary>
         private static EditorWindow _currentWindow;
 
-        /// <summary>The delegate type for object creation functions.</summary>
-        /// <typeparam name="T">The type of Unity Object to create.</typeparam>
-        /// <param name="settings">The menu settings for the creation.</param>
-        public delegate void CreateFunc<T>(MenuSettings<T> settings)
-            where T : UnityEngine.Object;
-
         /// <summary>Shows the ActorWindow editor window.</summary>
         public static void ShowWindow()
         {
@@ -73,7 +67,7 @@ namespace Gimbl
                 GUILayout.Width(position.width)
             );
 
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.style);
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("Actors", LayoutSettings.SectionLabel);
 
             EditorGUILayout.BeginHorizontal(LayoutSettings.EditWidth);
@@ -96,7 +90,7 @@ namespace Gimbl
             _actorSettings.show[0] = EditorGUILayout.Foldout(_actorSettings.show[0], "Create");
             if (_actorSettings.show[0])
             {
-                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.style);
+                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
                 EditorGUILayout.LabelField("Create Actor", EditorStyles.boldLabel);
                 _actorSettings.name = EditorGUILayout.TextField(
                     "Actor Name: ",
@@ -116,7 +110,7 @@ namespace Gimbl
             GUI.enabled = true;
             EditorGUILayout.EndVertical();
 
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.style);
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("Controllers", LayoutSettings.SectionLabel);
 
             EditorGUILayout.BeginHorizontal(LayoutSettings.EditWidth);
@@ -132,7 +126,7 @@ namespace Gimbl
             {
                 if (_controllerSettings.SelectedObject != null)
                 {
-                    EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.style);
+                    EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
                     _controllerSettings.SelectedObject.master.EditMenu();
                     EditorGUILayout.Space();
                     EditorGUILayout.BeginHorizontal(LayoutSettings.EditFieldOption);
@@ -167,7 +161,7 @@ namespace Gimbl
             _controllerSettings.show[1] = EditorGUILayout.Foldout(_controllerSettings.show[1], "Create");
             if (_controllerSettings.show[1])
             {
-                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.style);
+                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
                 EditorGUILayout.LabelField("Create Controller", EditorStyles.boldLabel);
                 _controllerSettings.name = EditorGUILayout.TextField(
                     "Controller Name: ",
@@ -271,53 +265,6 @@ namespace Gimbl
                 settings.name = "";
             }
             EditorGUILayout.EndHorizontal();
-        }
-
-        /// <summary>
-        /// Stores menu state and selection for a generic Unity Object type.
-        /// </summary>
-        /// <typeparam name="T">The type of Unity Object this menu manages.</typeparam>
-        public class MenuSettings<T>
-            where T : UnityEngine.Object
-        {
-            /// <summary>The display name of the object type.</summary>
-            public string typeName;
-
-            /// <summary>The array of foldout visibility states.</summary>
-            public bool[] show = { false, false, false, false, false };
-
-            /// <summary>The name for creating new objects.</summary>
-            public string name = "";
-
-            /// <summary>The entity ID of the selected object for serialization.</summary>
-            public EntityId selectedEntityId;
-
-            /// <summary>The rectangle position for the editing window.</summary>
-            public Rect editRect = new Rect();
-
-            /// <summary>The backing field for the selected object.</summary>
-            private T _selectedObject;
-
-            /// <summary>The currently selected object.</summary>
-            public T SelectedObject
-            {
-                get { return _selectedObject; }
-                set
-                {
-                    if (!UnityEngine.Object.ReferenceEquals(value, _selectedObject))
-                    {
-                        _selectedObject = value;
-                        if (value != null)
-                        {
-                            selectedEntityId = value.GetEntityId();
-                        }
-                        else
-                        {
-                            selectedEntityId = EntityId.None;
-                        }
-                    }
-                }
-            }
         }
 
         /// <summary>

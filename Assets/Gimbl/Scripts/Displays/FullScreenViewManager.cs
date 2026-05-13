@@ -5,6 +5,7 @@
 /// with the Unity editor active, enabling VR studies that use sets of adjacent monitors
 /// to display the world. Camera assignments are persisted in per-scene asset files.
 /// </summary>
+#if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
@@ -27,7 +28,7 @@ namespace Gimbl
         /// <summary>Initializes the manager by detecting monitors and loading camera assignments.</summary>
         public FullScreenViewManager()
         {
-            monitors = Monitor.EnumeratedMonitors();
+            monitors = Monitor.EnumerateMonitors();
             LoadCameras();
         }
 
@@ -36,7 +37,7 @@ namespace Gimbl
         {
             if (GUILayout.Button("Refresh Monitor Positions"))
             {
-                List<Monitor> refreshedMonitors = Monitor.EnumeratedMonitors();
+                List<Monitor> refreshedMonitors = Monitor.EnumerateMonitors();
                 for (int i = 0; i < refreshedMonitors.Count; i++)
                 {
                     if (i < monitors.Count)
@@ -190,15 +191,17 @@ namespace Gimbl
         /// <summary>Returns the full hierarchy path name for a GameObject.</summary>
         /// <param name="gameObject">The GameObject to get the path for.</param>
         /// <returns>The full hierarchy path from root to the GameObject.</returns>
-        private string PathName(GameObject gameObject)
+        private static string PathName(GameObject gameObject)
         {
-            string path = gameObject.name;
-            while (gameObject.transform.parent != null)
+            GameObject walker = gameObject;
+            string path = walker.name;
+            while (walker.transform.parent != null)
             {
-                gameObject = gameObject.transform.parent.gameObject;
-                path = $"{gameObject.name}/{path}";
+                walker = walker.transform.parent.gameObject;
+                path = $"{walker.name}/{path}";
             }
             return path;
         }
     }
 }
+#endif

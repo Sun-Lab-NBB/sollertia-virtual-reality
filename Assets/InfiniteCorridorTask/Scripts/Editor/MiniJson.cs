@@ -3,6 +3,7 @@
 /// </summary>
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace SL.Tasks
@@ -41,9 +42,9 @@ namespace SL.Tasks
                 return $"\"{EscapeString(stringValue)}\"";
             }
 
-            if (obj is int || obj is long || obj is float || obj is double)
+            if (obj is IFormattable formattable && (obj is int || obj is long || obj is float || obj is double))
             {
-                return obj.ToString();
+                return formattable.ToString(format: null, CultureInfo.InvariantCulture);
             }
 
             if (obj is Dictionary<string, object> dictionary)
@@ -77,7 +78,8 @@ namespace SL.Tasks
                         builder.Append(",");
                     }
 
-                    builder.Append($"\"{EscapeString(entry.Key)}\":{entry.Value}");
+                    string formattedValue = entry.Value.ToString(CultureInfo.InvariantCulture);
+                    builder.Append($"\"{EscapeString(entry.Key)}\":{formattedValue}");
                     first = false;
                 }
 
@@ -340,16 +342,24 @@ namespace SL.Tasks
                 || numberString.Contains('E', StringComparison.Ordinal)
             )
             {
-                double.TryParse(
-                    numberString,
-                    System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out double doubleValue
-                );
+                if (
+                    !double.TryParse(
+                        numberString,
+                        NumberStyles.Float,
+                        CultureInfo.InvariantCulture,
+                        out double doubleValue
+                    )
+                )
+                {
+                    throw new FormatException($"MiniJson: '{numberString}' is not a valid floating-point literal.");
+                }
                 return doubleValue;
             }
 
-            long.TryParse(numberString, out long longValue);
+            if (!long.TryParse(numberString, NumberStyles.Integer, CultureInfo.InvariantCulture, out long longValue))
+            {
+                throw new FormatException($"MiniJson: '{numberString}' is not a valid integer literal.");
+            }
             return longValue;
         }
 
@@ -357,6 +367,9 @@ namespace SL.Tasks
         /// <param name="json">The JSON string being parsed.</param>
         /// <param name="index">The current parse position, advanced past the parsed boolean.</param>
         /// <returns>The parsed boolean value.</returns>
+        /// <exception cref="FormatException">
+        /// The literal at <paramref name="index"/> is not "true" or "false".
+        /// </exception>
         private static object ParseBool(string json, ref int index)
         {
             if (json.AsSpan(index).StartsWith("true", StringComparison.Ordinal))
@@ -364,17 +377,25 @@ namespace SL.Tasks
                 index += 4;
                 return true;
             }
-
-            index += 5;
-            return false;
+            if (json.AsSpan(index).StartsWith("false", StringComparison.Ordinal))
+            {
+                index += 5;
+                return false;
+            }
+            throw new FormatException($"MiniJson: expected 'true' or 'false' at index {index}.");
         }
 
         /// <summary>Parses a JSON null value.</summary>
         /// <param name="json">The JSON string being parsed.</param>
         /// <param name="index">The current parse position, advanced past the null literal.</param>
         /// <returns>Null.</returns>
+        /// <exception cref="FormatException">The literal at <paramref name="index"/> is not "null".</exception>
         private static object ParseNull(string json, ref int index)
         {
+            if (!json.AsSpan(index).StartsWith("null", StringComparison.Ordinal))
+            {
+                throw new FormatException($"MiniJson: expected 'null' at index {index}.");
+            }
             index += 4;
             return null;
         }

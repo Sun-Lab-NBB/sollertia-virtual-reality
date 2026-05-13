@@ -4,6 +4,7 @@
 /// Enumerates physical monitors across Windows, Linux, and macOS platforms and stores
 /// their position, dimensions, and camera assignment for multi-monitor VR displays.
 /// </summary>
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -53,8 +54,13 @@ namespace Gimbl
         }
 
         /// <summary>Detects and returns a list of all system monitors.</summary>
+        /// <remarks>
+        /// On each detected monitor, briefly opens a 20×20 popup <see cref="MonitorTester"/> window to
+        /// measure <c>EditorGUIUtility.pixelsPerPoint</c>, then closes it immediately. This per-monitor
+        /// probe is the only way to read the DPI scale that varies between displays on the same host.
+        /// </remarks>
         /// <returns>The list of detected monitors with their positions and dimensions.</returns>
-        public static List<Monitor> EnumeratedMonitors()
+        public static List<Monitor> EnumerateMonitors()
         {
             List<Monitor> result = new List<Monitor>();
 
@@ -76,64 +82,60 @@ namespace Gimbl
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                using (System.Diagnostics.Process xrandrProcess = new System.Diagnostics.Process())
+                using System.Diagnostics.Process xrandrProcess = new System.Diagnostics.Process();
+                xrandrProcess.StartInfo.UseShellExecute = false;
+                xrandrProcess.StartInfo.RedirectStandardOutput = true;
+                xrandrProcess.StartInfo.FileName = "xrandr";
+                xrandrProcess.Start();
+                string xrandrOutput = xrandrProcess.StandardOutput.ReadToEnd();
+                if (!xrandrProcess.WaitForExit(5000))
                 {
-                    xrandrProcess.StartInfo.UseShellExecute = false;
-                    xrandrProcess.StartInfo.RedirectStandardOutput = true;
-                    xrandrProcess.StartInfo.FileName = "xrandr";
-                    xrandrProcess.Start();
-                    string xrandrOutput = xrandrProcess.StandardOutput.ReadToEnd();
-                    if (!xrandrProcess.WaitForExit(5000))
+                    xrandrProcess.Kill();
+                }
+                foreach (Match match in Regex.Matches(xrandrOutput, @"(\d+)x(\d+)\+(\d+)\+(\d+)"))
+                {
+                    if (
+                        match.Groups.Count >= 5
+                        && int.TryParse(match.Groups[1].Value, out int matchWidth)
+                        && int.TryParse(match.Groups[2].Value, out int matchHeight)
+                        && int.TryParse(match.Groups[3].Value, out int matchLeft)
+                        && int.TryParse(match.Groups[4].Value, out int matchTop)
+                    )
                     {
-                        xrandrProcess.Kill();
-                    }
-                    foreach (Match match in Regex.Matches(xrandrOutput, @"(\d+)x(\d+)\+(\d+)\+(\d+)"))
-                    {
-                        if (
-                            match.Groups.Count >= 5
-                            && int.TryParse(match.Groups[1].Value, out int matchWidth)
-                            && int.TryParse(match.Groups[2].Value, out int matchHeight)
-                            && int.TryParse(match.Groups[3].Value, out int matchLeft)
-                            && int.TryParse(match.Groups[4].Value, out int matchTop)
-                        )
-                        {
-                            result.Add(new Monitor(matchLeft, matchTop, matchWidth, matchHeight));
-                        }
+                        result.Add(new Monitor(matchLeft, matchTop, matchWidth, matchHeight));
                     }
                 }
             }
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                using (System.Diagnostics.Process displayplacerProcess = new System.Diagnostics.Process())
+                using System.Diagnostics.Process displayplacerProcess = new System.Diagnostics.Process();
+                displayplacerProcess.StartInfo.UseShellExecute = false;
+                displayplacerProcess.StartInfo.RedirectStandardOutput = true;
+                displayplacerProcess.StartInfo.FileName = "/usr/local/bin/displayplacer";
+                displayplacerProcess.StartInfo.Arguments = "list";
+                displayplacerProcess.Start();
+                string displayplacerOutput = displayplacerProcess.StandardOutput.ReadToEnd();
+                if (!displayplacerProcess.WaitForExit(5000))
                 {
-                    displayplacerProcess.StartInfo.UseShellExecute = false;
-                    displayplacerProcess.StartInfo.RedirectStandardOutput = true;
-                    displayplacerProcess.StartInfo.FileName = "/usr/local/bin/displayplacer";
-                    displayplacerProcess.StartInfo.Arguments = "list";
-                    displayplacerProcess.Start();
-                    string displayplacerOutput = displayplacerProcess.StandardOutput.ReadToEnd();
-                    if (!displayplacerProcess.WaitForExit(5000))
-                    {
-                        displayplacerProcess.Kill();
-                    }
-                    foreach (
-                        Match match in Regex.Matches(
-                            displayplacerOutput,
-                            @"Resolution: (\d+)x(\d+)(.|\n)*?Origin: [(](\d+),(\d+)[)]"
-                        )
+                    displayplacerProcess.Kill();
+                }
+                foreach (
+                    Match match in Regex.Matches(
+                        displayplacerOutput,
+                        @"Resolution: (\d+)x(\d+)(.|\n)*?Origin: [(](\d+),(\d+)[)]"
+                    )
+                )
+                {
+                    if (
+                        match.Groups.Count >= 6
+                        && int.TryParse(match.Groups[1].Value, out int matchWidth)
+                        && int.TryParse(match.Groups[2].Value, out int matchHeight)
+                        && int.TryParse(match.Groups[4].Value, out int matchLeft)
+                        && int.TryParse(match.Groups[5].Value, out int matchTop)
                     )
                     {
-                        if (
-                            match.Groups.Count >= 6
-                            && int.TryParse(match.Groups[1].Value, out int matchWidth)
-                            && int.TryParse(match.Groups[2].Value, out int matchHeight)
-                            && int.TryParse(match.Groups[4].Value, out int matchLeft)
-                            && int.TryParse(match.Groups[5].Value, out int matchTop)
-                        )
-                        {
-                            result.Add(new Monitor(matchLeft, matchTop, matchWidth, matchHeight));
-                        }
+                        result.Add(new Monitor(matchLeft, matchTop, matchWidth, matchHeight));
                     }
                 }
             }
@@ -175,16 +177,10 @@ namespace Gimbl
             public int bottom;
 
             /// <summary>The width of the rectangle in pixels.</summary>
-            public int Width
-            {
-                get { return right - left; }
-            }
+            public int Width => right - left;
 
             /// <summary>The height of the rectangle in pixels.</summary>
-            public int Height
-            {
-                get { return bottom - top; }
-            }
+            public int Height => bottom - top;
         }
 
         /// <summary>
@@ -204,3 +200,4 @@ namespace Gimbl
         }
     }
 }
+#endif

@@ -29,9 +29,13 @@ namespace SL.Config
         /// <summary>Loads a TaskTemplate from a YAML file and derives the template name from the filename.</summary>
         /// <param name="filePath">The absolute path to the YAML template file.</param>
         /// <returns>The parsed template with templateName populated.</returns>
-        /// <exception cref="FileNotFoundException">Thrown when the template file does not exist at the given path.</exception>
-        /// <exception cref="FormatException">Thrown when the YAML file cannot be parsed into a TaskTemplate.</exception>
-        /// <exception cref="InvalidDataException">Thrown when the parsed template fails validation.</exception>
+        /// <exception cref="FileNotFoundException">
+        /// The template file at <paramref name="filePath"/> does not exist.
+        /// </exception>
+        /// <exception cref="FormatException">
+        /// The YAML file cannot be deserialized into a <see cref="TaskTemplate"/>.
+        /// </exception>
+        /// <exception cref="InvalidDataException">The parsed template fails validation.</exception>
         public static TaskTemplate LoadTemplate(string filePath)
         {
             if (!File.Exists(filePath))
@@ -58,8 +62,8 @@ namespace SL.Config
         /// <summary>Validates the loaded template for required fields and data integrity.</summary>
         /// <param name="template">The template to validate.</param>
         /// <param name="filePath">The absolute path to the template file, used for resolving asset paths.</param>
-        /// <exception cref="FormatException">Thrown when the template is null or cannot be parsed.</exception>
-        /// <exception cref="InvalidDataException">Thrown when the template fails any validation check.</exception>
+        /// <exception cref="FormatException">The template is null or could not be parsed.</exception>
+        /// <exception cref="InvalidDataException">The template fails one of the validation checks.</exception>
         private static void ValidateTemplate(TaskTemplate template, string filePath)
         {
             if (template == null)

@@ -1,14 +1,19 @@
 /// <summary>
-/// Provides the CreateTask class that generates Task prefabs from YAML configuration files via Unity Editor menu.
+/// Provides the CreateTask class that generates Task prefabs and matching test scenes from YAML configuration
+/// files via the Unity Editor menu. Mirrors the agentic generate_task_prefab + create_scene pipeline in a
+/// single Editor entry point so a YAML edit produces a runnable scene without leaving the Editor.
 /// </summary>
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using Gimbl;
 using SL.Config;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace SL.Tasks
 {
@@ -20,6 +25,37 @@ namespace SL.Tasks
     {
         /// <summary>The tolerance for comparing measured prefab lengths against configured lengths.</summary>
         private const float LengthComparisonEpsilon = 0.01f;
+
+        /// <summary>The project-relative folder where generated task prefabs are saved.</summary>
+        private const string TasksFolder = "Assets/InfiniteCorridorTask/Tasks";
+
+        /// <summary>The project-relative folder where generated task scenes are saved.</summary>
+        private const string ScenesFolder = "Assets/Scenes";
+
+        /// <summary>
+        /// The project-relative path to the canonical scene template that scene generation copies from.
+        /// </summary>
+        /// <remarks>
+        /// The template is hand-authored and contains the Display rig, Actor, and any other scene-wide
+        /// infrastructure that every task scene needs. ``McpBridge`` protects this path from deletion via
+        /// its protected-paths list so a regenerated scene always has a known-good source. Updating the
+        /// path here requires a matching update to the protected-paths list in
+        /// <c>McpBridge.DeleteProtectedPaths</c>.
+        /// </remarks>
+        private const string TemplateScenePath = "Assets/Scenes/ExperimentTemplate.unity";
+
+        /// <summary>The canonical reference material whose shader is reused by all generated cue materials.</summary>
+        /// <remarks>
+        /// This material lives in source control and is protected from deletion via the McpBridge's
+        /// protected-paths list. Its shader (built-in fileID 10708 — a legacy diffuse variant) renders
+        /// both walls of a cue correctly even when the Right wall uses a negative geometry scale to
+        /// mirror its texture; the Standard shader breaks under negative scales, and Unlit shaders drop
+        /// lighting altogether. The reference is loaded by <see cref="LoadReferenceCueShader"/> so a
+        /// fresh project clone produces visually identical cues without needing a pre-existing legacy
+        /// material to bootstrap from.
+        /// </remarks>
+        private const string CueShaderReferenceMaterialPath =
+            "Assets/InfiniteCorridorTask/Materials/_CueShaderReference.mat";
 
         /// <summary>
         /// Formats a cue's centimeter length as the suffix used in cue prefab and material filenames.
@@ -81,7 +117,9 @@ namespace SL.Tasks
         /// YAML deserialization per template; the catalog is small) and runs on every generation call so
         /// drift introduced between runs is caught at the earliest possible moment.
         /// </remarks>
-        /// <param name="errorMessage">Receives a human-readable description of every detected conflict on failure.</param>
+        /// <param name="errorMessage">
+        /// Receives a human-readable description of every detected conflict on failure.
+        /// </param>
         /// <returns>True when no conflicts are detected; false otherwise.</returns>
         private static bool ValidateCueDefinitionsAcrossTemplates(out string errorMessage)
         {
@@ -173,14 +211,23 @@ namespace SL.Tasks
             return false;
         }
 
-        /// <summary>Creates a new Task prefab from a selected YAML configuration file via the Editor menu.</summary>
+        /// <summary>
+        /// Creates a new Task prefab and a matching scene from a selected YAML configuration file. Save
+        /// paths and asset names are auto-resolved from the template filename so the menu flow matches the
+        /// MCP-driven pipeline: the prefab lands at ``Assets/InfiniteCorridorTask/Tasks/{templateName}.prefab``
+        /// and the scene at ``Assets/Scenes/{templateName}.unity``. The user is only prompted for the
+        /// template selection and, when an existing prefab or scene would be overwritten, a single
+        /// confirmation dialog before any mutation occurs.
+        /// </summary>
         /// <remarks>
-        /// Rejects selections outside ``Assets/InfiniteCorridorTask/Configurations/`` so the Editor surface
-        /// matches the MCP surface (which is already hard-coded to that folder) and so the cross-template
-        /// cue-texture preflight in <see cref="CreateFromTemplate"/> sees every template that can drive
-        /// generation. Constraining the menu also keeps the runtime-resolved ``relativeConfigPath`` stored
-        /// on the Task component well-formed: a YAML selected from outside ``Application.dataPath`` would
-        /// otherwise yield a malformed path that breaks the runtime template lookup later.
+        /// Rejects template selections outside ``Assets/InfiniteCorridorTask/Configurations/`` so the
+        /// Editor surface matches the MCP surface (which is already hard-coded to that folder) and so the
+        /// cross-template cue-texture preflight in <see cref="CreateFromTemplate"/> sees every template
+        /// that can drive generation. Constraining the menu also keeps the runtime-resolved
+        /// ``relativeConfigPath`` stored on the Task component well-formed: a YAML selected from outside
+        /// ``Application.dataPath`` would otherwise yield a malformed path that breaks the runtime template
+        /// lookup later. The scene generation step is the final phase so the user sees the prefab result
+        /// before scene work begins, and so a failed prefab build short-circuits before any scene is touched.
         /// </remarks>
         [MenuItem("CreateTask/New Task")]
         public static void CreateNewTask()
@@ -207,36 +254,98 @@ namespace SL.Tasks
             string configurationsPrefix = configurationsDirectory.TrimEnd('/') + "/";
             if (!absoluteSelectedPath.StartsWith(configurationsPrefix, StringComparison.Ordinal))
             {
-                Debug.LogError(
+                string message =
                     $"Selected template '{absoluteSelectedPath}' is outside the canonical Configurations "
-                        + $"directory '{configurationsDirectory}'. Move the template into Configurations/ "
-                        + "before generating; only files under that folder are visible to MCP-driven "
-                        + "generation and to the cross-template cue-texture preflight."
-                );
+                    + $"directory '{configurationsDirectory}'. Move the template into Configurations/ "
+                    + "before generating; only files under that folder are visible to MCP-driven "
+                    + "generation and to the cross-template cue-texture preflight.";
+                Debug.LogError(message);
                 return;
             }
 
+            // Auto-resolves every downstream path from the template filename. The template name is also the
+            // prefab basename, the scene basename, and the segment-prefab prefix, matching the MCP flow's
+            // conventions so menu-generated and agent-generated assets are byte-equivalent.
+            string templateName = Path.GetFileNameWithoutExtension(absoluteSelectedPath);
             string configPath = absoluteSelectedPath.Substring(dataPath.Length).TrimStart('/');
+            string prefabSavePath = Path.Combine(TasksFolder, $"{templateName}.prefab").Replace('\\', '/');
+            string sceneSavePath = Path.Combine(ScenesFolder, $"{templateName}.unity").Replace('\\', '/');
 
-            // Opens save file panel for user to specify location and name of prefab
-            string tasksDirectory = Path.Combine(Application.dataPath, "InfiniteCorridorTask", "Tasks");
-            string savePath = EditorUtility.SaveFilePanel(
-                "Save Task Prefab",
-                tasksDirectory,
-                "newTask.prefab",
-                "prefab"
+            // Confirms overwrite up front when either auto-resolved target already exists. Doing this
+            // before any mutation lets the user cancel without leaving the project in a half-regenerated
+            // state and keeps the destructive nature of the flow visible — auto-resolution removes the OS
+            // file-panel's built-in overwrite prompt, so we have to surface it ourselves.
+            List<string> existingTargets = new List<string>();
+            if (File.Exists(prefabSavePath))
+            {
+                existingTargets.Add(prefabSavePath);
+            }
+            if (File.Exists(sceneSavePath))
+            {
+                existingTargets.Add(sceneSavePath);
+            }
+            if (existingTargets.Count > 0)
+            {
+                string dialogMessage =
+                    $"The following assets will be replaced:\n\n  {string.Join("\n  ", existingTargets)}"
+                    + "\n\nAny hand-edits to those files will be lost. Continue?";
+                bool proceed = EditorUtility.DisplayDialog(
+                    title: $"Regenerate '{templateName}' Assets",
+                    message: dialogMessage,
+                    ok: "Replace",
+                    cancel: "Cancel"
+                );
+                if (!proceed)
+                {
+                    Debug.Log("Task generation cancelled.");
+                    return;
+                }
+            }
+
+            // Ensures the Tasks output folder exists before CreateFromTemplate writes the prefab. The
+            // Scenes folder is part of the project skeleton and is assumed to exist; if it does not,
+            // CreateSceneFromTemplate's CopyAsset call will surface the failure.
+            if (!AssetDatabase.IsValidFolder(TasksFolder))
+            {
+                AssetDatabase.CreateFolder("Assets/InfiniteCorridorTask", "Tasks");
+            }
+
+            string absoluteTemplatePath = Path.Combine(Application.dataPath, configPath);
+            string prefabResult = CreateFromTemplate(absoluteTemplatePath, configPath, prefabSavePath);
+            Debug.Log(prefabResult);
+
+            // Skips scene generation when prefab creation failed. The scene step depends on the prefab
+            // existing on disk and would otherwise emit a confusing "task prefab not found" warning.
+            if (!prefabResult.StartsWith("success:", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            // Defers to Unity's built-in unsaved-changes dialog before opening the new scene. Returning
+            // false means the user pressed Cancel, which we treat as an abort of just the scene step; the
+            // already-generated prefab is left in place so a follow-up run can finish the scene.
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+            {
+                string message =
+                    $"Scene generation cancelled — unsaved changes in the active scene were not handled. "
+                    + $"The prefab is at {prefabSavePath}; rerun the menu to regenerate the scene.";
+                Debug.Log(message);
+                return;
+            }
+
+            SceneCreationResult sceneResult = CreateSceneFromTemplate(
+                sceneSavePath: sceneSavePath,
+                taskPrefabPath: prefabSavePath,
+                overwriteExisting: true
             );
 
-            if (string.IsNullOrEmpty(savePath))
+            if (!sceneResult.Success)
             {
-                Debug.LogError("User did not select a save location.");
+                Debug.LogError($"error: {sceneResult.Message}");
                 return;
             }
 
-            savePath = FileUtil.GetProjectRelativePath(savePath);
-            string absoluteTemplatePath = Path.Combine(Application.dataPath, configPath);
-            string result = CreateFromTemplate(absoluteTemplatePath, configPath, savePath);
-            Debug.Log(result);
+            Debug.Log($"success: {sceneResult.Message}");
         }
 
         /// <summary>
@@ -328,12 +437,12 @@ namespace SL.Tasks
             {
                 if (Mathf.Abs(measuredSegmentLengths[i] - segmentLengths[i]) > LengthComparisonEpsilon)
                 {
-                    Debug.LogWarning(
+                    string message =
                         $"For trial {trialNames[i]}, there is a mismatch between the prefab "
-                            + $"length ({measuredSegmentLengths[i]}) and the sum of all the cue "
-                            + $"lengths ({segmentLengths[i]}). Using {segmentLengths[i]} for the "
-                            + "length of the segment."
-                    );
+                        + $"length ({measuredSegmentLengths[i]}) and the sum of all the cue "
+                        + $"lengths ({segmentLengths[i]}). Using {segmentLengths[i]} for the "
+                        + "length of the segment.";
+                    Debug.LogWarning(message);
                 }
             }
 
@@ -342,16 +451,14 @@ namespace SL.Tasks
 
             // Creates task GameObject hierarchy
             string taskName = Path.GetFileNameWithoutExtension(savePath);
-            GameObject task = new GameObject(taskName);
-            Task taskScript = task.AddComponent<Task>();
+            GameObject taskGameObject = new GameObject(taskName);
+            Task taskScript = taskGameObject.AddComponent<Task>();
             taskScript.requireLick = true;
             taskScript.configPath = relativeConfigPath;
 
             int[] corridorSegments = new int[depth];
-            int segment;
             float currentCorridorX = 0;
             float corridorXShift = template.vrEnvironment.CorridorSpacingUnity;
-            float zShift;
 
             // Iterates through all possible corridor combinations
             for (int i = 0; i < Mathf.Pow(trialCount, depth); i++)
@@ -363,13 +470,13 @@ namespace SL.Tasks
                 }
 
                 GameObject corridor = new GameObject($"Corridor{string.Join("", corridorSegments)}");
-                corridor.transform.SetParent(task.transform);
+                corridor.transform.SetParent(taskGameObject.transform);
                 corridor.transform.localPosition = new Vector3(currentCorridorX, 0, 0);
 
-                zShift = 0;
+                float zShift = 0;
                 for (int j = 0; j < depth; j++)
                 {
-                    segment = corridorSegments[j];
+                    int segment = corridorSegments[j];
                     GameObject instance = PrefabUtility.InstantiatePrefab(segmentPrefabs[segment]) as GameObject;
 
                     // Only the first segment in each corridor should have a stimulus trigger zone
@@ -412,24 +519,149 @@ namespace SL.Tasks
                 currentCorridorX += corridorXShift;
             }
 
-            PrefabUtility.SaveAsPrefabAsset(task, savePath);
-            UnityEngine.Object.DestroyImmediate(task);
+            PrefabUtility.SaveAsPrefabAsset(taskGameObject, savePath);
+            UnityEngine.Object.DestroyImmediate(taskGameObject);
 
             return $"success: Task prefab saved to {savePath}";
         }
 
-        /// <summary>The canonical reference material whose shader is reused by all generated cue materials.</summary>
-        /// <remarks>
-        /// This material lives in source control and is protected from deletion via the McpBridge's
-        /// protected-paths list. Its shader (built-in fileID 10708 — a legacy diffuse variant) renders
-        /// both walls of a cue correctly even when the Right wall uses a negative geometry scale to
-        /// mirror its texture; the Standard shader breaks under negative scales, and Unlit shaders drop
-        /// lighting altogether. The reference is loaded by <see cref="LoadReferenceCueShader"/> so a
-        /// fresh project clone produces visually identical cues without needing a pre-existing legacy
-        /// material to bootstrap from.
-        /// </remarks>
-        private const string CueShaderReferenceMaterialPath =
-            "Assets/InfiniteCorridorTask/Materials/_CueShaderReference.mat";
+        /// <summary>
+        /// Creates a new scene by copying the canonical experiment template scene, optionally instantiating a
+        /// task prefab into it, and adding a SimulatedLinearTreadmill controller alongside any existing
+        /// LinearTreadmill so the scene can be exercised with keyboard input out of the box. The new scene is
+        /// opened in the Editor and saved on disk before the call returns. Callers are responsible for
+        /// resolving any unsaved changes in the currently open scene before invoking this method, since the
+        /// menu flow uses Unity's native dialog while the MCP flow uses an explicit policy argument.
+        /// </summary>
+        /// <param name="sceneSavePath">The project-relative path where the new scene file is written.</param>
+        /// <param name="taskPrefabPath">
+        /// The project-relative path to a task prefab to instantiate in the scene, or an empty string to
+        /// create the scene without any task prefab. A non-empty path that does not resolve to a loadable
+        /// prefab still yields a successful result with <see cref="SceneCreationResult.TaskPrefabNotFound"/>
+        /// set so callers can surface the discrepancy without rolling back the scene.
+        /// </param>
+        /// <param name="overwriteExisting">
+        /// When true, an existing scene at <paramref name="sceneSavePath"/> is deleted before the template is
+        /// copied. Use this from interactive flows that have already confirmed the overwrite with the user;
+        /// pass false from automated callers that should refuse to clobber existing scenes.
+        /// </param>
+        /// <returns>A <see cref="SceneCreationResult"/> describing the outcome.</returns>
+        public static SceneCreationResult CreateSceneFromTemplate(
+            string sceneSavePath,
+            string taskPrefabPath,
+            bool overwriteExisting
+        )
+        {
+            SceneCreationResult result = new SceneCreationResult();
+
+            if (string.IsNullOrEmpty(sceneSavePath))
+            {
+                result.Message = "Scene save path must not be null or empty.";
+                return result;
+            }
+
+            if (!File.Exists(TemplateScenePath))
+            {
+                result.Message = $"Template scene not found at: {TemplateScenePath}";
+                return result;
+            }
+
+            if (File.Exists(sceneSavePath))
+            {
+                if (!overwriteExisting)
+                {
+                    result.Message = $"Scene already exists at: {sceneSavePath}";
+                    return result;
+                }
+
+                if (!AssetDatabase.DeleteAsset(sceneSavePath))
+                {
+                    result.Message = $"Failed to delete existing scene at: {sceneSavePath}";
+                    return result;
+                }
+            }
+
+            if (!AssetDatabase.CopyAsset(TemplateScenePath, sceneSavePath))
+            {
+                result.Message = $"Failed to copy template scene to: {sceneSavePath}";
+                return result;
+            }
+            AssetDatabase.Refresh();
+
+            EditorSceneManager.OpenScene(sceneSavePath);
+
+            // Instantiates the task prefab when one was requested. A missing prefab is reported as a
+            // non-fatal warning so the rest of the pipeline (controller add, scene save) still runs and the
+            // user is left with a usable scene that just lacks the task hierarchy.
+            if (!string.IsNullOrEmpty(taskPrefabPath))
+            {
+                GameObject taskPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(taskPrefabPath);
+                if (taskPrefab != null)
+                {
+                    PrefabUtility.InstantiatePrefab(taskPrefab);
+                }
+                else
+                {
+                    result.TaskPrefabNotFound = true;
+                }
+            }
+
+            result.SimulatedControllerAdded = AddSimulatedControllerToActiveScene();
+
+            EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
+
+            result.Success = true;
+            if (result.TaskPrefabNotFound)
+            {
+                result.Message = $"Scene saved to {sceneSavePath} but task prefab was not found at: {taskPrefabPath}";
+            }
+            else
+            {
+                result.Message = $"Scene saved to {sceneSavePath}";
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Adds a SimulatedLinearTreadmill controller GameObject to the active scene alongside any existing
+        /// LinearTreadmill so the scene can be driven by keyboard input out of the box. The new controller
+        /// inherits the existing LinearTreadmill's actor and settings references so it behaves identically
+        /// aside from the input source. Skips the add when the scene already contains a
+        /// SimulatedLinearTreadmill, or when no LinearTreadmill is present (no reference to borrow actor and
+        /// settings from). Returns true when a new controller was added.
+        /// </summary>
+        /// <returns>True when a SimulatedLinearTreadmill GameObject was created, false otherwise.</returns>
+        private static bool AddSimulatedControllerToActiveScene()
+        {
+            Scene activeScene = SceneManager.GetActiveScene();
+            if (
+                Resources
+                    .FindObjectsOfTypeAll<SimulatedLinearTreadmill>()
+                    .Any(existing => existing.gameObject.scene == activeScene)
+            )
+            {
+                return false;
+            }
+
+            LinearTreadmill referenceController = Resources
+                .FindObjectsOfTypeAll<LinearTreadmill>()
+                .FirstOrDefault(controller =>
+                    controller.gameObject.scene == activeScene && controller is not SimulatedLinearTreadmill
+                );
+            if (referenceController == null)
+            {
+                return false;
+            }
+
+            GameObject simulatedGameObject = new GameObject("SimulatedController");
+            simulatedGameObject.transform.SetParent(referenceController.transform.parent, worldPositionStays: false);
+            SimulatedLinearTreadmill simulated = simulatedGameObject.AddComponent<SimulatedLinearTreadmill>();
+            simulated.actor = referenceController.actor;
+            simulated.settings = referenceController.settings;
+            ControllerOutput simulatedOutput = simulatedGameObject.AddComponent<ControllerOutput>();
+            simulatedOutput.master = simulated;
+            return true;
+        }
 
         /// <summary>
         /// Resolves the shader used by generated cue materials, preferring the committed reference
@@ -447,11 +679,11 @@ namespace SL.Tasks
             {
                 return reference.shader;
             }
-            Debug.LogWarning(
+            string message =
                 $"BuildCuePrefabs: canonical shader reference '{CueShaderReferenceMaterialPath}' is missing; "
-                    + "falling back to a hand-authored Cue*.mat material or Shader.Find. Restore the "
-                    + "reference material to guarantee consistent cue rendering across machines."
-            );
+                + "falling back to a hand-authored Cue*.mat material or Shader.Find. Restore the "
+                + "reference material to guarantee consistent cue rendering across machines.";
+            Debug.LogWarning(message);
 
             string[] guids = AssetDatabase.FindAssets("t:Material", new[] { materialsPath.TrimEnd('/') });
             foreach (string guid in guids)
@@ -865,6 +1097,31 @@ namespace SL.Tasks
             {
                 stimulusZone.showBoundary = showBoundary;
             }
+        }
+
+        /// <summary>
+        /// Reports the outcome of <see cref="CreateSceneFromTemplate"/>. Returned in lieu of a string-prefix
+        /// protocol because the scene path encodes three orthogonal facts that callers route differently:
+        /// success or error, whether the requested task prefab was found, and whether a SimulatedLinearTreadmill
+        /// was added. The MCP bridge surfaces all three back to the relay; the menu flow only logs the message.
+        /// </summary>
+        public class SceneCreationResult
+        {
+            /// <summary>Determines whether the scene file was successfully created and saved.</summary>
+            public bool Success { get; set; }
+
+            /// <summary>The human-readable description of the outcome, including any error detail.</summary>
+            public string Message { get; set; }
+
+            /// <summary>Determines whether a SimulatedLinearTreadmill GameObject was added to the new scene.</summary>
+            public bool SimulatedControllerAdded { get; set; }
+
+            /// <summary>
+            /// Determines whether a non-empty task prefab path was supplied but no asset could be loaded
+            /// from it. The scene is still created and saved when this flag is set; callers may surface a
+            /// warning to the user but should not treat it as a fatal error.
+            /// </summary>
+            public bool TaskPrefabNotFound { get; set; }
         }
     }
 }

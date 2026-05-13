@@ -27,12 +27,13 @@ namespace Gimbl
         public void ParentToActor(ActorObject actor)
         {
             gameObject.transform.SetParent(actor.transform, false);
-            gameObject.transform.localPosition = new Vector3(0, settings != null ? settings.heightInVR : 0, 0);
+            float heightInVR = settings?.heightInVR ?? 0f;
+            gameObject.transform.localPosition = new Vector3(0f, heightInVR, 0f);
 
-            foreach (Camera cam in gameObject.GetComponentsInChildren<Camera>())
+            foreach (Camera displayCamera in gameObject.GetComponentsInChildren<Camera>())
             {
-                cam.cullingMask = -1;
-                cam.cullingMask &= ~(1 << LayerMask.NameToLayer(actor.name));
+                displayCamera.cullingMask = -1;
+                displayCamera.cullingMask &= ~(1 << LayerMask.NameToLayer(actor.name));
             }
         }
 
@@ -40,9 +41,9 @@ namespace Gimbl
         public void Unparent()
         {
             gameObject.transform.SetParent(null);
-            foreach (Camera cam in gameObject.GetComponentsInChildren<Camera>())
+            foreach (Camera displayCamera in gameObject.GetComponentsInChildren<Camera>())
             {
-                cam.cullingMask = -1;
+                displayCamera.cullingMask = -1;
             }
         }
     }

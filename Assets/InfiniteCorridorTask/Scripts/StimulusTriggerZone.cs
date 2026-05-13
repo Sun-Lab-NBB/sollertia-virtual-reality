@@ -46,11 +46,6 @@ namespace SL.Tasks
         /// <summary>The child OccupancyZone that determines occupancy mode behavior, if present.</summary>
         private OccupancyZone _occupancyZone;
 
-        /// <summary>
-        /// Determines whether this zone operates in occupancy mode based on presence of OccupancyZone child.
-        /// </summary>
-        private bool IsOccupancyMode => _occupancyZone != null;
-
         /// <summary>The reference to the Task for checking guidance mode state.</summary>
         private Task _task;
 
@@ -59,6 +54,14 @@ namespace SL.Tasks
 
         /// <summary>The MQTT channel for receiving lick detection messages.</summary>
         private MQTTChannel _lickTrigger;
+
+        /// <summary>The cached MeshRenderer used to render the boundary indicator, if attached.</summary>
+        private MeshRenderer _boundaryRenderer;
+
+        /// <summary>
+        /// Determines whether this zone operates in occupancy mode based on presence of OccupancyZone child.
+        /// </summary>
+        private bool IsOccupancyMode => _occupancyZone != null;
 
         /// <summary>Initializes the zone by finding child zones and setting up MQTT channels.</summary>
         private void Start()
@@ -74,6 +77,9 @@ namespace SL.Tasks
             // Finds child zones that determine behavior mode.
             _guidanceZone = GetComponentInChildren<GuidanceZone>();
             _occupancyZone = GetComponentInChildren<OccupancyZone>();
+
+            // Caches the boundary renderer so per-lap and per-trigger toggles avoid TryGetComponent.
+            TryGetComponent(out _boundaryRenderer);
 
             // Sets up MQTT channels.
             _stimulusTrigger = new MQTTChannel("Gimbl/Stimulus/");
@@ -98,15 +104,15 @@ namespace SL.Tasks
         }
 
         /// <summary>Sets the zone state to active when the animal enters the trigger zone collider.</summary>
-        /// <param name="collider">The collider that entered or exited the trigger zone.</param>
-        private void OnTriggerEnter(Collider collider)
+        /// <param name="other">The collider that entered the trigger zone.</param>
+        private void OnTriggerEnter(Collider other)
         {
             _inZone = true;
         }
 
         /// <summary>Sets the zone state to inactive when the animal exits the trigger zone collider.</summary>
-        /// <param name="collider">The collider that entered or exited the trigger zone.</param>
-        private void OnTriggerExit(Collider collider)
+        /// <param name="other">The collider that exited the trigger zone.</param>
+        private void OnTriggerExit(Collider other)
         {
             _inZone = false;
         }
@@ -124,9 +130,9 @@ namespace SL.Tasks
             isActive = true;
             _lickDetectedInZone = false;
             _inZone = false;
-            if (TryGetComponent<MeshRenderer>(out var meshRenderer))
+            if (_boundaryRenderer != null)
             {
-                meshRenderer.enabled = showBoundary;
+                _boundaryRenderer.enabled = showBoundary;
             }
         }
 
@@ -185,9 +191,9 @@ namespace SL.Tasks
         private void TriggerStimulus()
         {
             Debug.Log("StimulusTriggerZone: Stimulus triggered.");
-            if (TryGetComponent<MeshRenderer>(out var meshRenderer))
+            if (_boundaryRenderer != null)
             {
-                meshRenderer.enabled = false;
+                _boundaryRenderer.enabled = false;
             }
             _stimulusTrigger.Send();
             isActive = false;

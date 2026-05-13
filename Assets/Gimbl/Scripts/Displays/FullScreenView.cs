@@ -4,6 +4,7 @@
 /// Renders a camera to a borderless popup editor window, enabling multi-monitor VR
 /// display setups within the Unity editor.
 /// </summary>
+#if UNITY_EDITOR
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -124,3 +125,4 @@ namespace Gimbl
         }
     }
 }
+#endif

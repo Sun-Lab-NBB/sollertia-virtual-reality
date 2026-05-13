@@ -12,7 +12,6 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
-using Gimbl;
 using SL.Config;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -54,8 +53,13 @@ namespace SL.Tasks
             "Assets/Scenes/ExperimentTemplate.unity",
         };
 
+        /// <summary>The shared error-protocol prefix returned by <see cref="CreateTask.CreateFromTemplate"/>.</summary>
+        private const string CreateTaskErrorPrefix = "error: ";
+
         /// <summary>The HTTP listener instance.</summary>
-        private static HttpListener _listener;
+        private static readonly HttpListener _listener = new HttpListener();
+
+        /// <summary>The queue of HTTP requests captured on the listener thread, drained on the editor thread.</summary>
         private static readonly ConcurrentQueue<HttpListenerContext> _pendingContexts =
             new ConcurrentQueue<HttpListenerContext>();
 
@@ -64,7 +68,6 @@ namespace SL.Tasks
         {
             try
             {
-                _listener = new HttpListener();
                 // Registers all three loopback hostnames because HttpListener performs exact
                 // host-header matching: a client requesting "localhost" is rejected by 127.0.0.1
                 // and [::1] prefixes, even though they resolve to the same socket. The explicit
@@ -75,9 +78,10 @@ namespace SL.Tasks
                 _listener.Start();
                 _listener.BeginGetContext(OnContextReceived, null);
                 EditorApplication.update += Poll;
-                Debug.Log(
-                    $"McpBridge: Listening on http://127.0.0.1:{Port}/, http://[::1]:{Port}/, and http://localhost:{Port}/"
-                );
+                string message =
+                    $"McpBridge: Listening on http://127.0.0.1:{Port}/, http://[::1]:{Port}/, "
+                    + $"and http://localhost:{Port}/";
+                Debug.Log(message);
             }
             catch (Exception exception)
             {
@@ -135,11 +139,8 @@ namespace SL.Tasks
 
             try
             {
-                string body;
-                using (StreamReader reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
-                {
-                    body = reader.ReadToEnd();
-                }
+                using StreamReader reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+                string body = reader.ReadToEnd();
 
                 Dictionary<string, object> request = MiniJson.Deserialize(body);
                 string tool = request.ContainsKey("tool") ? request["tool"].ToString() : "";
@@ -236,9 +237,9 @@ namespace SL.Tasks
 
             string result = CreateTask.CreateFromTemplate(absoluteTemplatePath, relativeConfigPath, savePath);
 
-            if (result.StartsWith("error:", StringComparison.Ordinal))
+            if (result.StartsWith(CreateTaskErrorPrefix, StringComparison.Ordinal))
             {
-                return Error(result.Substring(7).Trim());
+                return Error(result.Substring(CreateTaskErrorPrefix.Length).Trim());
             }
 
             return Ok(
@@ -380,8 +381,8 @@ namespace SL.Tasks
                 if (zone != null)
                 {
                     float actualZ = zone.transform.localPosition.z;
-                    BoxCollider collider = zone.GetComponent<BoxCollider>();
-                    float actualSize = collider != null ? collider.size.z : 0f;
+                    BoxCollider zoneCollider = zone.GetComponent<BoxCollider>();
+                    float actualSize = zoneCollider != null ? zoneCollider.size.z : 0f;
 
                     float expectedCenter =
                         (trial.stimulusTriggerZoneStartCm + trial.stimulusTriggerZoneEndCm) / (2f * cmPerUnit);
@@ -533,6 +534,9 @@ namespace SL.Tasks
 
         /// <summary>
         /// Creates a new scene by copying ExperimentTemplate.unity, optionally adding a task prefab to it.
+        /// Delegates the file copy, prefab instantiation, and SimulatedLinearTreadmill placement to
+        /// <see cref="CreateTask.CreateSceneFromTemplate"/> so the MCP surface and the Editor menu
+        /// produce identical scenes.
         /// </summary>
         /// <param name="args">
         /// The tool arguments containing scene_name, optional task_prefab_path, and optional unsaved_changes.
@@ -549,14 +553,12 @@ namespace SL.Tasks
                 return Error("Missing required argument: scene_name");
             }
 
-            string templateScenePath = Path.Combine("Assets", "Scenes", "ExperimentTemplate.unity");
             string newScenePath = Path.Combine("Assets", "Scenes", $"{sceneName}.unity");
 
-            if (!File.Exists(templateScenePath))
-            {
-                return Error($"Template scene not found at: {templateScenePath}");
-            }
-
+            // Refuses to clobber an existing scene at the requested path. The Editor menu uses Unity's
+            // SaveFilePanel overwrite prompt and passes overwriteExisting=true to the shared helper; the
+            // MCP surface deliberately rejects this case so an automated client never silently destroys a
+            // hand-authored scene.
             if (File.Exists(newScenePath))
             {
                 return Error($"Scene already exists at: {newScenePath}");
@@ -568,86 +570,30 @@ namespace SL.Tasks
                 return Error(handlingError);
             }
 
-            // Copies the template scene file
-            AssetDatabase.CopyAsset(templateScenePath, newScenePath);
-            AssetDatabase.Refresh();
+            CreateTask.SceneCreationResult sceneResult = CreateTask.CreateSceneFromTemplate(
+                sceneSavePath: newScenePath,
+                taskPrefabPath: taskPrefabPath,
+                overwriteExisting: false
+            );
 
-            // Opens the new scene and adds the task prefab if specified
-            EditorSceneManager.OpenScene(newScenePath);
-
-            if (!string.IsNullOrEmpty(taskPrefabPath))
+            if (!sceneResult.Success)
             {
-                GameObject taskPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(taskPrefabPath);
-                if (taskPrefab != null)
-                {
-                    PrefabUtility.InstantiatePrefab(taskPrefab);
-                    EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
-                }
-                else
-                {
-                    return Ok(
-                        new Dictionary<string, object>
-                        {
-                            { "message", $"Scene created but task prefab not found at: {taskPrefabPath}" },
-                            { "scene_path", newScenePath },
-                            { "warning", "task_prefab_not_found" },
-                        }
-                    );
-                }
+                return Error(sceneResult.Message);
             }
-
-            bool simulatedControllerAdded = AddSimulatedControllerToActiveScene();
-
-            EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
 
             Dictionary<string, object> response = new Dictionary<string, object>
             {
-                { "message", $"Scene created: {newScenePath}" },
+                { "message", sceneResult.Message },
                 { "scene_path", newScenePath },
-                { "simulated_controller_added", simulatedControllerAdded },
+                { "simulated_controller_added", sceneResult.SimulatedControllerAdded },
             };
+
+            if (sceneResult.TaskPrefabNotFound)
+            {
+                response["warning"] = "task_prefab_not_found";
+            }
+
             return Ok(response);
-        }
-
-        /// <summary>
-        /// Adds a SimulatedLinearTreadmill controller GameObject to the active scene alongside any
-        /// existing LinearTreadmill, so the scene can be driven by keyboard input out of the box. The
-        /// new controller inherits the existing LinearTreadmill's actor and settings references so it
-        /// behaves identically aside from the input source. Skips the add when the scene already
-        /// contains a SimulatedLinearTreadmill, or when no LinearTreadmill is present (no reference to
-        /// borrow actor/settings from). Returns true when a new controller was added.
-        /// </summary>
-        /// <returns>True when a SimulatedLinearTreadmill GameObject was created, false otherwise.</returns>
-        private static bool AddSimulatedControllerToActiveScene()
-        {
-            Scene activeScene = SceneManager.GetActiveScene();
-            if (
-                Resources
-                    .FindObjectsOfTypeAll<SimulatedLinearTreadmill>()
-                    .Any(existing => existing.gameObject.scene == activeScene)
-            )
-            {
-                return false;
-            }
-
-            LinearTreadmill referenceController = Resources
-                .FindObjectsOfTypeAll<LinearTreadmill>()
-                .FirstOrDefault(controller =>
-                    controller.gameObject.scene == activeScene && controller is not SimulatedLinearTreadmill
-                );
-            if (referenceController == null)
-            {
-                return false;
-            }
-
-            GameObject simulatedGameObject = new GameObject("SimulatedController");
-            simulatedGameObject.transform.SetParent(referenceController.transform.parent, worldPositionStays: false);
-            SimulatedLinearTreadmill simulated = simulatedGameObject.AddComponent<SimulatedLinearTreadmill>();
-            simulated.actor = referenceController.actor;
-            simulated.settings = referenceController.settings;
-            ControllerOutput simulatedOutput = simulatedGameObject.AddComponent<ControllerOutput>();
-            simulatedOutput.master = simulated;
-            return true;
         }
 
         /// <summary>Inspects the active scene and returns its root GameObject hierarchy.</summary>
@@ -767,7 +713,9 @@ namespace SL.Tasks
         /// The handling policy: "save" persists the active scene, "discard" abandons unsaved edits, and an
         /// empty string leaves the policy unspecified so the caller can prompt the user.
         /// </param>
-        /// <returns>An error message when the active scene is dirty and no policy was provided, otherwise null.</returns>
+        /// <returns>
+        /// An error message when the active scene is dirty and no policy was provided, otherwise null.
+        /// </returns>
         private static string HandleUnsavedChanges(string unsavedChanges)
         {
             Scene activeScene = SceneManager.GetActiveScene();
@@ -799,7 +747,7 @@ namespace SL.Tasks
         /// <returns>The list of cue names ordered along the segment's local Z axis.</returns>
         private static List<string> GetCueOrderFromSegmentPrefab(GameObject segmentPrefab)
         {
-            List<(string cueName, float localZ)> cueChildren = new List<(string, float)>();
+            List<(string cueName, float localZ)> cueChildren = new List<(string cueName, float localZ)>();
             for (int childIndex = 0; childIndex < segmentPrefab.transform.childCount; childIndex++)
             {
                 Transform child = segmentPrefab.transform.GetChild(childIndex);

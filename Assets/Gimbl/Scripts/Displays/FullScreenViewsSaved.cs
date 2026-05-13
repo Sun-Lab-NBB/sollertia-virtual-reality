@@ -1,6 +1,7 @@
 /// <summary>
 /// Provides the FullScreenViewsSaved class for persisting camera assignments.
 /// </summary>
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -26,3 +27,4 @@ namespace Gimbl
         }
     }
 }
+#endif

@@ -154,7 +154,7 @@ namespace Gimbl
 
             /// <summary>Creates a new value buffer with the specified size and mode.</summary>
             /// <param name="size">The maximum number of values to buffer.</param>
-            /// <param name="circular">If true, the buffer wraps around when full.</param>
+            /// <param name="circular">Determines whether the buffer wraps around when full.</param>
             public ValueBuffer(int size, bool circular)
             {
                 _bufferSize = size;

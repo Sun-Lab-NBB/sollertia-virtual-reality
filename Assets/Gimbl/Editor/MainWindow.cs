@@ -27,24 +27,22 @@ namespace Gimbl
         /// <summary>The MQTT client reference for configuration.</summary>
         private MQTTClient _client;
 
-        /// <summary>The current main window instance.</summary>
-        private static MainWindow _window;
-
         /// <summary>The session menu settings instance.</summary>
         [SerializeField]
         private SessionMenuSettings _sessionSettings = new SessionMenuSettings();
 
         /// <summary>Shows the Gimbl main window and related editor windows.</summary>
+        /// <remarks>
+        /// The Settings window is docked next to <c>UnityEditor.InspectorWindow</c>, which is resolved by
+        /// assembly-qualified type name to avoid a hard reference to a private Unity type.
+        /// </remarks>
         [MenuItem("Window/Gimbl")]
         public static void ShowWindow()
         {
-            if (_window == null)
-            {
-                System.Type inspectorType = System.Type.GetType("UnityEditor.InspectorWindow,UnityEditor.dll");
-                EditorWindow window = MainWindow.GetWindow<MainWindow>("Settings", new System.Type[] { inspectorType });
-                ActorWindow.ShowWindow();
-                DisplaysWindow.ShowWindow();
-            }
+            System.Type inspectorType = System.Type.GetType("UnityEditor.InspectorWindow,UnityEditor.dll");
+            GetWindow<MainWindow>("Settings", true, new System.Type[] { inspectorType });
+            ActorWindow.ShowWindow();
+            DisplaysWindow.ShowWindow();
         }
 
         /// <summary>Initializes the scene when the window is enabled.</summary>
@@ -66,7 +64,7 @@ namespace Gimbl
             {
                 GUI.enabled = false;
             }
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.style);
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("MQTT", LayoutSettings.SectionLabel);
             _client.ipAddress = EditorGUILayout.TextField("ip: ", _client.ipAddress, GUILayout.Width(300));
 
@@ -90,7 +88,7 @@ namespace Gimbl
             _sessionSettings.isFold = EditorGUILayout.Foldout(_sessionSettings.isFold, "External Control");
             if (_sessionSettings.isFold)
             {
-                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.style);
+                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
                 bool newExternalStart = EditorGUILayout.Toggle(
                     "External Start Trigger",
                     _sessionSettings.externalStart,
@@ -117,7 +115,7 @@ namespace Gimbl
             GUI.enabled = true;
             EditorGUILayout.EndVertical();
 
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.style);
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("Setup", LayoutSettings.SectionLabel);
             if (GUILayout.Button("Export Setup"))
             {
@@ -180,12 +178,8 @@ namespace Gimbl
                         _client = sceneObject.GetComponent<MQTTClient>();
                         sceneObject.hideFlags = HideFlags.HideInHierarchy;
                         break;
-                    case "Paths":
-                        break;
                     case "Controllers":
                         sceneObject.hideFlags = HideFlags.None;
-                        break;
-                    case "Actors":
                         break;
                     default:
                         break;

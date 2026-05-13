@@ -1,8 +1,6 @@
 /// <summary>
-/// Defines the DisplayType enumeration for available display types.
+/// Provides the DisplayType enumeration that catalogs the supported VR display kinds.
 /// </summary>
-using UnityEngine;
-
 namespace Gimbl
 {
     /// <summary>

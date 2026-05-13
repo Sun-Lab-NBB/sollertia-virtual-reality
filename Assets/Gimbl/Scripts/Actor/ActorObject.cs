@@ -17,7 +17,7 @@ namespace Gimbl
     /// Represents an animal actor in the VR environment with linked display and controller.
     /// </summary>
     [System.Serializable]
-    public partial class ActorObject : MonoBehaviour
+    public class ActorObject : MonoBehaviour
     {
         /// <summary>Determines whether actor movement is enabled.</summary>
         public bool isActive = true;
@@ -85,9 +85,10 @@ namespace Gimbl
                         {
                             if (actor.Controller == value && actor != this)
                             {
-                                Debug.LogWarning(
-                                    $"Switched Controller {value.gameObject.name} from {actor.gameObject.name} to {gameObject.name}"
-                                );
+                                string message =
+                                    $"Switched Controller {value.gameObject.name} from {actor.gameObject.name} "
+                                    + $"to {gameObject.name}";
+                                Debug.LogWarning(message);
                                 actor._controller = null;
                             }
                         }
@@ -202,7 +203,7 @@ namespace Gimbl
         /// <summary>Renders the editor GUI for editing actor properties.</summary>
         public void EditMenu()
         {
-            EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.style);
+            EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
 
             // Controller field.
             EditorGUILayout.BeginHorizontal();

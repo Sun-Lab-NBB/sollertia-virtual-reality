@@ -4,6 +4,7 @@
 /// Adapted from https://answers.unity.com/questions/33597/is-it-possible-to-create-a-tag-programmatically.html
 /// </summary>
 #if UNITY_EDITOR
+using System;
 using UnityEditor;
 
 namespace Gimbl
@@ -11,7 +12,7 @@ namespace Gimbl
     /// <summary>
     /// Manages Unity tags and layers through the TagManager asset.
     /// </summary>
-    public class TagsAndLayers
+    public static class TagsAndLayers
     {
         /// <summary>The maximum number of tags allowed.</summary>
         private const int MaxTags = 10000;
@@ -30,7 +31,7 @@ namespace Gimbl
             SerializedProperty tagsProp = tagManager.FindProperty("tags");
             if (tagsProp.arraySize >= MaxTags)
             {
-                throw new System.InvalidOperationException(
+                throw new InvalidOperationException(
                     $"No more tags can be added to the Tags property. You have {tagsProp.arraySize} tags."
                 );
             }
@@ -68,7 +69,7 @@ namespace Gimbl
                         return true;
                     }
                 }
-                throw new System.InvalidOperationException("All allowed layers have been filled.");
+                throw new InvalidOperationException("All allowed layers have been filled.");
             }
             return false;
         }
@@ -92,7 +93,7 @@ namespace Gimbl
                 {
                     layerSlot = layersProp.GetArrayElementAtIndex(layerIndex);
 
-                    if (layerSlot.stringValue.Equals(layerName, System.StringComparison.Ordinal))
+                    if (layerSlot.stringValue.Equals(layerName, StringComparison.Ordinal))
                     {
                         layerSlot.stringValue = "";
                         tagManager.ApplyModifiedProperties();
@@ -115,7 +116,7 @@ namespace Gimbl
             for (int elementIndex = start; elementIndex < end; elementIndex++)
             {
                 SerializedProperty element = property.GetArrayElementAtIndex(elementIndex);
-                if (element.stringValue.Equals(value, System.StringComparison.Ordinal))
+                if (element.stringValue.Equals(value, StringComparison.Ordinal))
                 {
                     return true;
                 }

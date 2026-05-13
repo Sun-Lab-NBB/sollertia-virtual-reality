@@ -30,8 +30,8 @@ namespace SL.Tasks
         }
 
         /// <summary>Resets all zones to their initial state when the animal enters the reset zone collider.</summary>
-        /// <param name="collider">The collider that entered the reset zone.</param>
-        private void OnTriggerEnter(Collider collider)
+        /// <param name="other">The collider that entered the reset zone.</param>
+        private void OnTriggerEnter(Collider other)
         {
             foreach (StimulusTriggerZone zone in _stimulusTriggerZones)
             {

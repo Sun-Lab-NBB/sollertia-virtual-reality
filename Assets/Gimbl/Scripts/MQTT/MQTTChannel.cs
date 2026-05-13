@@ -17,10 +17,10 @@ namespace Gimbl
     public class MQTTChannel
     {
         /// <summary>The MQTT topic string for this channel.</summary>
-        public string topic;
+        public readonly string topic;
 
         /// <summary>The reference to the MQTTClient managing the broker connection.</summary>
-        public MQTTClient client;
+        public readonly MQTTClient client;
 
         /// <summary>The Unity event invoked when a message is received on this channel.</summary>
         public readonly UnityEvent receivedEvent = new UnityEvent();
@@ -29,16 +29,8 @@ namespace Gimbl
         /// <param name="topicString">The MQTT topic to subscribe to or publish on.</param>
         /// <param name="isListener">Determines whether to subscribe to receive messages on this topic.</param>
         /// <param name="qosLevel">The Quality of Service level for the subscription.</param>
+        /// <exception cref="InvalidOperationException">No <see cref="MQTTClient"/> singleton is available.</exception>
         public MQTTChannel(string topicString, bool isListener = true, byte qosLevel = 2)
-        {
-            Init(topicString, isListener: isListener, qosLevel);
-        }
-
-        /// <summary>Initializes the channel with the specified topic and subscription settings.</summary>
-        /// <param name="topicString">The MQTT topic to subscribe to or publish on.</param>
-        /// <param name="isListener">Determines whether to subscribe to receive messages on this topic.</param>
-        /// <param name="qosLevel">The Quality of Service level for the subscription.</param>
-        public void Init(string topicString, bool isListener, byte qosLevel)
         {
             topic = topicString;
             client = MQTTClient.Instance;
@@ -71,6 +63,12 @@ namespace Gimbl
     /// Handles typed MQTT messaging with JSON serialization for the payload.
     /// </summary>
     /// <typeparam name="TMessage">The type of the message payload to serialize and deserialize.</typeparam>
+    /// <remarks>
+    /// The typed <see cref="receivedEvent"/> intentionally hides the base <see cref="MQTTChannel.receivedEvent"/>
+    /// via the <c>new</c> modifier. Subscribers must hold a reference of type <see cref="MQTTChannel{TMessage}"/>
+    /// (not the base <see cref="MQTTChannel"/>) to observe deserialized payloads; a base-typed reference will
+    /// expose only the parameterless event.
+    /// </remarks>
     public class MQTTChannel<TMessage> : MQTTChannel
     {
         /// <summary>The typed Unity event invoked when a message is received on this channel.</summary>

@@ -27,10 +27,15 @@ namespace SL.Tasks
     /// </remarks>
     public class Task : MonoBehaviour
     {
-        /// <summary>The actor (animal) being tracked in the VR environment.</summary>
-        public ActorObject actor = null;
+        /// <summary>The sentinel value for <see cref="trackSeed"/> requesting a nondeterministic seed.</summary>
+        public const int RandomSeedSentinel = -1;
 
-        /// <summary>Determines whether the animal must lick to trigger the stimulus (lick guidance mode toggle).</summary>
+        /// <summary>The actor (animal) being tracked in the VR environment.</summary>
+        public ActorObject actor;
+
+        /// <summary>
+        /// Determines whether the animal must lick to trigger the stimulus (lick guidance mode toggle).
+        /// </summary>
         public bool requireLick = false;
 
         /// <summary>
@@ -42,13 +47,13 @@ namespace SL.Tasks
         /// The total length of the pre-generated random segment sequence.
         /// Should overestimate the distance the animal will actually travel.
         /// </summary>
-        public float trackLength = 15000;
+        public float trackLength = 15000f;
 
         /// <summary>
         /// The seed for random segment generation. A specific seed produces the same cue pattern.
-        /// Set to -1 to use a random seed.
+        /// Set to <see cref="RandomSeedSentinel"/> to use a nondeterministic seed.
         /// </summary>
-        public int trackSeed = -1;
+        public int trackSeed = RandomSeedSentinel;
 
         /// <summary>The path to the YAML configuration file, relative to Application.dataPath.</summary>
         public string configPath;
@@ -98,10 +103,14 @@ namespace SL.Tasks
         /// <summary>The loaded task template.</summary>
         private TaskTemplate _template;
 
-        /// <summary>The ordered array of trial names matching the trial_structures dictionary iteration order.</summary>
+        /// <summary>
+        /// The ordered array of trial names matching the trial_structures dictionary iteration order.
+        /// </summary>
         private string[] _trialNames;
 
-        /// <summary>The reverse lookup mapping each trial name to its positional index in <see cref="_trialNames"/>.</summary>
+        /// <summary>
+        /// The reverse lookup mapping each trial name to its positional index in <see cref="_trialNames"/>.
+        /// </summary>
         private Dictionary<string, int> _trialNameToIndex;
 
         /// <summary>The mapping of cue names to their byte codes.</summary>
@@ -144,11 +153,11 @@ namespace SL.Tasks
             // Warns if Task is not at origin.
             if (transform.position != Vector3.zero)
             {
-                Debug.LogWarning(
+                string message =
                     $"Task is positioned at {transform.position}. Automatically Setting Task position to "
-                        + "(0,0,0) for this runtime but it is recommended to permanently set the task position to "
-                        + "(0,0,0) in Editor Mode."
-                );
+                    + "(0,0,0) for this runtime but it is recommended to permanently set the task position to "
+                    + "(0,0,0) in Editor Mode.";
+                Debug.LogWarning(message);
                 transform.position = Vector3.zero;
             }
 
@@ -159,11 +168,11 @@ namespace SL.Tasks
 
             if (string.IsNullOrEmpty(sanitizedConfigPath) || !File.Exists(globalConfigPath))
             {
-                Debug.LogError(
+                string message =
                     $"Task: configuration YAML not found. configPath='{configPath}', resolved='{globalConfigPath}'. "
-                        + "Disabling Task to prevent runtime errors. Regenerate this task prefab via the "
-                        + "CreateTask pipeline or assign a valid template path."
-                );
+                    + "Disabling Task to prevent runtime errors. Regenerate this task prefab via the "
+                    + "CreateTask pipeline or assign a valid template path.";
+                Debug.LogError(message);
                 enabled = false;
                 return;
             }
@@ -173,12 +182,12 @@ namespace SL.Tasks
             {
                 _template = ConfigLoader.LoadTemplate(globalConfigPath);
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Debug.LogError(
-                    $"Failed to load task template from YAML file '{globalConfigPath}': {ex.Message}. "
-                        + "Disabling Task to prevent runtime errors."
-                );
+                string message =
+                    $"Failed to load task template from YAML file '{globalConfigPath}': {exception.Message}. "
+                    + "Disabling Task to prevent runtime errors.";
+                Debug.LogError(message);
                 enabled = false;
                 return;
             }
@@ -368,7 +377,7 @@ namespace SL.Tasks
         /// <param name="transitions">The trial-name keyed transition dictionary; values must sum to 1.0.</param>
         /// <param name="random">The random number generator instance.</param>
         /// <returns>The sampled trial name.</returns>
-        private string SampleFromTransitions(Dictionary<string, float> transitions, System.Random random)
+        private static string SampleFromTransitions(Dictionary<string, float> transitions, System.Random random)
         {
             float randomValue = (float)random.NextDouble();
             float cumulative = 0f;
@@ -387,13 +396,16 @@ namespace SL.Tasks
 
         /// <summary>Generates a random sequence of trials based on the specified length and optional seed.</summary>
         /// <param name="length">The total desired length of the maze sequence in Unity units.</param>
-        /// <param name="seed">The optional seed for random number generator. Use -1 for random seed.</param>
+        /// <param name="seed">
+        /// The optional seed for the random number generator. Use <see cref="RandomSeedSentinel"/> for a
+        /// nondeterministic seed.
+        /// </param>
         /// <returns>A tuple containing (trial indices array, flattened cue codes array).</returns>
-        private (int[], byte[]) GenerateRandomMaze(float length, int? seed = null)
+        private (int[], byte[]) GenerateRandomMaze(float length, int seed)
         {
             float sequenceLength = 0;
 
-            System.Random random = seed.HasValue && seed != -1 ? new System.Random(seed.Value) : new System.Random();
+            System.Random random = seed == RandomSeedSentinel ? new System.Random() : new System.Random(seed);
 
             List<int> segmentSequence = new List<int>();
             List<byte> cueSequence = new List<byte>();

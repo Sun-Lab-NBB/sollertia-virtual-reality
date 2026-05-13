@@ -65,14 +65,14 @@ namespace Gimbl
         public class SubBox
         {
             /// <summary>The GUI style for sub boxes.</summary>
-            public readonly GUIStyle style;
+            public readonly GUIStyle Style;
 
             /// <summary>Creates a new sub box style based on HelpBox.</summary>
             public SubBox()
             {
-                style = new GUIStyle("HelpBox");
-                style.margin = new RectOffset(15, 15, 10, 5);
-                style.padding = new RectOffset(10, 5, 5, 15);
+                Style = new GUIStyle("HelpBox");
+                Style.margin = new RectOffset(15, 15, 10, 5);
+                Style.padding = new RectOffset(10, 5, 5, 15);
             }
         }
 
@@ -85,15 +85,15 @@ namespace Gimbl
         public class MainBox
         {
             /// <summary>The GUI style for main boxes.</summary>
-            public readonly GUIStyle style;
+            public readonly GUIStyle Style;
 
             /// <summary>Creates a new main box style based on HelpBox.</summary>
             public MainBox()
             {
-                style = new GUIStyle("HelpBox");
-                style.margin = new RectOffset(10, 10, 10, 5);
-                style.padding = new RectOffset(10, 5, 5, 15);
-                style.fixedWidth = 350;
+                Style = new GUIStyle("HelpBox");
+                Style.margin = new RectOffset(10, 10, 10, 5);
+                Style.padding = new RectOffset(10, 5, 5, 15);
+                Style.fixedWidth = 350;
             }
         }
 

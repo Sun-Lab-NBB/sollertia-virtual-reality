@@ -57,8 +57,8 @@ namespace SL.UI
         /// <summary>Removes MQTT event listeners when this component is destroyed.</summary>
         private void OnDestroy()
         {
-            _lick.receivedEvent.RemoveListener(OnLick);
-            _stimulus.receivedEvent.RemoveListener(OnStimulus);
+            _lick?.receivedEvent.RemoveListener(OnLick);
+            _stimulus?.receivedEvent.RemoveListener(OnStimulus);
         }
 
         /// <summary>Flags a lick indicator to be shown on the next Update cycle.</summary>

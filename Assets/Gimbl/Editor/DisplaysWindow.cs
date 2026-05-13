@@ -38,19 +38,19 @@ namespace Gimbl
         private SerializedObject _serializedObject;
 
         /// <summary>The menu settings for display management.</summary>
+        [SerializeField]
         private DisplayMenu _displaySettings = new DisplayMenu() { typeName = "Display" };
 
         /// <summary>The full-screen view manager for camera mapping.</summary>
-        [SerializeField]
         public FullScreenViewManager fullScreenManager;
 
         /// <summary>The current editor window instance.</summary>
         private static EditorWindow _currentWindow;
 
         /// <summary>The delegate type for display creation functions.</summary>
-        /// <typeparam name="T">The type of Unity Object to create.</typeparam>
+        /// <typeparam name="T">The Unity Object type to create.</typeparam>
         /// <param name="settings">The menu settings for the creation.</param>
-        public delegate void CreateFunc<T>(MenuSettings<T> settings)
+        private delegate void CreateFunc<T>(MenuSettings<T> settings)
             where T : UnityEngine.Object;
 
         /// <summary>Shows the DisplaysWindow editor window.</summary>
@@ -120,7 +120,7 @@ namespace Gimbl
                 GUILayout.Width(position.width)
             );
 
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.style);
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("Displays", LayoutSettings.SectionLabel);
 
             EditorGUILayout.BeginHorizontal();
@@ -131,21 +131,24 @@ namespace Gimbl
             }
             EditorGUILayout.EndHorizontal();
 
-            if (_displaySettings.selected != null)
+            if (_displaySettings.SelectedObject != null)
             {
                 EditorGUILayout.BeginHorizontal();
-                if (_displaySettings.selected.currentBrightness > 0)
+                if (_displaySettings.SelectedObject.currentBrightness > 0)
                 {
                     if (GUILayout.Button("Blank Display"))
                     {
-                        _displaySettings.selected.currentBrightness = 0;
+                        _displaySettings.SelectedObject.currentBrightness = 0;
                     }
                 }
                 else
                 {
                     if (GUILayout.Button("Show Display"))
                     {
-                        _displaySettings.selected.currentBrightness = _displaySettings.selected.settings.brightness;
+                        _displaySettings.SelectedObject.currentBrightness = _displaySettings
+                            .SelectedObject
+                            .settings
+                            .brightness;
                     }
                 }
                 EditorGUILayout.EndHorizontal();
@@ -154,12 +157,12 @@ namespace Gimbl
             _displaySettings.show[0] = EditorGUILayout.Foldout(_displaySettings.show[0], "Edit");
             if (_displaySettings.show[0])
             {
-                if (_displaySettings.selected != null)
+                if (_displaySettings.SelectedObject != null)
                 {
-                    EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.style);
-                    _serializedObject = new SerializedObject(_displaySettings.selected.settings);
-                    float prevHeight = _displaySettings.selected.settings.heightInVR;
-                    float prevBrightness = _displaySettings.selected.settings.brightness;
+                    EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
+                    _serializedObject = new SerializedObject(_displaySettings.SelectedObject.settings);
+                    float prevHeight = _displaySettings.SelectedObject.settings.heightInVR;
+                    float prevBrightness = _displaySettings.SelectedObject.settings.brightness;
                     EditorGUILayout.PropertyField(
                         _serializedObject.FindProperty("isActive"),
                         includeChildren: true,
@@ -176,17 +179,20 @@ namespace Gimbl
                         LayoutSettings.EditFieldOption
                     );
                     _serializedObject.ApplyModifiedProperties();
-                    if (prevHeight != _displaySettings.selected.settings.heightInVR)
+                    if (prevHeight != _displaySettings.SelectedObject.settings.heightInVR)
                     {
-                        _displaySettings.selected.transform.localPosition = new Vector3(
+                        _displaySettings.SelectedObject.transform.localPosition = new Vector3(
                             0,
-                            _displaySettings.selected.settings.heightInVR,
+                            _displaySettings.SelectedObject.settings.heightInVR,
                             0
                         );
                     }
-                    if (prevBrightness != _displaySettings.selected.settings.brightness)
+                    if (prevBrightness != _displaySettings.SelectedObject.settings.brightness)
                     {
-                        _displaySettings.selected.currentBrightness = _displaySettings.selected.settings.brightness;
+                        _displaySettings.SelectedObject.currentBrightness = _displaySettings
+                            .SelectedObject
+                            .settings
+                            .brightness;
                     }
                     EditorGUILayout.EndVertical();
                 }
@@ -199,7 +205,7 @@ namespace Gimbl
             _displaySettings.show[1] = EditorGUILayout.Foldout(_displaySettings.show[1], "Create");
             if (_displaySettings.show[1])
             {
-                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.style);
+                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
                 EditorGUILayout.LabelField("Create Display", EditorStyles.boldLabel);
                 _displaySettings.name = EditorGUILayout.TextField(
                     "Display Name: ",
@@ -220,7 +226,7 @@ namespace Gimbl
             GUI.enabled = true;
             EditorGUILayout.EndVertical();
 
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.style);
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("Camera Mapping", LayoutSettings.SectionLabel);
 
             fullScreenManager.OnGUIRefreshMonitorPositions();
@@ -243,11 +249,12 @@ namespace Gimbl
             where T : UnityEngine.Object
         {
             T existingObject = FindAnyObjectByType<T>();
-            if (settings.selected == null && existingObject != null)
+            if (settings.SelectedObject == null && existingObject != null)
             {
-                settings.selected = existingObject;
+                settings.SelectedObject = existingObject;
             }
-            settings.selected = (T)EditorGUILayout.ObjectField(settings.selected, typeof(T), allowSceneObjects: true);
+            settings.SelectedObject = (T)
+                EditorGUILayout.ObjectField(settings.SelectedObject, typeof(T), allowSceneObjects: true);
         }
 
         /// <summary>Renders the create button with validation for duplicate and empty names.</summary>
@@ -282,7 +289,7 @@ namespace Gimbl
         /// <summary>Deletes the currently selected display after confirmation.</summary>
         private void DeleteDisplay()
         {
-            GameObject displayObject = _displaySettings.selected.gameObject;
+            GameObject displayObject = _displaySettings.SelectedObject.gameObject;
             bool confirmDelete = EditorUtility.DisplayDialog(
                 $"Remove Display {displayObject.name}?",
                 $"Are you sure you want to delete Display {displayObject.name}?",
@@ -299,7 +306,7 @@ namespace Gimbl
         /// <typeparam name="T">The type of component for the menu settings.</typeparam>
         /// <param name="settings">The menu settings containing the display name.</param>
         private void CreateDisplay<T>(MenuSettings<T> settings)
-            where T : UnityEngine.Component
+            where T : DisplayObject
         {
             UnityEngine.Object modelPrefab = Resources.Load($"Displays/{_displayModels[_selectedModel]}");
             GameObject displayObject = Instantiate(modelPrefab) as GameObject;
@@ -337,28 +344,8 @@ namespace Gimbl
                     break;
             }
             Undo.RegisterCreatedObjectUndo(displayObject, "Create Display");
-            settings.selected = display as T;
+            settings.SelectedObject = display as T;
             settings.name = "";
-        }
-
-        /// <summary>
-        /// Stores menu state for a generic Unity Object type.
-        /// </summary>
-        /// <typeparam name="T">The type of Unity Object this menu manages.</typeparam>
-        [System.Serializable]
-        public class MenuSettings<T>
-        {
-            /// <summary>The display name of the object type.</summary>
-            public string typeName;
-
-            /// <summary>The array of foldout visibility states.</summary>
-            public bool[] show = { false, false, false, false, false };
-
-            /// <summary>The name for creating new objects.</summary>
-            public string name = "";
-
-            /// <summary>The currently selected object.</summary>
-            public T selected;
         }
 
         /// <summary>

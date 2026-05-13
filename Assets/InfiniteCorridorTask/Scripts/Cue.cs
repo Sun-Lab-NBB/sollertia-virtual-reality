@@ -13,7 +13,9 @@ namespace SL.Config
     [Serializable]
     public class Cue
     {
-        /// <summary>The visual identifier for the cue (e.g., 'A', 'B', 'Gray'). Used in segment cue sequences.</summary>
+        /// <summary>
+        /// The visual identifier for the cue (e.g., 'A', 'B', 'Gray'). Used in segment cue sequences.
+        /// </summary>
         public string name;
 
         /// <summary>The unique uint8 code (0-255) used for MQTT communication and data analysis.</summary>

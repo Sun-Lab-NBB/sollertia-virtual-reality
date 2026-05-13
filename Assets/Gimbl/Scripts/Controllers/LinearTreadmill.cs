@@ -28,16 +28,23 @@ namespace Gimbl
         /// <summary>The cached actor rotation for updates.</summary>
         private Quaternion _newRotation;
 
+        /// <summary>The MQTT channel subscribed to incoming treadmill data; null for simulated treadmills.</summary>
+        private MQTTChannel<TreadmillMessage> _dataChannel;
+
         /// <summary>Sets up the MQTT listener for this treadmill on start.</summary>
         private void Start()
         {
             if (this is not SimulatedLinearTreadmill && settings != null)
             {
-                MQTTChannel<TreadmillMessage> channel = new MQTTChannel<TreadmillMessage>(
-                    $"{settings.deviceName}/Data"
-                );
-                channel.receivedEvent.AddListener(OnMessage);
+                _dataChannel = new MQTTChannel<TreadmillMessage>($"{settings.deviceName}/Data");
+                _dataChannel.receivedEvent.AddListener(OnMessage);
             }
+        }
+
+        /// <summary>Removes the MQTT listener so the treadmill stops receiving data after destruction.</summary>
+        private void OnDestroy()
+        {
+            _dataChannel?.receivedEvent.RemoveListener(OnMessage);
         }
 
         /// <summary>Processes accumulated movement each frame.</summary>

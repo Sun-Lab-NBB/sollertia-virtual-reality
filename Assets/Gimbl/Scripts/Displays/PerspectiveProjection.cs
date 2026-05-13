@@ -15,6 +15,9 @@ namespace Gimbl
     [ExecuteInEditMode]
     public class PerspectiveProjection : MonoBehaviour
     {
+        /// <summary>The shader property name driving brightness adjustment in the post-processing material.</summary>
+        private const string BrightnessShaderProperty = "_brightness";
+
         /// <summary>The GameObject representing the physical projection screen.</summary>
         public GameObject projectionScreen;
 
@@ -55,7 +58,9 @@ namespace Gimbl
         /// <summary>The quaternion for camera rotation.</summary>
         private Quaternion _cameraRotation;
 
-        /// <summary>Initializes the brightness shader material, display object reference, and camera component.</summary>
+        /// <summary>
+        /// Initializes the brightness shader material, display object reference, and camera component.
+        /// </summary>
         private void Awake()
         {
             if (material == null)
@@ -75,6 +80,10 @@ namespace Gimbl
         /// <summary>Calculates and applies the off-axis projection matrix.</summary>
         public void UpdateView()
         {
+            if (projectionScreen == null)
+            {
+                return;
+            }
             if (_meshType == null)
             {
                 _meshType = projectionScreen.GetComponent<MeshFilter>().sharedMesh.name;
@@ -83,8 +92,7 @@ namespace Gimbl
             {
                 _cameraComponent = GetComponent<Camera>();
             }
-
-            if (projectionScreen == null || _cameraComponent == null)
+            if (_cameraComponent == null)
             {
                 return;
             }
@@ -260,15 +268,15 @@ namespace Gimbl
         {
             if (displayObject == null)
             {
-                material.SetFloat("_brightness", 100f);
+                material.SetFloat(BrightnessShaderProperty, 100f);
             }
             else if (displayObject.settings == null || displayObject.settings.isActive)
             {
-                material.SetFloat("_brightness", displayObject.currentBrightness);
+                material.SetFloat(BrightnessShaderProperty, displayObject.currentBrightness);
             }
             else
             {
-                material.SetFloat("_brightness", 0);
+                material.SetFloat(BrightnessShaderProperty, 0f);
             }
             Graphics.Blit(source, destination, material);
         }
