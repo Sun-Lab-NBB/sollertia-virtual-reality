@@ -4,6 +4,7 @@
 /// Renders the main editor window for MQTT settings, session configuration,
 /// and setup import/export functionality.
 /// </summary>
+using SL.Tasks;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -59,6 +60,8 @@ namespace Gimbl
                 GUILayout.Height(position.height),
                 GUILayout.Width(position.width)
             );
+
+            DrawTaskSection();
 
             if (EditorApplication.isPlaying)
             {
@@ -128,6 +131,72 @@ namespace Gimbl
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.EndScrollView();
+        }
+
+        /// <summary>Renders the Task section that exposes per-scene Task settings.</summary>
+        /// <remarks>
+        /// Locates the Task component via <see cref="UnityEngine.Object.FindAnyObjectByType{T}()"/> each frame
+        /// because Task references move with scene changes. Disables the controls in Play Mode since the live
+        /// guidance toggles are driven by MQTT during runtime.
+        /// </remarks>
+        private void DrawTaskSection()
+        {
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
+            EditorGUILayout.LabelField("Task", LayoutSettings.SectionLabel);
+
+            Task task = FindAnyObjectByType<Task>();
+            if (task == null)
+            {
+                EditorGUILayout.HelpBox("No Task component found in the current scene.", MessageType.Info);
+                EditorGUILayout.EndVertical();
+                return;
+            }
+
+            if (EditorApplication.isPlaying)
+            {
+                GUI.enabled = false;
+            }
+
+            EditorGUI.BeginChangeCheck();
+            ActorObject newActor = (ActorObject)
+                EditorGUILayout.ObjectField(
+                    "Actor: ",
+                    task.actor,
+                    typeof(ActorObject),
+                    allowSceneObjects: true,
+                    LayoutSettings.EditFieldOption
+                );
+            bool newRequireLick = EditorGUILayout.Toggle(
+                "Require Lick: ",
+                task.requireLick,
+                LayoutSettings.EditFieldOption
+            );
+            bool newRequireWait = EditorGUILayout.Toggle(
+                "Require Wait: ",
+                task.requireWait,
+                LayoutSettings.EditFieldOption
+            );
+            float newTrackLength = EditorGUILayout.FloatField(
+                "Track Length: ",
+                task.trackLength,
+                LayoutSettings.EditFieldOption
+            );
+            int newTrackSeed = EditorGUILayout.IntField("Track Seed: ", task.trackSeed, LayoutSettings.EditFieldOption);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(task, "Edit Task Settings");
+                task.actor = newActor;
+                task.requireLick = newRequireLick;
+                task.requireWait = newRequireWait;
+                task.trackLength = newTrackLength;
+                task.trackSeed = newTrackSeed;
+                EditorUtility.SetDirty(task);
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            }
+
+            GUI.enabled = true;
+            EditorGUILayout.EndVertical();
         }
 
         /// <summary>Ensures required GameObjects and folders exist in the scene.</summary>
