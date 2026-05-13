@@ -3,8 +3,6 @@
 # Layout:  Segment DEFG with the rewarding stimulus (water) trigger zone in cue G.
 # Related: SSO_Shared_Base (ABC base training), SSO_Connection (ABC-DEFG connection trials)
 
-cue_offset_cm: 10.0
-
 cues:
   - name: "Gray"
     code: 0
@@ -39,20 +37,16 @@ cues:
     length_cm: 40.0
     texture: "Cue 014 - 4x1.png"
 
-
-segments:
-  - name: "Segment_defg_40cm"
-    cue_sequence: ["D", "Gray", "E", "Gray", "F", "Gray", "G", "Gray"]
-
 vr_environment:
   corridor_spacing_cm: 20.0
   segments_per_corridor: 3
   padding_prefab_name: "Padding"
   cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
 
 trial_structures:
   DEFG:
-    segment_name: "Segment_defg_40cm"
+    cue_sequence: ["D", "Gray", "E", "Gray", "F", "Gray", "G", "Gray"]
     stimulus_trigger_zone_start_cm: 248.0
     stimulus_trigger_zone_end_cm: 272.0
     stimulus_location_cm: 268.0

@@ -3,19 +3,20 @@
 /// </summary>
 using UnityEngine;
 
-namespace SL.UI;
-
-/// <summary>
-/// Displays a temporary UI indicator when a stimulus event occurs and destroys itself after a configurable delay.
-/// </summary>
-public class StimulusMessage : MonoBehaviour
+namespace SL.UI
 {
-    /// <summary>The time in seconds before this indicator is destroyed.</summary>
-    public float destroyTime = 4.0f;
-
-    /// <summary>Schedules the destruction of this game object after the specified delay.</summary>
-    private void Start()
+    /// <summary>
+    /// Displays a temporary UI indicator when a stimulus event occurs and destroys itself after a configurable delay.
+    /// </summary>
+    public class StimulusMessage : MonoBehaviour
     {
-        Destroy(gameObject, destroyTime);
+        /// <summary>The time in seconds before this indicator is destroyed.</summary>
+        public float destroyTime = 4.0f;
+
+        /// <summary>Schedules the destruction of this game object after the specified delay.</summary>
+        private void Start()
+        {
+            Destroy(gameObject, destroyTime);
+        }
     }
 }

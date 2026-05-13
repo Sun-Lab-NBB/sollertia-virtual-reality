@@ -4,6 +4,7 @@
 /// Enumerates physical monitors across Windows, Linux, and macOS platforms and stores
 /// their position, dimensions, and camera assignment for multi-monitor VR displays.
 /// </summary>
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -11,71 +12,77 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
-namespace Gimbl;
-
-/// <summary>
-/// Stores monitor display information and camera assignment.
-/// </summary>
-[Serializable]
-public class Monitor
+namespace Gimbl
 {
-    /// <summary>The left position of the monitor in pixels.</summary>
-    public int left;
-
-    /// <summary>The top position of the monitor in pixels.</summary>
-    public int top;
-
-    /// <summary>The width of the monitor in pixels.</summary>
-    public int width;
-
-    /// <summary>The height of the monitor in pixels.</summary>
-    public int height;
-
-    /// <summary>The pixels per point scaling factor for this monitor.</summary>
-    public float pixelsPerPoint;
-
-    /// <summary>The entity ID of the camera assigned to this monitor.</summary>
-    public EntityId cameraEntityId;
-
-    /// <summary>Creates a new monitor with the specified position and dimensions.</summary>
-    /// <param name="leftPosition">The left position in pixels.</param>
-    /// <param name="topPosition">The top position in pixels.</param>
-    /// <param name="widthPixels">The width in pixels.</param>
-    /// <param name="heightPixels">The height in pixels.</param>
-    private Monitor(int leftPosition, int topPosition, int widthPixels, int heightPixels)
+    /// <summary>
+    /// Stores monitor display information and camera assignment.
+    /// </summary>
+    [Serializable]
+    public class Monitor
     {
-        left = leftPosition;
-        top = topPosition;
-        width = widthPixels;
-        height = heightPixels;
-        pixelsPerPoint = 1.0f;
-        cameraEntityId = EntityId.None;
-    }
+        /// <summary>The left position of the monitor in pixels.</summary>
+        public int left;
 
-    /// <summary>Detects and returns a list of all system monitors.</summary>
-    /// <returns>The list of detected monitors with their positions and dimensions.</returns>
-    public static List<Monitor> EnumeratedMonitors()
-    {
-        List<Monitor> result = new List<Monitor>();
+        /// <summary>The top position of the monitor in pixels.</summary>
+        public int top;
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        /// <summary>The width of the monitor in pixels.</summary>
+        public int width;
+
+        /// <summary>The height of the monitor in pixels.</summary>
+        public int height;
+
+        /// <summary>The pixels per point scaling factor for this monitor.</summary>
+        public float pixelsPerPoint;
+
+        /// <summary>The entity ID of the camera assigned to this monitor.</summary>
+        public EntityId cameraEntityId;
+
+        /// <summary>Creates a new monitor with the specified position and dimensions.</summary>
+        /// <param name="leftPosition">The left position in pixels.</param>
+        /// <param name="topPosition">The top position in pixels.</param>
+        /// <param name="widthPixels">The width in pixels.</param>
+        /// <param name="heightPixels">The height in pixels.</param>
+        private Monitor(int leftPosition, int topPosition, int widthPixels, int heightPixels)
         {
-            EnumDisplayMonitors(
-                IntPtr.Zero,
-                IntPtr.Zero,
-                delegate(IntPtr hMonitor, IntPtr hdc, ref RectApi monitorRect, IntPtr dwData)
-                {
-                    result.Add(new Monitor(monitorRect.left, monitorRect.top, monitorRect.Width, monitorRect.Height));
-                    return true;
-                },
-                0
-            );
+            left = leftPosition;
+            top = topPosition;
+            width = widthPixels;
+            height = heightPixels;
+            pixelsPerPoint = 1.0f;
+            cameraEntityId = EntityId.None;
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        /// <summary>Detects and returns a list of all system monitors.</summary>
+        /// <remarks>
+        /// On each detected monitor, briefly opens a 20×20 popup <see cref="MonitorTester"/> window to
+        /// measure <c>EditorGUIUtility.pixelsPerPoint</c>, then closes it immediately. This per-monitor
+        /// probe is the only way to read the DPI scale that varies between displays on the same host.
+        /// </remarks>
+        /// <returns>The list of detected monitors with their positions and dimensions.</returns>
+        public static List<Monitor> EnumerateMonitors()
         {
-            using (System.Diagnostics.Process xrandrProcess = new System.Diagnostics.Process())
+            List<Monitor> result = new List<Monitor>();
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                EnumDisplayMonitors(
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    delegate(IntPtr hMonitor, IntPtr hdc, ref RectApi monitorRect, IntPtr dwData)
+                    {
+                        result.Add(
+                            new Monitor(monitorRect.left, monitorRect.top, monitorRect.Width, monitorRect.Height)
+                        );
+                        return true;
+                    },
+                    0
+                );
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                using System.Diagnostics.Process xrandrProcess = new System.Diagnostics.Process();
                 xrandrProcess.StartInfo.UseShellExecute = false;
                 xrandrProcess.StartInfo.RedirectStandardOutput = true;
                 xrandrProcess.StartInfo.FileName = "xrandr";
@@ -99,12 +106,10 @@ public class Monitor
                     }
                 }
             }
-        }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            using (System.Diagnostics.Process displayplacerProcess = new System.Diagnostics.Process())
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
+                using System.Diagnostics.Process displayplacerProcess = new System.Diagnostics.Process();
                 displayplacerProcess.StartInfo.UseShellExecute = false;
                 displayplacerProcess.StartInfo.RedirectStandardOutput = true;
                 displayplacerProcess.StartInfo.FileName = "/usr/local/bin/displayplacer";
@@ -134,70 +139,65 @@ public class Monitor
                     }
                 }
             }
+
+            foreach (Monitor monitor in result)
+            {
+                MonitorTester tester = EditorWindow.CreateInstance<MonitorTester>();
+                tester.position = new Rect(monitor.left, monitor.top, 20, 20);
+                tester.monitor = monitor;
+                tester.ShowPopup();
+            }
+
+            return result;
         }
 
-        foreach (Monitor monitor in result)
+        /// <summary>The delegate for Windows monitor enumeration callback.</summary>
+        private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdc, ref RectApi pRect, IntPtr dwData);
+
+        /// <summary>Windows API function to enumerate display monitors.</summary>
+        [DllImport("user32")]
+        private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lpRect, MonitorEnumProc callback, int dwData);
+
+        /// <summary>
+        /// Windows API rectangle structure for monitor bounds.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RectApi
         {
-            MonitorTester tester = EditorWindow.CreateInstance<MonitorTester>();
-            tester.position = new Rect(monitor.left, monitor.top, 20, 20);
-            tester.monitor = monitor;
-            tester.ShowPopup();
+            /// <summary>The left edge coordinate in pixels.</summary>
+            public int left;
+
+            /// <summary>The top edge coordinate in pixels.</summary>
+            public int top;
+
+            /// <summary>The right edge coordinate in pixels.</summary>
+            public int right;
+
+            /// <summary>The bottom edge coordinate in pixels.</summary>
+            public int bottom;
+
+            /// <summary>The width of the rectangle in pixels.</summary>
+            public int Width => right - left;
+
+            /// <summary>The height of the rectangle in pixels.</summary>
+            public int Height => bottom - top;
         }
 
-        return result;
-    }
-
-    /// <summary>The delegate for Windows monitor enumeration callback.</summary>
-    private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdc, ref RectApi pRect, IntPtr dwData);
-
-    /// <summary>Windows API function to enumerate display monitors.</summary>
-    [DllImport("user32")]
-    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lpRect, MonitorEnumProc callback, int dwData);
-
-    /// <summary>
-    /// Windows API rectangle structure for monitor bounds.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RectApi
-    {
-        /// <summary>The left edge coordinate in pixels.</summary>
-        public int left;
-
-        /// <summary>The top edge coordinate in pixels.</summary>
-        public int top;
-
-        /// <summary>The right edge coordinate in pixels.</summary>
-        public int right;
-
-        /// <summary>The bottom edge coordinate in pixels.</summary>
-        public int bottom;
-
-        /// <summary>The width of the rectangle in pixels.</summary>
-        public int Width
+        /// <summary>
+        /// Temporary editor window for detecting pixels per point on each monitor.
+        /// </summary>
+        private class MonitorTester : EditorWindow
         {
-            get { return right - left; }
-        }
+            /// <summary>The monitor to test.</summary>
+            internal Monitor monitor;
 
-        /// <summary>The height of the rectangle in pixels.</summary>
-        public int Height
-        {
-            get { return bottom - top; }
-        }
-    }
-
-    /// <summary>
-    /// Temporary editor window for detecting pixels per point on each monitor.
-    /// </summary>
-    private class MonitorTester : EditorWindow
-    {
-        /// <summary>The monitor to test.</summary>
-        internal Monitor monitor;
-
-        /// <summary>Records pixels per point and closes immediately.</summary>
-        private void OnGUI()
-        {
-            monitor.pixelsPerPoint = EditorGUIUtility.pixelsPerPoint;
-            Close();
+            /// <summary>Records pixels per point and closes immediately.</summary>
+            private void OnGUI()
+            {
+                monitor.pixelsPerPoint = EditorGUIUtility.pixelsPerPoint;
+                Close();
+            }
         }
     }
 }
+#endif

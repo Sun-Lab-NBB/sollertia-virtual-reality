@@ -6,29 +6,30 @@
 /// </summary>
 using UnityEngine;
 
-namespace SL.Tasks;
-
-/// <summary>
-/// Tracks whether the animal is inside the guidance zone collider.
-/// Used by parent StimulusTriggerZone to determine when to deliver automatic stimulus in guidance mode.
-/// </summary>
-public class GuidanceZone : MonoBehaviour
+namespace SL.Tasks
 {
-    /// <summary>Determines whether the animal is currently inside this guidance zone.</summary>
-    [HideInInspector]
-    public bool inZone = false;
-
-    /// <summary>Sets the zone state to active when the animal enters the guidance zone collider.</summary>
-    /// <param name="other">The collider that entered or exited the trigger zone.</param>
-    private void OnTriggerEnter(Collider other)
+    /// <summary>
+    /// Tracks whether the animal is inside the guidance zone collider.
+    /// Used by parent StimulusTriggerZone to determine when to deliver automatic stimulus in guidance mode.
+    /// </summary>
+    public class GuidanceZone : MonoBehaviour
     {
-        inZone = true;
-    }
+        /// <summary>Determines whether the animal is currently inside this guidance zone.</summary>
+        [HideInInspector]
+        public bool inZone = false;
 
-    /// <summary>Sets the zone state to inactive when the animal exits the guidance zone collider.</summary>
-    /// <param name="other">The collider that entered or exited the trigger zone.</param>
-    private void OnTriggerExit(Collider other)
-    {
-        inZone = false;
+        /// <summary>Sets the zone state to active when the animal enters the guidance zone collider.</summary>
+        /// <param name="other">The collider that entered the trigger zone.</param>
+        private void OnTriggerEnter(Collider other)
+        {
+            inZone = true;
+        }
+
+        /// <summary>Sets the zone state to inactive when the animal exits the guidance zone collider.</summary>
+        /// <param name="other">The collider that exited the trigger zone.</param>
+        private void OnTriggerExit(Collider other)
+        {
+            inZone = false;
+        }
     }
 }

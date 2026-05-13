@@ -3,9 +3,6 @@
 # Layout:  Segments ABC and ABCA with the rewarding stimulus (water) trigger zone in cue C.
 #          Segments DEFG and DEFGD with the rewarding stimulus (water) trigger zone in cue G.
 #          ABCA always transitions to DEFG/D and DEFGD always transitions to ABC/A.
-# Related: SSO_Shared_Base (ABC base training), SSO_Connection_Base (DEFG base training)
-
-cue_offset_cm: 10.0
 
 cues:
   - name: "Gray"
@@ -41,60 +38,54 @@ cues:
     length_cm: 40.0
     texture: "Cue 014 - 4x1.png"
 
-
-segments:
-  - name: "Segment_abc_40cm"
-    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
-    transition_probabilities: [0.5, 0.5, 0.0, 0.0]
-
-  - name: "Segment_abca_40cm"
-    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray", "A", "Gray"]
-    transition_probabilities: [0.0, 0.0, 0.5, 0.5]
-
-  - name: "Segment_defg_40cm"
-    cue_sequence: ["D", "Gray", "E", "Gray", "F", "Gray", "G", "Gray"]
-    transition_probabilities: [0.0, 0.0, 0.5, 0.5]
-
-  - name: "Segment_defgd_40cm"
-    cue_sequence: ["D", "Gray", "E", "Gray", "F", "Gray", "G", "Gray", "D", "Gray"]
-    transition_probabilities: [0.5, 0.5, 0.0, 0.0]
-
-
 vr_environment:
   corridor_spacing_cm: 20.0
   segments_per_corridor: 3
   padding_prefab_name: "Padding"
   cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
 
 trial_structures:
   ABC:
-    segment_name: "Segment_abc_40cm"
+    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
+    transitions:
+      ABC: 0.5
+      ABCA: 0.5
 
   ABCA:
-    segment_name: "Segment_abca_40cm"
+    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray", "A", "Gray"]
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
+    transitions:
+      DEFG: 0.5
+      DEFGD: 0.5
 
   DEFG:
-    segment_name: "Segment_defg_40cm"
+    cue_sequence: ["D", "Gray", "E", "Gray", "F", "Gray", "G", "Gray"]
     stimulus_trigger_zone_start_cm: 248.0
     stimulus_trigger_zone_end_cm: 272.0
     stimulus_location_cm: 268.0
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
+    transitions:
+      DEFG: 0.5
+      DEFGD: 0.5
 
   DEFGD:
-    segment_name: "Segment_defgd_40cm"
+    cue_sequence: ["D", "Gray", "E", "Gray", "F", "Gray", "G", "Gray", "D", "Gray"]
     stimulus_trigger_zone_start_cm: 248.0
     stimulus_trigger_zone_end_cm: 272.0
     stimulus_location_cm: 268.0
     show_stimulus_collision_boundary: false
     trigger_type: "lick"
+    transitions:
+      ABC: 0.5
+      ABCA: 0.5

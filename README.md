@@ -229,9 +229,7 @@ For multi-line fields, align continuation text with the first character after th
 
 The structure is:
 
-- **cue_offset_cm** *(number)*: The offset in centimeters from the reset zone to the first cue.
-
-- **cues** *(array\<Cue>)*: The list of all cues used by any segment.
+- **cues** *(array\<Cue>)*: The list of all cues used by any trial.
     - **Cue**
         - **name** *(string)*: The unique human-readable label for the cue (e.g., `"A"`, `"Gray"`).
         - **code** *(integer, 0-255)*: The unique integer code for the cue used in logging.
@@ -239,32 +237,34 @@ The structure is:
         - **texture** *(string)*: The filename of the texture image in `Assets/InfiniteCorridorTask/Textures/`
           (e.g., `"Cue 016 - 4x1.png"`).
 
-- **segments** *(array\<Segment>)*: The list of all segments.
-    - **Segment**
-        - **name** *(string)*: The name of the segment prefab (e.g., `"Segment_abc_40cm"`). Must match the prefab file
-          name in **Assets/InfiniteCorridorTask/Prefabs**.
-        - **cue_sequence** *(string[])*: The ordered list of cues in the segment.
-        - **transition_probabilities** *(number[])*: The probabilities of transitioning to each segment. Must sum to 1.
-          Optional; if unspecified, uniform transitions are assumed.
-
 - **vr_environment** *(object)*: VR corridor configuration.
     - **corridor_spacing_cm** *(number)*: Distance between consecutive corridors in centimeters.
     - **segments_per_corridor** *(integer)*: Number of segments per corridor. Setting this to 3 is generally enough to
       give the illusion of an infinite corridor.
     - **padding_prefab_name** *(string)*: The name of the padding prefab (usually `"Padding"`).
     - **cm_per_unity_unit** *(number)*: Conversion factor from centimeters to Unity units.
+    - **cue_offset_cm** *(number)*: The offset of the animal's starting position relative to each corridor's cue
+      sequence origin, in centimeters. Drives both the upstream shift applied to every segment prefab's local origin
+      and the position of the per-segment ResetZone.
 
-- **trial_structures** *(dict\<string, TrialStructure>)*: Maps trial names to their spatial configurations.
+- **trial_structures** *(dict\<string, TrialStructure>)*: Maps trial names to their spatial configurations. Each trial
+  generates a single segment prefab named `<template>_<trial>.prefab` (e.g. `MF_Reward_Base_ABCD.prefab`); trial names
+  must therefore match `^[A-Za-z0-9_]+$`. Segment prefabs are always regenerated on each `generate_task_prefab_tool`
+  call so trial-parameter edits take effect without manual prefab deletion.
     - **TrialStructure**
-        - **segment_name** *(string)*: The segment this trial uses.
+        - **cue_sequence** *(string[])*: The ordered list of cue names that comprise the trial's segment.
         - **stimulus_trigger_zone_start_cm** *(number)*: Start of the stimulus trigger zone in centimeters.
         - **stimulus_trigger_zone_end_cm** *(number)*: End of the stimulus trigger zone in centimeters.
         - **stimulus_location_cm** *(number)*: Position of the stimulus boundary in centimeters.
         - **show_stimulus_collision_boundary** *(boolean)*: Determines whether to show the stimulus boundary to the
           animal.
-        - **trigger_type** *(string)*: The trigger mode for the zone. Must be `"lick"` for segments with a
-          Guidance Zone child or `"occupancy"` for segments with an Occupancy Zone child. This field specifies the
-          trigger mechanism, not the stimulus type.
+        - **trigger_type** *(string)*: The trigger mode for the zone. Must be `"lick"` for trials with a Guidance Zone
+          child or `"occupancy"` for trials with an Occupancy Zone child. This field specifies the trigger mechanism,
+          not the stimulus type.
+        - **transitions** *(dict\<string, number>)*: Optional probability distribution over the trial names that may
+          follow this trial during corridor traversal. Keys must reference other trial names defined on the same
+          template; values must sum to 1.0. Omitted keys carry implicit zero probability. When null or omitted,
+          successors are sampled uniformly at random over all defined trials.
 
 See existing configuration files in `Assets/InfiniteCorridorTask/Configurations/` for examples.
 

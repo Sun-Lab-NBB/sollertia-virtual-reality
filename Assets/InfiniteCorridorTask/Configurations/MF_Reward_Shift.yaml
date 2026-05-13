@@ -1,0 +1,42 @@
+# Project: MaalstroomicFlow
+# Purpose: Defines a cyclic 4-cue corridor with Gray separators and a rewarding stimulus trigger zone shifted to the middle Gray.
+# Layout:  Segment A-Gray-B-Gray-C-Gray-D-Gray (8 cues x 30 cm = 240 cm) with reward trigger zone in the second Gray (B->C).
+# Related: MF_Reward_Base (same geometry with the reward trigger zone in the final Gray after D).
+
+cues:
+  - name: "Gray"
+    code: 0
+    length_cm: 30.0
+    texture: "Gray Cue 2x1.png"
+  - name: "A"
+    code: 1
+    length_cm: 30.0
+    texture: "Cue 016 - 2x1 repeat.png"
+  - name: "B"
+    code: 2
+    length_cm: 30.0
+    texture: "Cue 001 - 2x1 repeat.png"
+  - name: "C"
+    code: 3
+    length_cm: 30.0
+    texture: "Cue 008 - 2x1 repeat.png"
+  - name: "D"
+    code: 4
+    length_cm: 30.0
+    texture: "Cue 002 - 2x1 repeat.png"
+
+vr_environment:
+  corridor_spacing_cm: 20.0
+  segments_per_corridor: 3
+  padding_prefab_name: "Padding"
+  cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
+
+trial_structures:
+  ABCD:
+    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray", "D", "Gray"]
+    stimulus_trigger_zone_start_cm: 98.0
+    stimulus_trigger_zone_end_cm: 112.0
+    stimulus_location_cm: 108.675
+    show_stimulus_collision_boundary: false
+    trigger_type: "lick"
