@@ -769,7 +769,7 @@ GameObject:
   - component: {fileID: 731326253}
   - component: {fileID: 731326252}
   m_Layer: 0
-  m_Name: LinearController
+  m_Name: Linear
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -828,7 +828,7 @@ GameObject:
   - component: {fileID: 880953360}
   - component: {fileID: 880953359}
   m_Layer: 0
-  m_Name: SimulatedController
+  m_Name: Simulated Linear
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -959,7 +959,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   settings: {fileID: 11400000, guid: e406f24d75ecb466c83d31286d955699, type: 2}
   _display: {fileID: 1135501256}
-  _controller: {fileID: 731326252}
+  _controller: {fileID: 0}
 --- !u!1 &1135501255
 GameObject:
   m_ObjectHideFlags: 0

@@ -33,14 +33,55 @@ namespace Gimbl
 
         /// <summary>Shows the Task Parameters editor window.</summary>
         /// <remarks>
-        /// The window is docked next to <c>UnityEditor.InspectorWindow</c>, resolved by assembly-qualified
-        /// type name to avoid a hard reference to a private Unity type.
+        /// The Window menu entry uses the full "Task Parameters" name while the docked tab uses the
+        /// shorter "Parameters" label to avoid redundancy. The window is docked next to
+        /// <c>UnityEditor.InspectorWindow</c>, resolved by assembly-qualified type name to avoid a hard
+        /// reference to a private Unity type.
         /// </remarks>
         [MenuItem("Window/Task Parameters")]
         public static void ShowWindow()
         {
+            OpenOrFocusWindow(focus: true);
+        }
+
+        /// <summary>Registers auto-open hooks that keep the Parameters window available across sessions.</summary>
+        /// <remarks>
+        /// Subscribes to scene-open and Play-Mode-enter events so closing the window does not strand the
+        /// user without access to the per-scene configuration surface. Also defers a one-shot open via
+        /// <see cref="EditorApplication.delayCall"/> so the window appears immediately after a script
+        /// reload or editor start, once the editor finishes initializing.
+        /// </remarks>
+        [InitializeOnLoadMethod]
+        private static void RegisterAutoOpen()
+        {
+            EditorSceneManager.sceneOpened += (Scene scene, OpenSceneMode mode) => EnsureWindowOpen();
+            EditorApplication.playModeStateChanged += state =>
+            {
+                if (state == PlayModeStateChange.EnteredPlayMode)
+                {
+                    EnsureWindowOpen();
+                }
+            };
+            EditorApplication.delayCall += EnsureWindowOpen;
+        }
+
+        /// <summary>Opens the Parameters window without stealing focus when no instance is currently open.</summary>
+        private static void EnsureWindowOpen()
+        {
+            if (HasOpenInstances<MainWindow>())
+            {
+                return;
+            }
+            OpenOrFocusWindow(focus: false);
+        }
+
+        /// <summary>Creates or surfaces the Parameters window and pins its title to the short label.</summary>
+        /// <param name="focus">Determines whether the window should take input focus on open.</param>
+        private static void OpenOrFocusWindow(bool focus)
+        {
             System.Type inspectorType = System.Type.GetType("UnityEditor.InspectorWindow,UnityEditor.dll");
-            GetWindow<MainWindow>("Task Parameters", true, new System.Type[] { inspectorType });
+            MainWindow window = GetWindow<MainWindow>("Parameters", focus, new System.Type[] { inspectorType });
+            window.titleContent = new GUIContent("Parameters");
         }
 
         /// <summary>Initializes the scene, full-screen view manager, and scene change handlers.</summary>
@@ -152,7 +193,12 @@ namespace Gimbl
             if (hasLickZone)
             {
                 newRequireLick = EditorGUILayout.Toggle(
-                    "Require Lick: ",
+                    new GUIContent(
+                        "Require Lick: ",
+                        "When on, the animal must lick inside the stimulus zone to trigger the reward. "
+                            + "When off, reaching the guidance zone automatically triggers the reward. "
+                            + "Addressable via MQTT at runtime."
+                    ),
                     task.requireLick,
                     LayoutSettings.EditFieldOption
                 );
@@ -161,17 +207,34 @@ namespace Gimbl
             if (hasOccupancyZone)
             {
                 newRequireWait = EditorGUILayout.Toggle(
-                    "Require Wait: ",
+                    new GUIContent(
+                        "Require Wait: ",
+                        "When on, the animal must remain in the occupancy zone to disarm the stimulus trigger. "
+                            + "When off, the VR emits a warning to the experiment controller via MQTT, "
+                            + "enabling it to interfere by activating brakes. Addressable via MQTT at runtime."
+                    ),
                     task.requireWait,
                     LayoutSettings.EditFieldOption
                 );
             }
             float newTrackLength = EditorGUILayout.FloatField(
-                "Track Length: ",
+                new GUIContent(
+                    "Track Length: ",
+                    "Total length of the pre-generated random trial sequence in Unity units. "
+                        + "Should overestimate the distance the animal will actually travel in a session."
+                ),
                 task.trackLength,
                 LayoutSettings.EditFieldOption
             );
-            int newTrackSeed = EditorGUILayout.IntField("Track Seed: ", task.trackSeed, LayoutSettings.EditFieldOption);
+            int newTrackSeed = EditorGUILayout.IntField(
+                new GUIContent(
+                    "Track Seed: ",
+                    "Seed for the random trial-sequence generator. A specific seed reproduces the same "
+                        + "sequence; use -1 for a nondeterministic seed each run."
+                ),
+                task.trackSeed,
+                LayoutSettings.EditFieldOption
+            );
 
             if (EditorGUI.EndChangeCheck())
             {
@@ -226,17 +289,23 @@ namespace Gimbl
                 return;
             }
 
+            GUIContent blankShowTooltip = new GUIContent(
+                "",
+                "Set brightness to 0 (Blank) or restore the configured brightness (Show)."
+            );
             EditorGUILayout.BeginHorizontal();
             if (display.currentBrightness > 0)
             {
-                if (GUILayout.Button("Blank Display"))
+                blankShowTooltip.text = "Blank Display";
+                if (GUILayout.Button(blankShowTooltip))
                 {
                     display.currentBrightness = 0;
                 }
             }
             else
             {
-                if (GUILayout.Button("Show Display"))
+                blankShowTooltip.text = "Show Display";
+                if (GUILayout.Button(blankShowTooltip))
                 {
                     display.currentBrightness = display.settings.brightness;
                 }
@@ -294,10 +363,20 @@ namespace Gimbl
             }
             EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("MQTT", LayoutSettings.SectionLabel);
-            _client.ipAddress = EditorGUILayout.TextField("ip: ", _client.ipAddress, LayoutSettings.EditFieldOption);
+            _client.ipAddress = EditorGUILayout.TextField(
+                new GUIContent(
+                    "ip: ",
+                    "IP address of the MQTT broker that bridges this Unity scene to the experiment hardware."
+                ),
+                _client.ipAddress,
+                LayoutSettings.EditFieldOption
+            );
 
             string portText = EditorGUILayout.TextField(
-                "port: ",
+                new GUIContent(
+                    "port: ",
+                    "TCP port of the MQTT broker that bridges this Unity scene to the experiment hardware."
+                ),
                 _client.port.ToString(),
                 LayoutSettings.EditFieldOption
             );
@@ -311,7 +390,14 @@ namespace Gimbl
                 EditorPrefs.SetString("SollertiaVR_MQTT_IP", _client.ipAddress);
                 EditorPrefs.SetInt("SollertiaVR_MQTT_Port", _client.port);
             }
-            if (GUILayout.Button("Test Connection"))
+            if (
+                GUILayout.Button(
+                    new GUIContent(
+                        "Test Connection",
+                        "Check whether the MQTT broker is reachable at the specified ip and port."
+                    )
+                )
+            )
             {
                 _client.Connect(verbose: true);
                 _client.Disconnect();
@@ -496,7 +582,13 @@ namespace Gimbl
                     continue;
                 }
 
-                GameObject controllerGameObject = new GameObject(controllerType.ToString());
+                string displayName = controllerType switch
+                {
+                    ControllerTypes.LinearTreadmill => "Linear",
+                    ControllerTypes.SimulatedLinearTreadmill => "Simulated Linear",
+                    _ => controllerType.ToString(),
+                };
+                GameObject controllerGameObject = new GameObject(displayName);
                 ControllerObject controller = (ControllerObject)controllerGameObject.AddComponent(resolvedType);
                 controller.InitiateController();
                 ControllerOutput output = controllerGameObject.AddComponent<ControllerOutput>();

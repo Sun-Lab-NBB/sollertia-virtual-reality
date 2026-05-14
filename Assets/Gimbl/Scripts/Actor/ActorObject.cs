@@ -241,7 +241,12 @@ namespace Gimbl
             {
                 currentIndex = Array.IndexOf(modelOptions, "None");
             }
-            int newIndex = EditorGUILayout.Popup("Model: ", currentIndex, modelOptions);
+            GUIContent modelLabel = new GUIContent(
+                "Model: ",
+                "3D Mesh rendered to represent the actor in the VR scene. Only visible in Actor View."
+            );
+            GUIContent[] modelGuiOptions = modelOptions.Select(name => new GUIContent(name)).ToArray();
+            int newIndex = EditorGUILayout.Popup(modelLabel, currentIndex, modelGuiOptions);
             if (newIndex != currentIndex && newIndex >= 0)
             {
                 Undo.RegisterFullObjectHierarchyUndo(gameObject, "Swap Actor Model");
@@ -266,7 +271,17 @@ namespace Gimbl
                     break;
                 }
             }
-            int newControllerIndex = EditorGUILayout.Popup("Controller: ", currentControllerIndex, controllerOptions);
+            GUIContent controllerLabel = new GUIContent(
+                "Controller: ",
+                "The action input mode. Selecting None disables interfacing with the task, "
+                    + "selecting Simulated enables interfacing via Keyboard."
+            );
+            GUIContent[] controllerGuiOptions = controllerOptions.Select(name => new GUIContent(name)).ToArray();
+            int newControllerIndex = EditorGUILayout.Popup(
+                controllerLabel,
+                currentControllerIndex,
+                controllerGuiOptions
+            );
             if (newControllerIndex != currentControllerIndex)
             {
                 Undo.RecordObject(this, "Swap Active Controller");

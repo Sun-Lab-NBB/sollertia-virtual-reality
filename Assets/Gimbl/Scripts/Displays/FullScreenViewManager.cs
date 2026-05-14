@@ -36,7 +36,14 @@ namespace Gimbl
         /// <summary>Renders a button to refresh monitor positions.</summary>
         public void OnGUIRefreshMonitorPositions()
         {
-            if (GUILayout.Button("Refresh Monitor Positions"))
+            if (
+                GUILayout.Button(
+                    new GUIContent(
+                        "Refresh Monitor Positions",
+                        "Re-detect monitors from the OS, preserving existing camera assignments."
+                    )
+                )
+            )
             {
                 List<Monitor> refreshedMonitors = Monitor.EnumerateMonitors();
                 for (int i = 0; i < refreshedMonitors.Count; i++)
@@ -67,11 +74,14 @@ namespace Gimbl
                     && !string.Equals(camera.gameObject.name, "Main Camera", System.StringComparison.Ordinal)
                 )
                 .ToArray();
-            string[] cameraOptions = new string[sceneCameras.Length + 1];
-            cameraOptions[0] = "None";
+            const string cameraTooltip =
+                "Scene Camera that renders to this monitor when full-screen views are launched. "
+                + "None leaves the monitor unused.";
+            GUIContent[] cameraOptions = new GUIContent[sceneCameras.Length + 1];
+            cameraOptions[0] = new GUIContent("None", cameraTooltip);
             for (int i = 0; i < sceneCameras.Length; i++)
             {
-                cameraOptions[i + 1] = sceneCameras[i].name;
+                cameraOptions[i + 1] = new GUIContent(sceneCameras[i].name, cameraTooltip);
             }
 
             for (int monitorIndex = 0; monitorIndex < monitors.Count; monitorIndex++)
@@ -91,7 +101,10 @@ namespace Gimbl
 
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.LabelField(
-                    $"Monitor {monitorIndex + 1} ({monitor.left}, {monitor.top})",
+                    new GUIContent(
+                        $"Monitor {monitorIndex + 1} ({monitor.left}, {monitor.top})",
+                        "OS-reported monitor index and its top-left origin in pixel coordinates."
+                    ),
                     GUILayout.Width(170)
                 );
                 int newIndex = EditorGUILayout.Popup(currentIndex, cameraOptions);
@@ -130,7 +143,16 @@ namespace Gimbl
         /// <summary>Renders a button to show full-screen views.</summary>
         public void OnGUIShowFullScreenViews()
         {
-            if (GUILayout.Button("Show Full-Screen Views"))
+            if (
+                GUILayout.Button(
+                    new GUIContent(
+                        "Show Full-Screen Views",
+                        "Open a borderless full-screen window per assigned monitor showing the chosen camera. "
+                            + "Stop Play Mode or close the windows to return to the editor. Only has effect "
+                            + "when the VR scene is playing."
+                    )
+                )
+            )
             {
                 ShowFullScreenViews(closeOldViews: true);
             }
