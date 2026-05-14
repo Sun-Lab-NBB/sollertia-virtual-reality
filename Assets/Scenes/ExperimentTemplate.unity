@@ -227,7 +227,7 @@ GameObject:
   - component: {fileID: 445136062}
   - component: {fileID: 445136063}
   m_Layer: 0
-  m_Name: 'Track Cam: rod'
+  m_Name: Actor View
   m_TagString: TrackCam
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -820,7 +820,7 @@ GameObject:
   - component: {fileID: 945592021}
   - component: {fileID: 945592020}
   m_Layer: 0
-  m_Name: rod
+  m_Name: Actor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1149,7 +1149,7 @@ GameObject:
   - component: {fileID: 1360300393}
   - component: {fileID: 1360300392}
   m_Layer: 0
-  m_Name: 'Camera: RightMonitor'
+  m_Name: Right View
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1252,7 +1252,7 @@ GameObject:
   - component: {fileID: 1592300519}
   - component: {fileID: 1592300518}
   m_Layer: 0
-  m_Name: 'Camera: LeftMonitor'
+  m_Name: Left View
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1464,7 +1464,7 @@ GameObject:
   - component: {fileID: 1791651019}
   - component: {fileID: 1791651018}
   m_Layer: 0
-  m_Name: 'Camera: CenterMonitor'
+  m_Name: Center View
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

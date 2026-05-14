@@ -36,9 +36,7 @@ namespace Gimbl
         {
             GetSimulatedInput();
             if (
-                settings != null
-                && settings.isActive
-                && actor != null
+                actor != null
                 && (
                     _input.Player.Jump.WasPressedThisFrame()
                     || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)

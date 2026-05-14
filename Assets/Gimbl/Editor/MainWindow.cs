@@ -1,58 +1,96 @@
 /// <summary>
-/// Provides the MainWindow class for Gimbl system configuration.
+/// Provides the MainWindow class for the consolidated Task Parameters editor window.
 ///
-/// Renders the main editor window for MQTT settings, session configuration,
-/// and setup import/export functionality.
+/// Renders the single editor window that hosts every per-scene configuration surface for Gimbl:
+/// Task, Actor, Display, Camera Mapping, and MQTT. Replaces the previous Settings / Actors /
+/// Displays three-window layout with one aggregated window.
 /// </summary>
+using System.Linq;
 using SL.Tasks;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace Gimbl
 {
     /// <summary>
-    /// Manages the main Gimbl configuration editor window.
+    /// Manages the consolidated Gimbl Task Parameters editor window.
     /// </summary>
     public class MainWindow : EditorWindow
     {
-        /// <summary>The serialized property for output path.</summary>
-        private SerializedProperty _outputPath;
-
-        /// <summary>The serialized property for output file.</summary>
-        private SerializedProperty _outputFile;
-
         /// <summary>The scroll position for the window content.</summary>
         private Vector2 _scrollPosition = Vector2.zero;
 
         /// <summary>The MQTT client reference for configuration.</summary>
         private MQTTClient _client;
 
-        /// <summary>The session menu settings instance.</summary>
-        [SerializeField]
-        private SessionMenuSettings _sessionSettings = new SessionMenuSettings();
+        /// <summary>Determines whether a scene change is pending after exiting play mode.</summary>
+        private bool _exitPlayModeSceneChangeComing = false;
 
-        /// <summary>Shows the Gimbl main window and related editor windows.</summary>
+        /// <summary>The full-screen view manager for camera mapping.</summary>
+        public FullScreenViewManager fullScreenManager;
+
+        /// <summary>Shows the Task Parameters editor window.</summary>
         /// <remarks>
-        /// The Settings window is docked next to <c>UnityEditor.InspectorWindow</c>, which is resolved by
-        /// assembly-qualified type name to avoid a hard reference to a private Unity type.
+        /// The window is docked next to <c>UnityEditor.InspectorWindow</c>, resolved by assembly-qualified
+        /// type name to avoid a hard reference to a private Unity type.
         /// </remarks>
-        [MenuItem("Window/Gimbl")]
+        [MenuItem("Window/Task Parameters")]
         public static void ShowWindow()
         {
             System.Type inspectorType = System.Type.GetType("UnityEditor.InspectorWindow,UnityEditor.dll");
-            GetWindow<MainWindow>("Settings", true, new System.Type[] { inspectorType });
-            ActorWindow.ShowWindow();
-            DisplaysWindow.ShowWindow();
+            GetWindow<MainWindow>("Task Parameters", true, new System.Type[] { inspectorType });
         }
 
-        /// <summary>Initializes the scene when the window is enabled.</summary>
+        /// <summary>Initializes the scene, full-screen view manager, and scene change handlers.</summary>
         private void OnEnable()
         {
+            TagsAndLayers.AddTag("VRDisplay");
+            fullScreenManager = new FullScreenViewManager();
             InitializeScene();
+
+            EditorSceneManager.activeSceneChangedInEditMode += OnActiveSceneChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
         }
 
-        /// <summary>Renders the MQTT settings and setup import/export GUI.</summary>
+        /// <summary>Removes scene change handlers when disabled.</summary>
+        private void OnDisable()
+        {
+            EditorSceneManager.activeSceneChangedInEditMode -= OnActiveSceneChanged;
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+        }
+
+        /// <summary>Reloads camera assignments when the active scene changes.</summary>
+        /// <param name="oldScene">The previous active scene.</param>
+        /// <param name="newScene">The new active scene.</param>
+        private void OnActiveSceneChanged(Scene oldScene, Scene newScene)
+        {
+            if (_exitPlayModeSceneChangeComing)
+            {
+                _exitPlayModeSceneChangeComing = false;
+            }
+            else
+            {
+                fullScreenManager.LoadCameras();
+            }
+        }
+
+        /// <summary>Handles play mode transitions for full-screen view management.</summary>
+        /// <param name="state">The play mode state change.</param>
+        private void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.ExitingEditMode)
+            {
+                fullScreenManager.ShowFullScreenViews(closeOldViews: false);
+            }
+            if (state == PlayModeStateChange.ExitingPlayMode)
+            {
+                _exitPlayModeSceneChangeComing = true;
+            }
+        }
+
+        /// <summary>Renders every configuration section in order.</summary>
         private void OnGUI()
         {
             _scrollPosition = EditorGUILayout.BeginScrollView(
@@ -61,17 +99,208 @@ namespace Gimbl
                 GUILayout.Width(position.width)
             );
 
+            DrawActorSection();
+            DrawMQTTSection();
+            DrawDisplaySection();
+            DrawCameraMappingSection();
             DrawTaskSection();
 
+            EditorGUILayout.EndScrollView();
+        }
+
+        /// <summary>Renders the Task section that exposes per-scene Task settings.</summary>
+        /// <remarks>
+        /// Locates the Task component via <see cref="UnityEngine.Object.FindAnyObjectByType{T}()"/> each frame
+        /// because Task references move with scene changes. Disables the controls in Play Mode since the live
+        /// guidance toggles are driven by MQTT during runtime. Hides <c>Require Lick</c> and <c>Require Wait</c>
+        /// when the active scene lacks a corresponding <see cref="GuidanceZone"/> or <see cref="OccupancyZone"/>
+        /// to keep the section focused on the toggles actually consumed by the current task.
+        /// </remarks>
+        private void DrawTaskSection()
+        {
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
+            EditorGUILayout.LabelField("Task", LayoutSettings.SectionLabel);
+
+            Task task = FindAnyObjectByType<Task>();
+            if (task == null)
+            {
+                EditorGUILayout.HelpBox("No Task component found in the current scene.", MessageType.Info);
+                EditorGUILayout.EndVertical();
+                return;
+            }
+
+            if (task.actor == null)
+            {
+                ActorObject resolvedActor = FindAnyObjectByType<ActorObject>();
+                if (resolvedActor != null)
+                {
+                    task.actor = resolvedActor;
+                    EditorUtility.SetDirty(task);
+                }
+            }
+
+            if (EditorApplication.isPlaying)
+            {
+                GUI.enabled = false;
+            }
+
+            bool hasLickZone = FindAnyObjectByType<GuidanceZone>() != null;
+            bool hasOccupancyZone = FindAnyObjectByType<OccupancyZone>() != null;
+
+            EditorGUI.BeginChangeCheck();
+            bool newRequireLick = task.requireLick;
+            if (hasLickZone)
+            {
+                newRequireLick = EditorGUILayout.Toggle(
+                    "Require Lick: ",
+                    task.requireLick,
+                    LayoutSettings.EditFieldOption
+                );
+            }
+            bool newRequireWait = task.requireWait;
+            if (hasOccupancyZone)
+            {
+                newRequireWait = EditorGUILayout.Toggle(
+                    "Require Wait: ",
+                    task.requireWait,
+                    LayoutSettings.EditFieldOption
+                );
+            }
+            float newTrackLength = EditorGUILayout.FloatField(
+                "Track Length: ",
+                task.trackLength,
+                LayoutSettings.EditFieldOption
+            );
+            int newTrackSeed = EditorGUILayout.IntField("Track Seed: ", task.trackSeed, LayoutSettings.EditFieldOption);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(task, "Edit Task Settings");
+                task.requireLick = newRequireLick;
+                task.requireWait = newRequireWait;
+                task.trackLength = newTrackLength;
+                task.trackSeed = newTrackSeed;
+                EditorUtility.SetDirty(task);
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            }
+
+            GUI.enabled = true;
+            EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>Renders the Actor section that exposes the active scene's Actor properties.</summary>
+        private void DrawActorSection()
+        {
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
+            EditorGUILayout.LabelField("Actor", LayoutSettings.SectionLabel);
+
+            ActorObject actor = FindAnyObjectByType<ActorObject>();
+            if (actor == null)
+            {
+                EditorGUILayout.HelpBox(
+                    "No Actor in the active scene. Close and reopen this window to auto-create one.",
+                    MessageType.Info
+                );
+            }
+            else
+            {
+                actor.EditMenu();
+            }
+            EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>Renders the Display section for brightness and height of the active scene's Display.</summary>
+        private void DrawDisplaySection()
+        {
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
+            EditorGUILayout.LabelField("Display", LayoutSettings.SectionLabel);
+
+            DisplayObject display = FindAnyObjectByType<DisplayObject>();
+            if (display == null)
+            {
+                EditorGUILayout.HelpBox(
+                    "No Display in the active scene. Close and reopen this window to auto-create one.",
+                    MessageType.Info
+                );
+                EditorGUILayout.EndVertical();
+                return;
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            if (display.currentBrightness > 0)
+            {
+                if (GUILayout.Button("Blank Display"))
+                {
+                    display.currentBrightness = 0;
+                }
+            }
+            else
+            {
+                if (GUILayout.Button("Show Display"))
+                {
+                    display.currentBrightness = display.settings.brightness;
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+
+            SerializedObject serializedSettings = new SerializedObject(display.settings);
+            float previousHeight = display.settings.heightInVR;
+            float previousBrightness = display.settings.brightness;
+            EditorGUILayout.PropertyField(
+                serializedSettings.FindProperty("brightness"),
+                includeChildren: true,
+                LayoutSettings.EditFieldOption
+            );
+            EditorGUILayout.PropertyField(
+                serializedSettings.FindProperty("heightInVR"),
+                includeChildren: true,
+                LayoutSettings.EditFieldOption
+            );
+            serializedSettings.ApplyModifiedProperties();
+            if (previousHeight != display.settings.heightInVR)
+            {
+                display.transform.localPosition = new Vector3(0, display.settings.heightInVR, 0);
+            }
+            if (previousBrightness != display.settings.brightness)
+            {
+                display.currentBrightness = display.settings.brightness;
+            }
+            EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>Renders the Camera Mapping section that wires display cameras to physical monitors.</summary>
+        private void DrawCameraMappingSection()
+        {
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
+            EditorGUILayout.LabelField("Camera Mapping", LayoutSettings.SectionLabel);
+
+            fullScreenManager.OnGUIRefreshMonitorPositions();
+            fullScreenManager.OnGUICameraObjectFields();
+            if (EditorApplication.isPlaying)
+            {
+                GUI.enabled = false;
+            }
+            fullScreenManager.OnGUIShowFullScreenViews();
+            GUI.enabled = true;
+            EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>Renders the MQTT section with broker IP/port and connection test.</summary>
+        private void DrawMQTTSection()
+        {
             if (EditorApplication.isPlaying)
             {
                 GUI.enabled = false;
             }
             EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
             EditorGUILayout.LabelField("MQTT", LayoutSettings.SectionLabel);
-            _client.ipAddress = EditorGUILayout.TextField("ip: ", _client.ipAddress, GUILayout.Width(300));
+            _client.ipAddress = EditorGUILayout.TextField("ip: ", _client.ipAddress, LayoutSettings.EditFieldOption);
 
-            string portText = EditorGUILayout.TextField("port: ", _client.port.ToString(), GUILayout.Width(300));
+            string portText = EditorGUILayout.TextField(
+                "port: ",
+                _client.port.ToString(),
+                LayoutSettings.EditFieldOption
+            );
             if (int.TryParse(portText, out int parsedPort))
             {
                 _client.port = parsedPort;
@@ -88,113 +317,6 @@ namespace Gimbl
                 _client.Disconnect();
             }
 
-            _sessionSettings.isFold = EditorGUILayout.Foldout(_sessionSettings.isFold, "External Control");
-            if (_sessionSettings.isFold)
-            {
-                EditorGUILayout.BeginVertical(LayoutSettings.SubBoxStyle.Style);
-                bool newExternalStart = EditorGUILayout.Toggle(
-                    "External Start Trigger",
-                    _sessionSettings.externalStart,
-                    LayoutSettings.EditFieldOption
-                );
-                if (newExternalStart != _sessionSettings.externalStart)
-                {
-                    _sessionSettings.externalStart = newExternalStart;
-                    EditorPrefs.SetBool("Gimbl_externalStart", newExternalStart);
-                }
-                bool newExternalLog = EditorGUILayout.Toggle(
-                    "External Log Naming",
-                    _sessionSettings.externalLog,
-                    LayoutSettings.EditFieldOption
-                );
-                if (newExternalLog != _sessionSettings.externalLog)
-                {
-                    _sessionSettings.externalLog = newExternalLog;
-                    EditorPrefs.SetBool("Gimbl_externalLog", newExternalLog);
-                }
-                EditorGUILayout.EndVertical();
-            }
-
-            GUI.enabled = true;
-            EditorGUILayout.EndVertical();
-
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
-            EditorGUILayout.LabelField("Setup", LayoutSettings.SectionLabel);
-            if (GUILayout.Button("Export Setup"))
-            {
-                ExportSetup();
-            }
-            if (GUILayout.Button("Import Setup"))
-            {
-                ImportSetup();
-            }
-            EditorGUILayout.EndVertical();
-
-            EditorGUILayout.EndScrollView();
-        }
-
-        /// <summary>Renders the Task section that exposes per-scene Task settings.</summary>
-        /// <remarks>
-        /// Locates the Task component via <see cref="UnityEngine.Object.FindAnyObjectByType{T}()"/> each frame
-        /// because Task references move with scene changes. Disables the controls in Play Mode since the live
-        /// guidance toggles are driven by MQTT during runtime.
-        /// </remarks>
-        private void DrawTaskSection()
-        {
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
-            EditorGUILayout.LabelField("Task", LayoutSettings.SectionLabel);
-
-            Task task = FindAnyObjectByType<Task>();
-            if (task == null)
-            {
-                EditorGUILayout.HelpBox("No Task component found in the current scene.", MessageType.Info);
-                EditorGUILayout.EndVertical();
-                return;
-            }
-
-            if (EditorApplication.isPlaying)
-            {
-                GUI.enabled = false;
-            }
-
-            EditorGUI.BeginChangeCheck();
-            ActorObject newActor = (ActorObject)
-                EditorGUILayout.ObjectField(
-                    "Actor: ",
-                    task.actor,
-                    typeof(ActorObject),
-                    allowSceneObjects: true,
-                    LayoutSettings.EditFieldOption
-                );
-            bool newRequireLick = EditorGUILayout.Toggle(
-                "Require Lick: ",
-                task.requireLick,
-                LayoutSettings.EditFieldOption
-            );
-            bool newRequireWait = EditorGUILayout.Toggle(
-                "Require Wait: ",
-                task.requireWait,
-                LayoutSettings.EditFieldOption
-            );
-            float newTrackLength = EditorGUILayout.FloatField(
-                "Track Length: ",
-                task.trackLength,
-                LayoutSettings.EditFieldOption
-            );
-            int newTrackSeed = EditorGUILayout.IntField("Track Seed: ", task.trackSeed, LayoutSettings.EditFieldOption);
-
-            if (EditorGUI.EndChangeCheck())
-            {
-                Undo.RecordObject(task, "Edit Task Settings");
-                task.actor = newActor;
-                task.requireLick = newRequireLick;
-                task.requireWait = newRequireWait;
-                task.trackLength = newTrackLength;
-                task.trackSeed = newTrackSeed;
-                EditorUtility.SetDirty(task);
-                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-            }
-
             GUI.enabled = true;
             EditorGUILayout.EndVertical();
         }
@@ -205,10 +327,6 @@ namespace Gimbl
             if (!AssetDatabase.IsValidFolder("Assets/VRSettings"))
             {
                 AssetDatabase.CreateFolder("Assets", "VRSettings");
-            }
-            if (!AssetDatabase.IsValidFolder("Assets/VRSettings/Controllers"))
-            {
-                AssetDatabase.CreateFolder("Assets/VRSettings", "Controllers");
             }
             if (!AssetDatabase.IsValidFolder("Assets/VRSettings/Displays"))
             {
@@ -235,7 +353,7 @@ namespace Gimbl
                         default:
                             break;
                     }
-                    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+                    EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
                 }
                 else
                 {
@@ -255,6 +373,10 @@ namespace Gimbl
                 }
             }
 
+            RemoveDefaultMainCamera();
+            EnsureActorAndDisplay();
+            EnsureControllers();
+
             _client.ipAddress = EditorPrefs.GetString("SollertiaVR_MQTT_IP");
             if (string.IsNullOrEmpty(_client.ipAddress))
             {
@@ -265,105 +387,127 @@ namespace Gimbl
             {
                 _client.port = 1883;
             }
-
-            _sessionSettings.externalStart = EditorPrefs.GetBool("Gimbl_externalStart", false);
-            _sessionSettings.externalLog = EditorPrefs.GetBool("Gimbl_externalLog", false);
         }
 
-        /// <summary>Exports the current setup to a .gimblsetup package file.</summary>
-        private void ExportSetup()
+        /// <summary>Removes every default Unity "Main Camera" GameObject from the active scene.</summary>
+        /// <remarks>
+        /// The auto-created Display owns the per-monitor cameras (via PerspectiveProjection) and the Actor
+        /// owns the third-person tracking camera, so the Unity-default "Main Camera" left over by the new
+        /// scene template renders nothing useful while still consuming display slot 0. Nothing in the C#
+        /// code references <c>Camera.main</c> or the <c>MainCamera</c> tag, so removing it is safe. Uses
+        /// <see cref="UnityEngine.Object.FindObjectsByType{T}(FindObjectsInactive, FindObjectsSortMode)"/>
+        /// instead of <c>GameObject.Find</c> so inactive and duplicate instances are also cleaned up.
+        /// </remarks>
+        private static void RemoveDefaultMainCamera()
         {
-            string[] pathParts = Application.dataPath.Split('/');
-            string projectName = pathParts[pathParts.Length - 2];
-            string exportFilePath = EditorUtility.SaveFilePanel("Save Setup as..", "", projectName, "gimblsetup");
-            if (string.IsNullOrEmpty(exportFilePath))
-                return;
-
-            PrefabUtility.SaveAsPrefabAsset(GameObject.Find("Actors"), "Assets/tempActors.prefab");
-            PrefabUtility.SaveAsPrefabAsset(GameObject.Find("Controllers"), "Assets/tempControllers.prefab");
-
-            string[] assetBundle = new string[]
+            Camera[] cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            bool anyRemoved = false;
+            foreach (Camera camera in cameras)
             {
-                "Assets/tempActors.prefab",
-                "Assets/tempControllers.prefab",
-                "Assets/VRSettings/Displays/savedFullScreenViews.asset",
-            };
-            AssetDatabase.ExportPackage(assetBundle, exportFilePath, ExportPackageOptions.IncludeDependencies);
-
-            AssetDatabase.DeleteAsset("Assets/tempActors.prefab");
-            AssetDatabase.DeleteAsset("Assets/tempControllers.prefab");
-        }
-
-        /// <summary>Imports a setup from a .gimblsetup package file.</summary>
-        private void ImportSetup()
-        {
-            bool confirmImport = EditorUtility.DisplayDialog(
-                "Erase current setup?",
-                "Importing this setup will remove all current Actors,Controllers and Displays",
-                "Continue",
-                "Cancel"
-            );
-            if (!confirmImport)
-                return;
-
-            string importFilePath = EditorUtility.OpenFilePanel("Import Setup", Application.dataPath, "gimblsetup");
-            if (string.IsNullOrEmpty(importFilePath))
-                return;
-
-            DestroyImmediate(GameObject.Find("Actors"));
-            DestroyImmediate(GameObject.Find("Controllers"));
-
-            AssetDatabase.ImportPackage(importFilePath, interactive: false);
-
-            Object actorsPrefab = AssetDatabase.LoadAssetAtPath("Assets/tempActors.prefab", typeof(Object));
-            GameObject actors = Instantiate(actorsPrefab) as GameObject;
-            actors.name = "Actors";
-
-            Object controllersPrefab = AssetDatabase.LoadAssetAtPath("Assets/tempControllers.prefab", typeof(Object));
-            GameObject controllers = Instantiate(controllersPrefab) as GameObject;
-            controllers.name = "Controllers";
-
-            DisplaysWindow displaysWindow = (DisplaysWindow)GetWindow(typeof(DisplaysWindow));
-            displaysWindow.fullScreenManager.LoadCameras();
-
-            foreach (ActorObject actor in actors.GetComponentsInChildren<ActorObject>())
-            {
-                if (LayerMask.NameToLayer(actor.name) == -1)
+                if (
+                    camera.gameObject.CompareTag("MainCamera")
+                    || string.Equals(camera.gameObject.name, "Main Camera", System.StringComparison.Ordinal)
+                )
                 {
-                    TagsAndLayers.AddLayer(actor.name);
-                }
-                GameObject model = actor.GetComponentInChildren<MeshRenderer>().gameObject;
-                model.layer = LayerMask.NameToLayer(actor.name);
-
-                DisplayObject actorDisplay = actor.gameObject.GetComponentInChildren<DisplayObject>();
-                if (actorDisplay != null)
-                {
-                    foreach (Camera camera in actorDisplay.GetComponentsInChildren<Camera>())
-                    {
-                        camera.cullingMask = -1;
-                        camera.cullingMask &= ~(1 << LayerMask.NameToLayer(actor.name));
-                    }
+                    DestroyImmediate(camera.gameObject);
+                    anyRemoved = true;
                 }
             }
-
-            AssetDatabase.DeleteAsset("Assets/tempActors.prefab");
-            AssetDatabase.DeleteAsset("Assets/tempControllers.prefab");
+            if (anyRemoved)
+            {
+                Debug.Log("Removed default Main Camera (unused; Display cameras handle monitor rendering).");
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            }
         }
 
-        /// <summary>
-        /// Stores session menu state and external control settings.
-        /// </summary>
-        [System.Serializable]
-        private class SessionMenuSettings
+        /// <summary>Ensures the active scene contains exactly one Actor and one Display, wired together.</summary>
+        /// <remarks>
+        /// Creates a default Actor with the first prefab under <c>Resources/Actors/Prefabs/</c> and a default
+        /// Display from the first prefab under <c>Resources/Displays/</c> whenever the active scene lacks
+        /// them. Existing instances are left untouched. The Actor is linked to the Display via
+        /// <see cref="ActorObject.Display"/> so the projection cameras render through the Actor's view.
+        /// </remarks>
+        private void EnsureActorAndDisplay()
         {
-            /// <summary>Determines whether the external control foldout is expanded.</summary>
-            public bool isFold = false;
+            ActorObject actor = FindAnyObjectByType<ActorObject>();
+            if (actor == null)
+            {
+                GameObject[] actorModels = Resources.LoadAll<GameObject>("Actors/Prefabs");
+                string defaultModel = actorModels.Length > 0 ? actorModels[0].name : "None";
+                GameObject actorGameObject = new GameObject("Actor");
+                actor = actorGameObject.AddComponent<ActorObject>();
+                actor.InitiateActor(defaultModel, trackCamera: true);
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            }
 
-            /// <summary>Determines whether external start trigger is enabled.</summary>
-            public bool externalStart = false;
+            DisplayObject display = FindAnyObjectByType<DisplayObject>();
+            if (display == null)
+            {
+                GameObject[] displayModels = Resources.LoadAll<GameObject>("Displays");
+                if (displayModels.Length == 0)
+                {
+                    Debug.LogError(
+                        "MainWindow.EnsureActorAndDisplay: no display prefabs found under Resources/Displays."
+                    );
+                    return;
+                }
+                display = DisplayObject.Create("Display", displayModels[0].name, DisplayType.Monitor);
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            }
 
-            /// <summary>Determines whether external log naming is enabled.</summary>
-            public bool externalLog = false;
+            if (actor.Display != display)
+            {
+                actor.Display = display;
+            }
+        }
+
+        /// <summary>Ensures the active scene contains one controller GameObject per supported ControllerTypes.</summary>
+        /// <remarks>
+        /// Iterates every <see cref="ControllerTypes"/> enum value, resolves it to a concrete subclass of
+        /// <see cref="ControllerObject"/> via the <see cref="ControllerObject"/> assembly, and creates a
+        /// matching GameObject under the scene's "Controllers" root when none of that exact type already
+        /// exists. The created GameObject is named after the enum value and gets a settings asset via
+        /// <see cref="ControllerObject.InitiateController"/>, which reuses any existing asset at the matching
+        /// path. The Actor.Controller assignment is left untouched so user-chosen swaps survive auto-create.
+        /// </remarks>
+        public static void EnsureControllers()
+        {
+            GameObject controllersRoot = GameObject.Find("Controllers");
+            if (controllersRoot == null)
+            {
+                return;
+            }
+
+            ControllerObject[] existingControllers = FindObjectsByType<ControllerObject>(FindObjectsSortMode.None);
+            bool createdAny = false;
+
+            foreach (ControllerTypes controllerType in System.Enum.GetValues(typeof(ControllerTypes)))
+            {
+                System.Type resolvedType = typeof(ControllerObject).Assembly.GetType($"Gimbl.{controllerType}");
+                if (resolvedType == null)
+                {
+                    Debug.LogError(
+                        $"MainWindow.EnsureControllers: could not resolve controller type 'Gimbl.{controllerType}'."
+                    );
+                    continue;
+                }
+                if (existingControllers.Any(existing => existing.GetType() == resolvedType))
+                {
+                    continue;
+                }
+
+                GameObject controllerGameObject = new GameObject(controllerType.ToString());
+                ControllerObject controller = (ControllerObject)controllerGameObject.AddComponent(resolvedType);
+                controller.InitiateController();
+                ControllerOutput output = controllerGameObject.AddComponent<ControllerOutput>();
+                output.master = controller;
+                createdAny = true;
+            }
+
+            if (createdAny)
+            {
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            }
         }
     }
 }

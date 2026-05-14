@@ -527,11 +527,13 @@ namespace SL.Tasks
 
         /// <summary>
         /// Creates a new scene by copying the canonical experiment template scene, optionally instantiating a
-        /// task prefab into it, and adding a SimulatedLinearTreadmill controller alongside any existing
-        /// LinearTreadmill so the scene can be exercised with keyboard input out of the box. The new scene is
-        /// opened in the Editor and saved on disk before the call returns. Callers are responsible for
-        /// resolving any unsaved changes in the currently open scene before invoking this method, since the
-        /// menu flow uses Unity's native dialog while the MCP flow uses an explicit policy argument.
+        /// task prefab into it, and ensuring every supported controller (LinearTreadmill and
+        /// SimulatedLinearTreadmill) is present in the scene so it can be driven by either real or keyboard
+        /// input out of the box. Controller creation runs through <see cref="MainWindow.EnsureControllers"/>
+        /// so the new and Task-Parameters-driven paths share the same logic. The new scene is opened in the
+        /// Editor and saved on disk before the call returns. Callers are responsible for resolving any
+        /// unsaved changes in the currently open scene before invoking this method, since the menu flow uses
+        /// Unity's native dialog while the MCP flow uses an explicit policy argument.
         /// </summary>
         /// <param name="sceneSavePath">The project-relative path where the new scene file is written.</param>
         /// <param name="taskPrefabPath">
@@ -606,9 +608,14 @@ namespace SL.Tasks
                 }
             }
 
-            result.SimulatedControllerAdded = AddSimulatedControllerToActiveScene();
+            Scene activeScene = SceneManager.GetActiveScene();
+            bool simulatedExistedBeforeEnsure = Resources
+                .FindObjectsOfTypeAll<SimulatedLinearTreadmill>()
+                .Any(existing => existing.gameObject.scene == activeScene);
+            MainWindow.EnsureControllers();
+            result.SimulatedControllerAdded = !simulatedExistedBeforeEnsure;
 
-            EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
+            EditorSceneManager.SaveScene(activeScene);
 
             result.Success = true;
             if (result.TaskPrefabNotFound)
@@ -620,47 +627,6 @@ namespace SL.Tasks
                 result.Message = $"Scene saved to {sceneSavePath}";
             }
             return result;
-        }
-
-        /// <summary>
-        /// Adds a SimulatedLinearTreadmill controller GameObject to the active scene alongside any existing
-        /// LinearTreadmill so the scene can be driven by keyboard input out of the box. The new controller
-        /// inherits the existing LinearTreadmill's actor and settings references so it behaves identically
-        /// aside from the input source. Skips the add when the scene already contains a
-        /// SimulatedLinearTreadmill, or when no LinearTreadmill is present (no reference to borrow actor and
-        /// settings from). Returns true when a new controller was added.
-        /// </summary>
-        /// <returns>True when a SimulatedLinearTreadmill GameObject was created, false otherwise.</returns>
-        private static bool AddSimulatedControllerToActiveScene()
-        {
-            Scene activeScene = SceneManager.GetActiveScene();
-            if (
-                Resources
-                    .FindObjectsOfTypeAll<SimulatedLinearTreadmill>()
-                    .Any(existing => existing.gameObject.scene == activeScene)
-            )
-            {
-                return false;
-            }
-
-            LinearTreadmill referenceController = Resources
-                .FindObjectsOfTypeAll<LinearTreadmill>()
-                .FirstOrDefault(controller =>
-                    controller.gameObject.scene == activeScene && controller is not SimulatedLinearTreadmill
-                );
-            if (referenceController == null)
-            {
-                return false;
-            }
-
-            GameObject simulatedGameObject = new GameObject("SimulatedController");
-            simulatedGameObject.transform.SetParent(referenceController.transform.parent, worldPositionStays: false);
-            SimulatedLinearTreadmill simulated = simulatedGameObject.AddComponent<SimulatedLinearTreadmill>();
-            simulated.actor = referenceController.actor;
-            simulated.settings = referenceController.settings;
-            ControllerOutput simulatedOutput = simulatedGameObject.AddComponent<ControllerOutput>();
-            simulatedOutput.master = simulated;
-            return true;
         }
 
         /// <summary>

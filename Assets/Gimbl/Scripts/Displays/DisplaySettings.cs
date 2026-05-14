@@ -11,9 +11,6 @@ namespace Gimbl
     [System.Serializable]
     public class DisplaySettings : ScriptableObject
     {
-        /// <summary>Determines whether this display is active.</summary>
-        public bool isActive = true;
-
         /// <summary>The brightness level for this display (0-100).</summary>
         public float brightness = 100f;
 

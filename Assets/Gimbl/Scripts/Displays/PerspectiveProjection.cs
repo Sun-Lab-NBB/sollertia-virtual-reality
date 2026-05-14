@@ -270,13 +270,9 @@ namespace Gimbl
             {
                 material.SetFloat(BrightnessShaderProperty, 100f);
             }
-            else if (displayObject.settings == null || displayObject.settings.isActive)
-            {
-                material.SetFloat(BrightnessShaderProperty, displayObject.currentBrightness);
-            }
             else
             {
-                material.SetFloat(BrightnessShaderProperty, 0f);
+                material.SetFloat(BrightnessShaderProperty, displayObject.currentBrightness);
             }
             Graphics.Blit(source, destination, material);
         }

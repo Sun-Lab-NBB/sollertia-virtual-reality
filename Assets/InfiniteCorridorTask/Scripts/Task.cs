@@ -145,11 +145,7 @@ namespace SL.Tasks
         {
             if (actor == null)
             {
-                ActorObject[] allActors = FindObjectsByType<ActorObject>(FindObjectsSortMode.None);
-                if (allActors.Length > 0)
-                {
-                    actor = allActors[0];
-                }
+                actor = FindAnyObjectByType<ActorObject>();
             }
         }
 
