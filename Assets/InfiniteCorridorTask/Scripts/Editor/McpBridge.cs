@@ -691,145 +691,7 @@ namespace SL.Tasks
         /// <returns>A JSON response with state, options, and visibility nested dictionaries.</returns>
         private static string ReadTaskParameters()
         {
-            ActorObject actor = UnityEngine.Object.FindAnyObjectByType<ActorObject>();
-            DisplayObject display = UnityEngine.Object.FindAnyObjectByType<DisplayObject>();
-            Task task = UnityEngine.Object.FindAnyObjectByType<Task>();
-            MQTTClient client = UnityEngine.Object.FindAnyObjectByType<MQTTClient>();
-            ControllerOutput[] controllers = UnityEngine.Object.FindObjectsByType<ControllerOutput>(
-                FindObjectsSortMode.None
-            );
-            Camera[] cameras = UnityEngine
-                .Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)
-                .Where(camera =>
-                    !camera.CompareTag("MainCamera")
-                    && !string.Equals(camera.gameObject.name, "Main Camera", StringComparison.Ordinal)
-                )
-                .ToArray();
-            bool hasLickZone = UnityEngine.Object.FindAnyObjectByType<GuidanceZone>() != null;
-            bool hasOccupancyZone = UnityEngine.Object.FindAnyObjectByType<OccupancyZone>() != null;
-            FullScreenViewManager fullScreenManager = AcquireFullScreenManager();
-
-            Dictionary<string, object> actorState = null;
-            if (actor != null)
-            {
-                string currentModel = "None";
-                foreach (Transform child in actor.transform)
-                {
-                    if (child.name.StartsWith("Model ", StringComparison.Ordinal))
-                    {
-                        currentModel = child.name.Substring("Model ".Length);
-                        break;
-                    }
-                }
-                actorState = new Dictionary<string, object>
-                {
-                    { "model", currentModel },
-                    { "controller", actor.Controller == null ? "None" : actor.Controller.gameObject.name },
-                };
-            }
-
-            Dictionary<string, object> mqttState =
-                client == null
-                    ? null
-                    : new Dictionary<string, object> { { "ip", client.ipAddress }, { "port", client.port } };
-
-            Dictionary<string, object> displayState =
-                display == null
-                    ? null
-                    : new Dictionary<string, object>
-                    {
-                        { "current_brightness", display.currentBrightness },
-                        { "brightness", display.settings != null ? display.settings.brightness : 100f },
-                        { "height_in_vr", display.settings != null ? display.settings.heightInVR : 0f },
-                    };
-
-            List<Dictionary<string, object>> cameraMappingState = new List<Dictionary<string, object>>();
-            for (int monitorIndex = 0; monitorIndex < fullScreenManager.monitors.Count; monitorIndex++)
-            {
-                Monitor monitor = fullScreenManager.monitors[monitorIndex];
-                Camera assigned = (Camera)EditorUtility.EntityIdToObject(monitor.cameraEntityId);
-                cameraMappingState.Add(
-                    new Dictionary<string, object>
-                    {
-                        { "monitor", monitorIndex + 1 },
-                        { "left", monitor.left },
-                        { "top", monitor.top },
-                        { "camera", assigned == null ? "None" : assigned.name },
-                    }
-                );
-            }
-
-            Dictionary<string, object> taskState =
-                task == null
-                    ? null
-                    : new Dictionary<string, object>
-                    {
-                        { "require_lick", task.requireLick },
-                        { "require_wait", task.requireWait },
-                        { "track_length", task.trackLength },
-                        { "track_seed", task.trackSeed },
-                    };
-
-            List<string> modelOptions = Resources
-                .LoadAll<GameObject>("Actors/Prefabs")
-                .Select(prefab => prefab.name)
-                .Append("None")
-                .ToList();
-
-            List<string> controllerOptions = new List<string> { "None" };
-            controllerOptions.AddRange(controllers.Select(controller => controller.gameObject.name));
-
-            List<string> cameraOptions = new List<string> { "None" };
-            cameraOptions.AddRange(cameras.Select(camera => camera.name));
-
-            return Ok(
-                new Dictionary<string, object>
-                {
-                    {
-                        "state",
-                        new Dictionary<string, object>
-                        {
-                            { "actor", actorState },
-                            { "mqtt", mqttState },
-                            { "display", displayState },
-                            { "camera_mapping", cameraMappingState },
-                            { "task", taskState },
-                        }
-                    },
-                    {
-                        "options",
-                        new Dictionary<string, object>
-                        {
-                            {
-                                "actor",
-                                new Dictionary<string, object>
-                                {
-                                    { "model", modelOptions },
-                                    { "controller", controllerOptions },
-                                }
-                            },
-                            {
-                                "camera_mapping",
-                                new Dictionary<string, object> { { "camera", cameraOptions } }
-                            },
-                        }
-                    },
-                    {
-                        "visibility",
-                        new Dictionary<string, object>
-                        {
-                            {
-                                "task",
-                                new Dictionary<string, object>
-                                {
-                                    { "require_lick", hasLickZone },
-                                    { "require_wait", hasOccupancyZone },
-                                }
-                            },
-                        }
-                    },
-                }
-            );
+            return Ok(BuildSnapshot(AcquireSceneComponents()));
         }
 
         /// <summary>Applies the supplied parameter subset and returns the post-write snapshot.</summary>
@@ -848,201 +710,37 @@ namespace SL.Tasks
         /// <returns>A JSON response carrying the post-write snapshot from <see cref="ReadTaskParameters"/>.</returns>
         private static string WriteTaskParameters(Dictionary<string, object> args)
         {
-            ActorObject actor = UnityEngine.Object.FindAnyObjectByType<ActorObject>();
-            DisplayObject display = UnityEngine.Object.FindAnyObjectByType<DisplayObject>();
-            Task task = UnityEngine.Object.FindAnyObjectByType<Task>();
-            MQTTClient client = UnityEngine.Object.FindAnyObjectByType<MQTTClient>();
-            ControllerOutput[] controllers = UnityEngine.Object.FindObjectsByType<ControllerOutput>(
-                FindObjectsSortMode.None
-            );
-            Camera[] cameras = UnityEngine
-                .Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)
-                .Where(camera =>
-                    !camera.CompareTag("MainCamera")
-                    && !string.Equals(camera.gameObject.name, "Main Camera", StringComparison.Ordinal)
-                )
-                .ToArray();
-
+            SceneComponents components = AcquireSceneComponents();
             bool dirty = false;
 
-            if (TryGetSection(args, "actor", out Dictionary<string, object> actorArgs) && actor != null)
+            string error = TryWriteActorSection(args, components, ref dirty);
+            if (error != null)
             {
-                if (actorArgs.TryGetValue("model", out object modelObject) && modelObject is string newModel)
-                {
-                    string[] validModels = Resources
-                        .LoadAll<GameObject>("Actors/Prefabs")
-                        .Select(prefab => prefab.name)
-                        .Append("None")
-                        .ToArray();
-                    if (!validModels.Contains(newModel))
-                    {
-                        return Error($"Invalid model '{newModel}'. Valid: {string.Join(", ", validModels)}");
-                    }
-                    actor.SetModel(newModel);
-                    dirty = true;
-                }
-                if (
-                    actorArgs.TryGetValue("controller", out object controllerObject)
-                    && controllerObject is string newController
-                )
-                {
-                    if (string.Equals(newController, "None", StringComparison.Ordinal))
-                    {
-                        actor.Controller = null;
-                    }
-                    else
-                    {
-                        ControllerOutput target = controllers.FirstOrDefault(controller =>
-                            controller.gameObject.name == newController
-                        );
-                        if (target == null)
-                        {
-                            string message =
-                                $"Invalid controller '{newController}'. Valid: None, "
-                                + string.Join(", ", controllers.Select(controller => controller.gameObject.name));
-                            return Error(message);
-                        }
-                        actor.Controller = target;
-                    }
-                    dirty = true;
-                }
+                return Error(error);
             }
 
-            if (TryGetSection(args, "mqtt", out Dictionary<string, object> mqttArgs) && client != null)
+            error = TryWriteMqttSection(args, components, ref dirty);
+            if (error != null)
             {
-                if (mqttArgs.TryGetValue("ip", out object ipObject) && ipObject is string newIp)
-                {
-                    client.ipAddress = newIp;
-                    EditorPrefs.SetString("SollertiaVR_MQTT_IP", newIp);
-                    dirty = true;
-                }
-                if (mqttArgs.TryGetValue("port", out object portObject))
-                {
-                    int newPort = Convert.ToInt32(portObject);
-                    client.port = newPort;
-                    EditorPrefs.SetInt("SollertiaVR_MQTT_Port", newPort);
-                    dirty = true;
-                }
+                return Error(error);
             }
 
-            if (TryGetSection(args, "display", out Dictionary<string, object> displayArgs) && display != null)
+            error = TryWriteDisplaySection(args, components, ref dirty);
+            if (error != null)
             {
-                if (displayArgs.TryGetValue("current_brightness", out object currentBrightnessObject))
-                {
-                    display.currentBrightness = Convert.ToSingle(currentBrightnessObject);
-                    dirty = true;
-                }
-                if (display.settings != null)
-                {
-                    if (displayArgs.TryGetValue("brightness", out object brightnessObject))
-                    {
-                        display.settings.brightness = Convert.ToSingle(brightnessObject);
-                        EditorUtility.SetDirty(display.settings);
-                        dirty = true;
-                    }
-                    if (displayArgs.TryGetValue("height_in_vr", out object heightObject))
-                    {
-                        display.settings.heightInVR = Convert.ToSingle(heightObject);
-                        display.transform.localPosition = new Vector3(0, display.settings.heightInVR, 0);
-                        EditorUtility.SetDirty(display.settings);
-                        dirty = true;
-                    }
-                }
+                return Error(error);
             }
 
-            if (
-                args.TryGetValue("camera_mapping", out object cameraMappingObject)
-                && cameraMappingObject is List<object> cameraMappingList
-            )
+            error = TryWriteCameraMappingSection(args, components, ref dirty);
+            if (error != null)
             {
-                FullScreenViewManager fullScreenManager = AcquireFullScreenManager();
-                foreach (object row in cameraMappingList)
-                {
-                    if (row is not Dictionary<string, object> rowDict)
-                    {
-                        continue;
-                    }
-                    if (!rowDict.TryGetValue("monitor", out object monitorObject))
-                    {
-                        continue;
-                    }
-                    int monitorIndex = Convert.ToInt32(monitorObject) - 1;
-                    if (monitorIndex < 0 || monitorIndex >= fullScreenManager.monitors.Count)
-                    {
-                        string message =
-                            $"Invalid monitor index {monitorIndex + 1}; scene has "
-                            + $"{fullScreenManager.monitors.Count} monitors.";
-                        return Error(message);
-                    }
-                    if (
-                        !rowDict.TryGetValue("camera", out object cameraObject) || cameraObject is not string cameraName
-                    )
-                    {
-                        continue;
-                    }
-                    if (string.Equals(cameraName, "None", StringComparison.Ordinal))
-                    {
-                        fullScreenManager.monitors[monitorIndex].cameraEntityId = EntityId.None;
-                    }
-                    else
-                    {
-                        Camera target = cameras.FirstOrDefault(camera => camera.name == cameraName);
-                        if (target == null)
-                        {
-                            string message =
-                                $"Invalid camera '{cameraName}' for monitor {monitorIndex + 1}. Valid: None, "
-                                + string.Join(", ", cameras.Select(camera => camera.name));
-                            return Error(message);
-                        }
-                        fullScreenManager.monitors[monitorIndex].cameraEntityId = target.GetEntityId();
-                    }
-                }
-                fullScreenManager.SaveCameras();
-                dirty = true;
+                return Error(error);
             }
 
-            if (TryGetSection(args, "task", out Dictionary<string, object> taskArgs) && task != null)
+            error = TryWriteTaskSection(args, components, ref dirty);
+            if (error != null)
             {
-                bool hasLickZone = UnityEngine.Object.FindAnyObjectByType<GuidanceZone>() != null;
-                bool hasOccupancyZone = UnityEngine.Object.FindAnyObjectByType<OccupancyZone>() != null;
-
-                if (taskArgs.ContainsKey("require_lick") && !hasLickZone)
-                {
-                    string message =
-                        "Cannot set require_lick: the active scene has no GuidanceZone, so the control is "
-                        + "hidden in the Parameters window and the flag has no runtime effect.";
-                    return Error(message);
-                }
-                if (taskArgs.ContainsKey("require_wait") && !hasOccupancyZone)
-                {
-                    string message =
-                        "Cannot set require_wait: the active scene has no OccupancyZone, so the control is "
-                        + "hidden in the Parameters window and the flag has no runtime effect.";
-                    return Error(message);
-                }
-
-                Undo.RecordObject(task, "Write Task Parameters");
-                if (taskArgs.TryGetValue("require_lick", out object requireLickObject))
-                {
-                    task.requireLick = Convert.ToBoolean(requireLickObject);
-                    dirty = true;
-                }
-                if (taskArgs.TryGetValue("require_wait", out object requireWaitObject))
-                {
-                    task.requireWait = Convert.ToBoolean(requireWaitObject);
-                    dirty = true;
-                }
-                if (taskArgs.TryGetValue("track_length", out object trackLengthObject))
-                {
-                    task.trackLength = Convert.ToSingle(trackLengthObject);
-                    dirty = true;
-                }
-                if (taskArgs.TryGetValue("track_seed", out object trackSeedObject))
-                {
-                    task.trackSeed = Convert.ToInt32(trackSeedObject);
-                    dirty = true;
-                }
-                EditorUtility.SetDirty(task);
+                return Error(error);
             }
 
             if (dirty)
@@ -1050,7 +748,454 @@ namespace SL.Tasks
                 EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             }
 
-            return ReadTaskParameters();
+            return Ok(BuildSnapshot(components));
+        }
+
+        /// <summary>
+        /// Aggregates the per-scene component references read by both <see cref="ReadTaskParameters"/> and
+        /// <see cref="WriteTaskParameters"/>. Built once per request via <see cref="AcquireSceneComponents"/>
+        /// so each tool invocation walks the scene exactly once, regardless of how many sections the writer
+        /// touches.
+        /// </summary>
+        private struct SceneComponents
+        {
+            /// <summary>The active scene's actor, or null when absent.</summary>
+            public ActorObject Actor;
+
+            /// <summary>The active scene's display, or null when absent.</summary>
+            public DisplayObject Display;
+
+            /// <summary>The active scene's Task component, or null when absent.</summary>
+            public Task Task;
+
+            /// <summary>The active scene's MQTT client singleton, or null when absent.</summary>
+            public MQTTClient Client;
+
+            /// <summary>Every <see cref="ControllerOutput"/> in the active scene.</summary>
+            public ControllerOutput[] Controllers;
+
+            /// <summary>Every assignable display camera (MainCamera excluded) in the active scene.</summary>
+            public Camera[] DisplayCameras;
+
+            /// <summary>True when the scene contains at least one <see cref="GuidanceZone"/>.</summary>
+            public bool HasLickZone;
+
+            /// <summary>True when the scene contains at least one <see cref="OccupancyZone"/>.</summary>
+            public bool HasOccupancyZone;
+
+            /// <summary>The shared <see cref="FullScreenViewManager"/> used by camera-mapping reads and writes.</summary>
+            public FullScreenViewManager FullScreenManager;
+        }
+
+        /// <summary>Performs the single scene walk shared by <see cref="ReadTaskParameters"/> and <see cref="WriteTaskParameters"/>.</summary>
+        /// <returns>A snapshot of every component the Task Parameters endpoints consume.</returns>
+        private static SceneComponents AcquireSceneComponents()
+        {
+            return new SceneComponents
+            {
+                Actor = UnityEngine.Object.FindAnyObjectByType<ActorObject>(),
+                Display = UnityEngine.Object.FindAnyObjectByType<DisplayObject>(),
+                Task = UnityEngine.Object.FindAnyObjectByType<Task>(),
+                Client = UnityEngine.Object.FindAnyObjectByType<MQTTClient>(),
+                Controllers = UnityEngine.Object.FindObjectsByType<ControllerOutput>(FindObjectsSortMode.None),
+                DisplayCameras = GetDisplayCameras(),
+                HasLickZone = UnityEngine.Object.FindAnyObjectByType<GuidanceZone>() != null,
+                HasOccupancyZone = UnityEngine.Object.FindAnyObjectByType<OccupancyZone>() != null,
+                FullScreenManager = AcquireFullScreenManager(),
+            };
+        }
+
+        /// <summary>Returns every assignable display camera in the active scene (Main Camera excluded).</summary>
+        /// <remarks>
+        /// Mirrors the filter applied by <see cref="FullScreenViewManager"/>'s dropdown so the agent surface
+        /// and the GUI agree on which cameras can be bound to monitors.
+        /// </remarks>
+        private static Camera[] GetDisplayCameras()
+        {
+            return UnityEngine
+                .Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)
+                .Where(camera =>
+                    !camera.CompareTag("MainCamera")
+                    && !string.Equals(camera.gameObject.name, "Main Camera", StringComparison.Ordinal)
+                )
+                .ToArray();
+        }
+
+        /// <summary>Returns every valid actor model name (every Resources/Actors/Prefabs entry plus "None").</summary>
+        private static string[] GetValidActorModels()
+        {
+            return Resources
+                .LoadAll<GameObject>("Actors/Prefabs")
+                .Select(prefab => prefab.name)
+                .Append("None")
+                .ToArray();
+        }
+
+        /// <summary>Builds the nested state/options/visibility dictionary that <see cref="ReadTaskParameters"/> returns.</summary>
+        /// <remarks>
+        /// Takes a pre-acquired <see cref="SceneComponents"/> rather than re-walking the scene so the
+        /// post-write response from <see cref="WriteTaskParameters"/> reuses the same component references
+        /// it already validated against, avoiding a third scene scan per request.
+        /// </remarks>
+        /// <param name="components">The pre-acquired scene component snapshot.</param>
+        /// <returns>The response payload ready for <see cref="Ok"/>.</returns>
+        private static Dictionary<string, object> BuildSnapshot(SceneComponents components)
+        {
+            Dictionary<string, object> actorState = null;
+            if (components.Actor != null)
+            {
+                string currentModel = "None";
+                foreach (Transform child in components.Actor.transform)
+                {
+                    if (child.name.StartsWith("Model ", StringComparison.Ordinal))
+                    {
+                        currentModel = child.name.Substring("Model ".Length);
+                        break;
+                    }
+                }
+                actorState = new Dictionary<string, object>
+                {
+                    { "model", currentModel },
+                    {
+                        "controller",
+                        components.Actor.Controller == null ? "None" : components.Actor.Controller.gameObject.name
+                    },
+                };
+            }
+
+            Dictionary<string, object> mqttState =
+                components.Client == null
+                    ? null
+                    : new Dictionary<string, object>
+                    {
+                        { "ip", components.Client.ipAddress },
+                        { "port", components.Client.port },
+                    };
+
+            Dictionary<string, object> displayState =
+                components.Display == null
+                    ? null
+                    : new Dictionary<string, object>
+                    {
+                        { "current_brightness", components.Display.currentBrightness },
+                        {
+                            "brightness",
+                            components.Display.settings != null ? components.Display.settings.brightness : 100f
+                        },
+                        {
+                            "height_in_vr",
+                            components.Display.settings != null ? components.Display.settings.heightInVR : 0f
+                        },
+                    };
+
+            List<Dictionary<string, object>> cameraMappingState = new List<Dictionary<string, object>>();
+            for (int monitorIndex = 0; monitorIndex < components.FullScreenManager.monitors.Count; monitorIndex++)
+            {
+                Monitor monitor = components.FullScreenManager.monitors[monitorIndex];
+                Camera assigned = (Camera)EditorUtility.EntityIdToObject(monitor.cameraEntityId);
+                cameraMappingState.Add(
+                    new Dictionary<string, object>
+                    {
+                        { "monitor", monitorIndex + 1 },
+                        { "left", monitor.left },
+                        { "top", monitor.top },
+                        { "camera", assigned == null ? "None" : assigned.name },
+                    }
+                );
+            }
+
+            Dictionary<string, object> taskState =
+                components.Task == null
+                    ? null
+                    : new Dictionary<string, object>
+                    {
+                        { "require_lick", components.Task.requireLick },
+                        { "require_wait", components.Task.requireWait },
+                        { "track_length", components.Task.trackLength },
+                        { "track_seed", components.Task.trackSeed },
+                    };
+
+            List<string> modelOptions = new List<string>(GetValidActorModels());
+
+            List<string> controllerOptions = new List<string> { "None" };
+            controllerOptions.AddRange(components.Controllers.Select(controller => controller.gameObject.name));
+
+            List<string> cameraOptions = new List<string> { "None" };
+            cameraOptions.AddRange(components.DisplayCameras.Select(camera => camera.name));
+
+            return new Dictionary<string, object>
+            {
+                {
+                    "state",
+                    new Dictionary<string, object>
+                    {
+                        { "actor", actorState },
+                        { "mqtt", mqttState },
+                        { "display", displayState },
+                        { "camera_mapping", cameraMappingState },
+                        { "task", taskState },
+                    }
+                },
+                {
+                    "options",
+                    new Dictionary<string, object>
+                    {
+                        {
+                            "actor",
+                            new Dictionary<string, object>
+                            {
+                                { "model", modelOptions },
+                                { "controller", controllerOptions },
+                            }
+                        },
+                        {
+                            "camera_mapping",
+                            new Dictionary<string, object> { { "camera", cameraOptions } }
+                        },
+                    }
+                },
+                {
+                    "visibility",
+                    new Dictionary<string, object>
+                    {
+                        {
+                            "task",
+                            new Dictionary<string, object>
+                            {
+                                { "require_lick", components.HasLickZone },
+                                { "require_wait", components.HasOccupancyZone },
+                            }
+                        },
+                    }
+                },
+            };
+        }
+
+        /// <summary>Applies any "actor" subsection from <paramref name="args"/>.</summary>
+        /// <returns>An error message when the actor section is invalid, otherwise null.</returns>
+        private static string TryWriteActorSection(
+            Dictionary<string, object> args,
+            SceneComponents components,
+            ref bool dirty
+        )
+        {
+            if (!TryGetSection(args, "actor", out Dictionary<string, object> actorArgs) || components.Actor == null)
+            {
+                return null;
+            }
+            if (actorArgs.TryGetValue("model", out object modelObject) && modelObject is string newModel)
+            {
+                string[] validModels = GetValidActorModels();
+                if (!validModels.Contains(newModel))
+                {
+                    return $"Invalid model '{newModel}'. Valid: {string.Join(", ", validModels)}";
+                }
+                components.Actor.SetModel(newModel);
+                dirty = true;
+            }
+            if (
+                actorArgs.TryGetValue("controller", out object controllerObject)
+                && controllerObject is string newController
+            )
+            {
+                if (string.Equals(newController, "None", StringComparison.Ordinal))
+                {
+                    components.Actor.Controller = null;
+                }
+                else
+                {
+                    ControllerOutput target = components.Controllers.FirstOrDefault(controller =>
+                        controller.gameObject.name == newController
+                    );
+                    if (target == null)
+                    {
+                        string controllerNames = string.Join(
+                            ", ",
+                            components.Controllers.Select(controller => controller.gameObject.name)
+                        );
+                        return $"Invalid controller '{newController}'. Valid: None, {controllerNames}";
+                    }
+                    components.Actor.Controller = target;
+                }
+                dirty = true;
+            }
+            return null;
+        }
+
+        /// <summary>Applies any "mqtt" subsection from <paramref name="args"/>. Logic preserved verbatim from the pre-refactor inline block.</summary>
+        /// <returns>An error message when the mqtt section is invalid, otherwise null.</returns>
+        private static string TryWriteMqttSection(
+            Dictionary<string, object> args,
+            SceneComponents components,
+            ref bool dirty
+        )
+        {
+            if (!TryGetSection(args, "mqtt", out Dictionary<string, object> mqttArgs) || components.Client == null)
+            {
+                return null;
+            }
+            if (mqttArgs.TryGetValue("ip", out object ipObject) && ipObject is string newIp)
+            {
+                components.Client.ipAddress = newIp;
+                EditorPrefs.SetString("SollertiaVR_MQTT_IP", newIp);
+                dirty = true;
+            }
+            if (mqttArgs.TryGetValue("port", out object portObject))
+            {
+                int newPort = Convert.ToInt32(portObject);
+                components.Client.port = newPort;
+                EditorPrefs.SetInt("SollertiaVR_MQTT_Port", newPort);
+                dirty = true;
+            }
+            return null;
+        }
+
+        /// <summary>Applies any "display" subsection from <paramref name="args"/>.</summary>
+        /// <returns>An error message when the display section is invalid, otherwise null.</returns>
+        private static string TryWriteDisplaySection(
+            Dictionary<string, object> args,
+            SceneComponents components,
+            ref bool dirty
+        )
+        {
+            if (
+                !TryGetSection(args, "display", out Dictionary<string, object> displayArgs)
+                || components.Display == null
+            )
+            {
+                return null;
+            }
+            if (displayArgs.TryGetValue("current_brightness", out object currentBrightnessObject))
+            {
+                components.Display.currentBrightness = Convert.ToSingle(currentBrightnessObject);
+                dirty = true;
+            }
+            if (components.Display.settings != null)
+            {
+                if (displayArgs.TryGetValue("brightness", out object brightnessObject))
+                {
+                    components.Display.settings.brightness = Convert.ToSingle(brightnessObject);
+                    EditorUtility.SetDirty(components.Display.settings);
+                    dirty = true;
+                }
+                if (displayArgs.TryGetValue("height_in_vr", out object heightObject))
+                {
+                    components.Display.settings.heightInVR = Convert.ToSingle(heightObject);
+                    components.Display.transform.localPosition = new Vector3(
+                        0,
+                        components.Display.settings.heightInVR,
+                        0
+                    );
+                    EditorUtility.SetDirty(components.Display.settings);
+                    dirty = true;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Applies any "camera_mapping" subsection from <paramref name="args"/>.</summary>
+        /// <returns>An error message when the camera_mapping section is invalid, otherwise null.</returns>
+        private static string TryWriteCameraMappingSection(
+            Dictionary<string, object> args,
+            SceneComponents components,
+            ref bool dirty
+        )
+        {
+            if (
+                !args.TryGetValue("camera_mapping", out object cameraMappingObject)
+                || cameraMappingObject is not List<object> cameraMappingList
+            )
+            {
+                return null;
+            }
+
+            FullScreenViewManager fullScreenManager = components.FullScreenManager;
+            foreach (object row in cameraMappingList)
+            {
+                if (row is not Dictionary<string, object> rowDict)
+                {
+                    continue;
+                }
+                if (!rowDict.TryGetValue("monitor", out object monitorObject))
+                {
+                    continue;
+                }
+                int monitorIndex = Convert.ToInt32(monitorObject) - 1;
+                if (monitorIndex < 0 || monitorIndex >= fullScreenManager.monitors.Count)
+                {
+                    return $"Invalid monitor index {monitorIndex + 1}; scene has "
+                        + $"{fullScreenManager.monitors.Count} monitors.";
+                }
+                if (!rowDict.TryGetValue("camera", out object cameraObject) || cameraObject is not string cameraName)
+                {
+                    continue;
+                }
+                if (string.Equals(cameraName, "None", StringComparison.Ordinal))
+                {
+                    fullScreenManager.monitors[monitorIndex].cameraEntityId = EntityId.None;
+                }
+                else
+                {
+                    Camera target = components.DisplayCameras.FirstOrDefault(camera => camera.name == cameraName);
+                    if (target == null)
+                    {
+                        return $"Invalid camera '{cameraName}' for monitor {monitorIndex + 1}. Valid: None, "
+                            + string.Join(", ", components.DisplayCameras.Select(camera => camera.name));
+                    }
+                    fullScreenManager.monitors[monitorIndex].cameraEntityId = target.GetEntityId();
+                }
+            }
+            fullScreenManager.SaveCameras();
+            dirty = true;
+            return null;
+        }
+
+        /// <summary>Applies any "task" subsection from <paramref name="args"/>.</summary>
+        /// <returns>An error message when the task section is invalid, otherwise null.</returns>
+        private static string TryWriteTaskSection(
+            Dictionary<string, object> args,
+            SceneComponents components,
+            ref bool dirty
+        )
+        {
+            if (!TryGetSection(args, "task", out Dictionary<string, object> taskArgs) || components.Task == null)
+            {
+                return null;
+            }
+            if (taskArgs.ContainsKey("require_lick") && !components.HasLickZone)
+            {
+                return "Cannot set require_lick: the active scene has no GuidanceZone, so the control is "
+                    + "hidden in the Parameters window and the flag has no runtime effect.";
+            }
+            if (taskArgs.ContainsKey("require_wait") && !components.HasOccupancyZone)
+            {
+                return "Cannot set require_wait: the active scene has no OccupancyZone, so the control is "
+                    + "hidden in the Parameters window and the flag has no runtime effect.";
+            }
+
+            Undo.RecordObject(components.Task, "Write Task Parameters");
+            if (taskArgs.TryGetValue("require_lick", out object requireLickObject))
+            {
+                components.Task.requireLick = Convert.ToBoolean(requireLickObject);
+                dirty = true;
+            }
+            if (taskArgs.TryGetValue("require_wait", out object requireWaitObject))
+            {
+                components.Task.requireWait = Convert.ToBoolean(requireWaitObject);
+                dirty = true;
+            }
+            if (taskArgs.TryGetValue("track_length", out object trackLengthObject))
+            {
+                components.Task.trackLength = Convert.ToSingle(trackLengthObject);
+                dirty = true;
+            }
+            if (taskArgs.TryGetValue("track_seed", out object trackSeedObject))
+            {
+                components.Task.trackSeed = Convert.ToInt32(trackSeedObject);
+                dirty = true;
+            }
+            EditorUtility.SetDirty(components.Task);
+            return null;
         }
 
         /// <summary>Extracts a sub-dictionary at the given key from the args; returns false when absent.</summary>

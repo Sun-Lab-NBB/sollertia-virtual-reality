@@ -22,9 +22,6 @@ namespace Gimbl
         /// <summary>The cached actor position for updates.</summary>
         private Vector3 _position;
 
-        /// <summary>The cached actor rotation for updates.</summary>
-        private Quaternion _newRotation;
-
         /// <summary>The MQTT channel subscribed to incoming treadmill data; null for simulated treadmills.</summary>
         private MQTTChannel<TreadmillMessage> _dataChannel;
 
@@ -60,12 +57,9 @@ namespace Gimbl
                     _moved = movement.Sum();
 
                     _position = actor.transform.position;
-                    _newRotation = actor.transform.rotation;
-
                     _position.z += _moved;
 
                     actor.transform.position = _position;
-                    actor.transform.rotation = _newRotation;
                 }
 
                 movement.Clear();

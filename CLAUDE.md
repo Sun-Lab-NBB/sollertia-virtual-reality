@@ -227,7 +227,7 @@ generation.
 1. Open a scene containing the task prefab via `/scenes` (`open_scene_tool`; pass `unsaved_changes="save"` or
    `"discard"` if the active scene is dirty — the tool returns an error otherwise so the user can choose)
 2. Assign an Actor in the Task Inspector
-3. Configure displays via `Window → Gimbl` (opens Settings, Actor, and Displays panels — see `/scene-setup`)
+3. Configure displays via `Window → Task Parameters` (opens the consolidated Parameters window — see `/scene-setup`)
 4. Use `SimulatedLinearTreadmill` for manual testing without hardware (see `/scene-setup`)
 5. Enter Play Mode via `/play-mode` and exercise the task with keyboard input
 6. Monitor MQTT topics with an external client for debugging (topic catalog in `/mqtt-contract`)

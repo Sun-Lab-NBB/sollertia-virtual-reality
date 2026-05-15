@@ -34,29 +34,14 @@ namespace Gimbl
         /// <summary>The offset applied to the near clip plane distance.</summary>
         public float nearClipDistanceOffset = -0.01f;
 
-        /// <summary>Determines whether debug logging is enabled.</summary>
-        public bool isDebug = false;
-
         /// <summary>The material for brightness adjustment post-processing.</summary>
         public Material material;
 
-        /// <summary>The mesh type of the projection screen (Plane or Quad).</summary>
+        /// <summary>The mesh type of the projection screen (Plane or Quad), resolved on first UpdateView.</summary>
         private string _meshType;
 
         /// <summary>The camera component for this projection.</summary>
         private Camera _cameraComponent;
-
-        /// <summary>The projection matrix.</summary>
-        private Matrix4x4 _projectionMatrix;
-
-        /// <summary>The rotation matrix.</summary>
-        private Matrix4x4 _rotationMatrix;
-
-        /// <summary>The translation matrix.</summary>
-        private Matrix4x4 _translationMatrix;
-
-        /// <summary>The quaternion for camera rotation.</summary>
-        private Quaternion _cameraRotation;
 
         /// <summary>
         /// Initializes the brightness shader material, display object reference, and camera component.
@@ -115,7 +100,6 @@ namespace Gimbl
             }
 
             Vector3 eyePosition = transform.position;
-            float nearClipDistance = _cameraComponent.nearClipPlane;
             float farClipDistance = _cameraComponent.farClipPlane;
 
             Vector3 screenRightAxis = screenLowerRight - screenLowerLeft;
@@ -124,12 +108,12 @@ namespace Gimbl
             Vector3 eyeToLowerRight = screenLowerRight - eyePosition;
             Vector3 eyeToUpperLeft = screenUpperLeft - eyePosition;
 
+            // Detects whether the camera is on the back side of the projection screen and flips the
+            // screen axes so the projection matrix renders correctly. The axes are still unnormalized
+            // at this point; normalization happens after the flip so the geometric redefinition of the
+            // corners uses the original-length basis vectors.
             if (Vector3.Dot(-Vector3.Cross(eyeToLowerLeft, eyeToUpperLeft), eyeToLowerRight) < 0.0)
             {
-                if (isDebug)
-                {
-                    Debug.Log("Facing backface of plane");
-                }
                 screenUpAxis = -screenUpAxis;
                 screenLowerLeft = screenUpperLeft;
                 screenLowerRight = screenLowerLeft + screenRightAxis;
@@ -138,24 +122,65 @@ namespace Gimbl
                 eyeToLowerRight = screenLowerRight - eyePosition;
                 eyeToUpperLeft = screenUpperLeft - eyePosition;
             }
-            else
-            {
-                if (isDebug)
-                {
-                    Debug.Log("Not Facing backface of plane");
-                }
-            }
 
             screenRightAxis.Normalize();
             screenUpAxis.Normalize();
             Vector3 screenNormal = -Vector3.Cross(screenRightAxis, screenUpAxis);
 
             float eyeToScreenDistance = -Vector3.Dot(eyeToLowerLeft, screenNormal);
+            float nearClipDistance = setNearClipPlane
+                ? eyeToScreenDistance + nearClipDistanceOffset
+                : _cameraComponent.nearClipPlane;
             if (setNearClipPlane)
             {
-                nearClipDistance = eyeToScreenDistance + nearClipDistanceOffset;
                 _cameraComponent.nearClipPlane = nearClipDistance;
             }
+
+            _cameraComponent.projectionMatrix = BuildProjectionMatrix(
+                screenRightAxis,
+                screenUpAxis,
+                eyeToLowerLeft,
+                eyeToLowerRight,
+                eyeToUpperLeft,
+                nearClipDistance,
+                farClipDistance,
+                eyeToScreenDistance
+            );
+            _cameraComponent.worldToCameraMatrix = BuildViewMatrix(
+                screenRightAxis,
+                screenUpAxis,
+                screenNormal,
+                eyePosition
+            );
+
+            if (estimateViewFrustum)
+            {
+                EstimateViewFrustum(
+                    screenLowerLeft,
+                    screenLowerRight,
+                    screenUpperLeft,
+                    screenUpAxis,
+                    eyePosition,
+                    eyeToLowerLeft
+                );
+            }
+        }
+
+        /// <summary>
+        /// Builds the off-axis perspective projection matrix from the screen's edge distances at the
+        /// near clip plane. Matrix layout matches the standard glFrustum convention.
+        /// </summary>
+        private static Matrix4x4 BuildProjectionMatrix(
+            Vector3 screenRightAxis,
+            Vector3 screenUpAxis,
+            Vector3 eyeToLowerLeft,
+            Vector3 eyeToLowerRight,
+            Vector3 eyeToUpperLeft,
+            float nearClipDistance,
+            float farClipDistance,
+            float eyeToScreenDistance
+        )
+        {
             float leftEdgeDistance =
                 Vector3.Dot(screenRightAxis, eyeToLowerLeft) * nearClipDistance / eyeToScreenDistance;
             float rightEdgeDistance =
@@ -164,101 +189,108 @@ namespace Gimbl
                 Vector3.Dot(screenUpAxis, eyeToLowerLeft) * nearClipDistance / eyeToScreenDistance;
             float topEdgeDistance = Vector3.Dot(screenUpAxis, eyeToUpperLeft) * nearClipDistance / eyeToScreenDistance;
 
-            _projectionMatrix[0, 0] = 2.0f * nearClipDistance / (rightEdgeDistance - leftEdgeDistance);
-            _projectionMatrix[0, 1] = 0.0f;
-            _projectionMatrix[0, 2] = (rightEdgeDistance + leftEdgeDistance) / (rightEdgeDistance - leftEdgeDistance);
-            _projectionMatrix[0, 3] = 0.0f;
+            Matrix4x4 projectionMatrix = new Matrix4x4();
+            projectionMatrix[0, 0] = 2.0f * nearClipDistance / (rightEdgeDistance - leftEdgeDistance);
+            projectionMatrix[0, 1] = 0.0f;
+            projectionMatrix[0, 2] = (rightEdgeDistance + leftEdgeDistance) / (rightEdgeDistance - leftEdgeDistance);
+            projectionMatrix[0, 3] = 0.0f;
 
-            _projectionMatrix[1, 0] = 0.0f;
-            _projectionMatrix[1, 1] = 2.0f * nearClipDistance / (topEdgeDistance - bottomEdgeDistance);
-            _projectionMatrix[1, 2] = (topEdgeDistance + bottomEdgeDistance) / (topEdgeDistance - bottomEdgeDistance);
-            _projectionMatrix[1, 3] = 0.0f;
+            projectionMatrix[1, 0] = 0.0f;
+            projectionMatrix[1, 1] = 2.0f * nearClipDistance / (topEdgeDistance - bottomEdgeDistance);
+            projectionMatrix[1, 2] = (topEdgeDistance + bottomEdgeDistance) / (topEdgeDistance - bottomEdgeDistance);
+            projectionMatrix[1, 3] = 0.0f;
 
-            _projectionMatrix[2, 0] = 0.0f;
-            _projectionMatrix[2, 1] = 0.0f;
-            _projectionMatrix[2, 2] = (farClipDistance + nearClipDistance) / (nearClipDistance - farClipDistance);
-            _projectionMatrix[2, 3] = 2.0f * farClipDistance * nearClipDistance / (nearClipDistance - farClipDistance);
+            projectionMatrix[2, 0] = 0.0f;
+            projectionMatrix[2, 1] = 0.0f;
+            projectionMatrix[2, 2] = (farClipDistance + nearClipDistance) / (nearClipDistance - farClipDistance);
+            projectionMatrix[2, 3] = 2.0f * farClipDistance * nearClipDistance / (nearClipDistance - farClipDistance);
 
-            _projectionMatrix[3, 0] = 0.0f;
-            _projectionMatrix[3, 1] = 0.0f;
-            _projectionMatrix[3, 2] = -1.0f;
-            _projectionMatrix[3, 3] = 0.0f;
+            projectionMatrix[3, 0] = 0.0f;
+            projectionMatrix[3, 1] = 0.0f;
+            projectionMatrix[3, 2] = -1.0f;
+            projectionMatrix[3, 3] = 0.0f;
+            return projectionMatrix;
+        }
 
-            _rotationMatrix[0, 0] = screenRightAxis.x;
-            _rotationMatrix[0, 1] = screenRightAxis.y;
-            _rotationMatrix[0, 2] = screenRightAxis.z;
-            _rotationMatrix[0, 3] = 0.0f;
+        /// <summary>
+        /// Composes the world-to-camera matrix from the screen-aligned rotation and the camera
+        /// translation. Equivalent to the original hand-rolled rotation * translation product; kept
+        /// explicit rather than swapped for <see cref="Matrix4x4.TRS"/> to preserve handedness.
+        /// </summary>
+        private static Matrix4x4 BuildViewMatrix(
+            Vector3 screenRightAxis,
+            Vector3 screenUpAxis,
+            Vector3 screenNormal,
+            Vector3 eyePosition
+        )
+        {
+            Matrix4x4 rotationMatrix = new Matrix4x4();
+            rotationMatrix[0, 0] = screenRightAxis.x;
+            rotationMatrix[0, 1] = screenRightAxis.y;
+            rotationMatrix[0, 2] = screenRightAxis.z;
+            rotationMatrix[0, 3] = 0.0f;
 
-            _rotationMatrix[1, 0] = screenUpAxis.x;
-            _rotationMatrix[1, 1] = screenUpAxis.y;
-            _rotationMatrix[1, 2] = screenUpAxis.z;
-            _rotationMatrix[1, 3] = 0.0f;
+            rotationMatrix[1, 0] = screenUpAxis.x;
+            rotationMatrix[1, 1] = screenUpAxis.y;
+            rotationMatrix[1, 2] = screenUpAxis.z;
+            rotationMatrix[1, 3] = 0.0f;
 
-            _rotationMatrix[2, 0] = screenNormal.x;
-            _rotationMatrix[2, 1] = screenNormal.y;
-            _rotationMatrix[2, 2] = screenNormal.z;
-            _rotationMatrix[2, 3] = 0.0f;
+            rotationMatrix[2, 0] = screenNormal.x;
+            rotationMatrix[2, 1] = screenNormal.y;
+            rotationMatrix[2, 2] = screenNormal.z;
+            rotationMatrix[2, 3] = 0.0f;
 
-            _rotationMatrix[3, 0] = 0.0f;
-            _rotationMatrix[3, 1] = 0.0f;
-            _rotationMatrix[3, 2] = 0.0f;
-            _rotationMatrix[3, 3] = 1.0f;
+            rotationMatrix[3, 0] = 0.0f;
+            rotationMatrix[3, 1] = 0.0f;
+            rotationMatrix[3, 2] = 0.0f;
+            rotationMatrix[3, 3] = 1.0f;
 
-            _translationMatrix[0, 0] = 1.0f;
-            _translationMatrix[0, 1] = 0.0f;
-            _translationMatrix[0, 2] = 0.0f;
-            _translationMatrix[0, 3] = -eyePosition.x;
+            Matrix4x4 translationMatrix = new Matrix4x4();
+            translationMatrix[0, 0] = 1.0f;
+            translationMatrix[0, 1] = 0.0f;
+            translationMatrix[0, 2] = 0.0f;
+            translationMatrix[0, 3] = -eyePosition.x;
 
-            _translationMatrix[1, 0] = 0.0f;
-            _translationMatrix[1, 1] = 1.0f;
-            _translationMatrix[1, 2] = 0.0f;
-            _translationMatrix[1, 3] = -eyePosition.y;
+            translationMatrix[1, 0] = 0.0f;
+            translationMatrix[1, 1] = 1.0f;
+            translationMatrix[1, 2] = 0.0f;
+            translationMatrix[1, 3] = -eyePosition.y;
 
-            _translationMatrix[2, 0] = 0.0f;
-            _translationMatrix[2, 1] = 0.0f;
-            _translationMatrix[2, 2] = 1.0f;
-            _translationMatrix[2, 3] = -eyePosition.z;
+            translationMatrix[2, 0] = 0.0f;
+            translationMatrix[2, 1] = 0.0f;
+            translationMatrix[2, 2] = 1.0f;
+            translationMatrix[2, 3] = -eyePosition.z;
 
-            _translationMatrix[3, 0] = 0.0f;
-            _translationMatrix[3, 1] = 0.0f;
-            _translationMatrix[3, 2] = 0.0f;
-            _translationMatrix[3, 3] = 1.0f;
+            translationMatrix[3, 0] = 0.0f;
+            translationMatrix[3, 1] = 0.0f;
+            translationMatrix[3, 2] = 0.0f;
+            translationMatrix[3, 3] = 1.0f;
+            return rotationMatrix * translationMatrix;
+        }
 
-            _cameraComponent.projectionMatrix = _projectionMatrix;
-            _cameraComponent.worldToCameraMatrix = _rotationMatrix * _translationMatrix;
+        /// <summary>
+        /// Points the camera at the screen center and sets its field of view so that Unity's culling
+        /// frustum approximates the off-axis projection (Unity culls against the symmetric frustum, not
+        /// the off-axis one applied above).
+        /// </summary>
+        private void EstimateViewFrustum(
+            Vector3 screenLowerLeft,
+            Vector3 screenLowerRight,
+            Vector3 screenUpperLeft,
+            Vector3 screenUpAxis,
+            Vector3 eyePosition,
+            Vector3 eyeToLowerLeft
+        )
+        {
+            Quaternion cameraRotation = new Quaternion();
+            cameraRotation.SetLookRotation(0.5f * (screenLowerRight + screenUpperLeft) - eyePosition, screenUpAxis);
+            _cameraComponent.transform.rotation = cameraRotation;
 
-            if (estimateViewFrustum)
-            {
-                _cameraRotation.SetLookRotation(
-                    (0.5f * (screenLowerRight + screenUpperLeft) - eyePosition),
-                    screenUpAxis
-                );
-                _cameraComponent.transform.rotation = _cameraRotation;
-
-                if (_cameraComponent.aspect >= 1.0)
-                {
-                    _cameraComponent.fieldOfView =
-                        Mathf.Rad2Deg
-                        * Mathf.Atan(
-                            (
-                                (screenLowerRight - screenLowerLeft).magnitude
-                                + (screenUpperLeft - screenLowerLeft).magnitude
-                            ) / eyeToLowerLeft.magnitude
-                        );
-                }
-                else
-                {
-                    _cameraComponent.fieldOfView =
-                        Mathf.Rad2Deg
-                        / _cameraComponent.aspect
-                        * Mathf.Atan(
-                            (
-                                (screenLowerRight - screenLowerLeft).magnitude
-                                + (screenUpperLeft - screenLowerLeft).magnitude
-                            ) / eyeToLowerLeft.magnitude
-                        );
-                }
-            }
+            float screenDiagonalSum =
+                (screenLowerRight - screenLowerLeft).magnitude + (screenUpperLeft - screenLowerLeft).magnitude;
+            float fovRadians = Mathf.Atan(screenDiagonalSum / eyeToLowerLeft.magnitude);
+            float aspectDivisor = _cameraComponent.aspect >= 1.0f ? 1.0f : _cameraComponent.aspect;
+            _cameraComponent.fieldOfView = Mathf.Rad2Deg * fovRadians / aspectDivisor;
         }
 
         /// <summary>Applies brightness adjustment to the rendered image.</summary>

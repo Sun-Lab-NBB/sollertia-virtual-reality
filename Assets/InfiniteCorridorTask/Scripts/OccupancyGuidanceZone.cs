@@ -14,7 +14,7 @@ namespace SL.Tasks
     /// Handles occupancy guidance mode as a secondary trigger zone for OccupancyZone.
     /// When guidance mode is active and the animal enters, sends brake activation message with remaining duration.
     /// </summary>
-    public class OccupancyGuidanceZone : MonoBehaviour
+    public class OccupancyGuidanceZone : MonoBehaviour, IResettable
     {
         /// <summary>Determines whether the animal is currently inside this guidance zone.</summary>
         [HideInInspector]

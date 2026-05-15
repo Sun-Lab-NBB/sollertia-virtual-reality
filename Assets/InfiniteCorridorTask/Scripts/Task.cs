@@ -129,25 +129,39 @@ namespace SL.Tasks
         private float[] _cueLengths;
 
         /// <summary>
-        /// Maps corridor ID string to (x-position, first segment length).
-        /// Used for teleporting the animal between corridors.
+        /// Maps a base-<see cref="_trialCount"/> encoding of the current corridor's segment indices to its
+        /// (x-position, first segment length). Indexed by <see cref="ComputeCorridorKey"/>; the encoding lets
+        /// the runtime avoid allocating a string key every frame.
         /// </summary>
-        private Dictionary<string, (float xPosition, float firstSegmentLength)> _corridorMap;
+        private (float xPosition, float firstSegmentLength)[] _corridorMap;
 
         /// <summary>The current corridor segment indices.</summary>
         private List<int> _currentSegment;
 
+        /// <summary>The cached integer corridor key for <see cref="_currentSegment"/>, refreshed only on advance.</summary>
+        private int _currentCorridorKey;
+
         /// <summary>The cached actor position for updates.</summary>
         private Vector3 _position;
 
-        /// <summary>Validates and auto-assigns the actor reference in the editor.</summary>
+#if UNITY_EDITOR
+        /// <summary>Editor-only validation that auto-assigns the actor reference when missing.</summary>
+        /// <remarks>
+        /// Skips while assemblies are recompiling because Unity batches OnValidate callbacks across every
+        /// modified script and a scene-wide find runs once per Task per modified script during a compile.
+        /// </remarks>
         private void OnValidate()
         {
+            if (UnityEditor.EditorApplication.isCompiling)
+            {
+                return;
+            }
             if (actor == null)
             {
                 actor = FindAnyObjectByType<ActorObject>();
             }
         }
+#endif
 
         /// <summary>Initializes the task, loads configuration, and sets up MQTT channels.</summary>
         private void Start()
@@ -207,15 +221,17 @@ namespace SL.Tasks
             _cueLengths = _template.GetCueLengthsUnity();
             _depth = _template.vrEnvironment.segmentsPerCorridor;
 
-            // Builds corridor map for teleportation.
-            // Maps corridor segment combination to (x-position, first segment length).
-            _corridorMap = new Dictionary<string, (float xPosition, float firstSegmentLength)>();
+            // Builds corridor map for teleportation. The outer loop index `i` IS the encoded corridor
+            // key for the iteration's segment combination, by construction: the inner loop decomposes
+            // `i` into base-_trialCount digits, which is the inverse of <see cref="ComputeCorridorKey"/>.
+            int corridorCount = (int)Mathf.Pow(_trialCount, _depth);
+            _corridorMap = new (float xPosition, float firstSegmentLength)[corridorCount];
 
             int[] corridorSegments = new int[_depth];
             float currentCorridorX = 0;
             float corridorXShift = _template.vrEnvironment.CorridorSpacingUnity;
 
-            for (int i = 0; i < Mathf.Pow(_trialCount, _depth); i++)
+            for (int i = 0; i < corridorCount; i++)
             {
                 // Generates segment combination for current corridor index.
                 for (int j = 0; j < _depth; j++)
@@ -223,10 +239,7 @@ namespace SL.Tasks
                     corridorSegments[j] = i / (int)Mathf.Pow(_trialCount, _depth - j - 1) % _trialCount;
                 }
 
-                _corridorMap[string.Join("-", corridorSegments)] = (
-                    currentCorridorX,
-                    _segmentLengths[corridorSegments[0]]
-                );
+                _corridorMap[i] = (currentCorridorX, _segmentLengths[corridorSegments[0]]);
                 currentCorridorX += corridorXShift;
             }
 
@@ -236,20 +249,23 @@ namespace SL.Tasks
             // Initializes current segment tracking.
             _currentSegmentIndex = 0;
             _currentSegment = new List<int>(_segmentSequenceArray.Take(_depth));
+            _currentCorridorKey = ComputeCorridorKey(_currentSegment);
 
             // Positions actor at the first corridor.
             if (actor != null)
             {
-                string corridorKey = string.Join("-", _currentSegment);
-                if (_corridorMap.TryGetValue(corridorKey, out var corridorData))
+                if (_currentCorridorKey >= 0 && _currentCorridorKey < _corridorMap.Length)
                 {
+                    (float xPosition, float firstSegmentLength) corridorData = _corridorMap[_currentCorridorKey];
                     _position = actor.transform.position;
                     _position.x = corridorData.xPosition;
                     actor.transform.position = _position;
                 }
                 else
                 {
-                    Debug.LogError($"Task: Corridor key '{corridorKey}' not found in corridor map.");
+                    Debug.LogError(
+                        $"Task: Corridor key '{_currentCorridorKey}' out of bounds [0, {_corridorMap.Length})."
+                    );
                 }
             }
 
@@ -285,12 +301,12 @@ namespace SL.Tasks
             if (actor == null)
                 return;
 
-            string corridorKey = string.Join("-", _currentSegment);
-            if (!_corridorMap.TryGetValue(corridorKey, out var corridorData))
+            if (_currentCorridorKey < 0 || _currentCorridorKey >= _corridorMap.Length)
             {
-                Debug.LogError($"Task: Corridor key '{corridorKey}' not found in corridor map.");
+                Debug.LogError($"Task: Corridor key '{_currentCorridorKey}' out of bounds [0, {_corridorMap.Length}).");
                 return;
             }
+            (float xPosition, float firstSegmentLength) corridorData = _corridorMap[_currentCorridorKey];
 
             _position = actor.transform.position;
 
@@ -306,6 +322,7 @@ namespace SL.Tasks
                 {
                     _currentSegment.RemoveAt(0);
                     _currentSegment.Add(_segmentSequenceArray[_currentSegmentIndex + _depth - 1]);
+                    _currentCorridorKey = ComputeCorridorKey(_currentSegment);
                 }
                 else
                 {
@@ -314,15 +331,17 @@ namespace SL.Tasks
                 }
 
                 // Teleports to new corridor.
-                string newCorridorKey = string.Join("-", _currentSegment);
-                if (_corridorMap.TryGetValue(newCorridorKey, out var newCorridorData))
+                if (_currentCorridorKey >= 0 && _currentCorridorKey < _corridorMap.Length)
                 {
+                    (float xPosition, float firstSegmentLength) newCorridorData = _corridorMap[_currentCorridorKey];
                     _position.x = newCorridorData.xPosition;
                     actor.transform.position = _position;
                 }
                 else
                 {
-                    Debug.LogError($"Task: New corridor key '{newCorridorKey}' not found in corridor map.");
+                    Debug.LogError(
+                        $"Task: New corridor key '{_currentCorridorKey}' out of bounds [0, {_corridorMap.Length})."
+                    );
                 }
             }
         }
@@ -375,6 +394,25 @@ namespace SL.Tasks
             requireWait = false;
         }
 
+        /// <summary>
+        /// Encodes the segment indices of a corridor as a single integer for indexing into
+        /// <see cref="_corridorMap"/>. Reads the sequence as digits of a base-<see cref="_trialCount"/> number
+        /// so that the corridor-map build loop (which decomposes its outer index back into digits) and the
+        /// runtime lookup produce identical integers.
+        /// </summary>
+        /// <param name="segments">The ordered segment indices that identify a corridor.</param>
+        /// <returns>The integer key matching the build-time index in <see cref="_corridorMap"/>.</returns>
+        private int ComputeCorridorKey(IList<int> segments)
+        {
+            int key = 0;
+            int count = segments.Count;
+            for (int i = 0; i < count; i++)
+            {
+                key = key * _trialCount + segments[i];
+            }
+            return key;
+        }
+
         /// <summary>Samples a trial name from a named probability distribution over trial transitions.</summary>
         /// <param name="transitions">The trial-name keyed transition dictionary; values must sum to 1.0.</param>
         /// <param name="random">The random number generator instance.</param>
@@ -409,8 +447,13 @@ namespace SL.Tasks
 
             System.Random random = seed == RandomSeedSentinel ? new System.Random() : new System.Random(seed);
 
-            List<int> segmentSequence = new List<int>();
-            List<byte> cueSequence = new List<byte>();
+            // Estimates the number of segments the loop will append so the backing arrays grow at most once
+            // during generation. The estimate uses the shortest segment to overshoot rather than undershoot.
+            float minSegmentLength = _segmentLengths.Min();
+            int estimatedSegmentCount =
+                minSegmentLength > 0f ? Mathf.Max(16, Mathf.CeilToInt(length / minSegmentLength) + _depth) : 16;
+            List<int> segmentSequence = new List<int>(estimatedSegmentCount);
+            List<byte> cueSequence = new List<byte>(estimatedSegmentCount * 4);
 
             int choice = random.Next(_trialCount);
 

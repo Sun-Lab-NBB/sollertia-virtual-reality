@@ -74,37 +74,6 @@ namespace Gimbl
             return false;
         }
 
-        /// <summary>Removes a layer from the project.</summary>
-        /// <param name="layerName">The name of the layer to remove.</param>
-        /// <returns>True if the layer was removed, false if it does not exist.</returns>
-        public static bool RemoveLayer(string layerName)
-        {
-            SerializedObject tagManager = new SerializedObject(
-                AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]
-            );
-
-            SerializedProperty layersProp = tagManager.FindProperty("layers");
-
-            if (PropertyExists(layersProp, start: 0, end: layersProp.arraySize, value: layerName))
-            {
-                SerializedProperty layerSlot;
-
-                for (int layerIndex = 0, arraySize = layersProp.arraySize; layerIndex < arraySize; layerIndex++)
-                {
-                    layerSlot = layersProp.GetArrayElementAtIndex(layerIndex);
-
-                    if (layerSlot.stringValue.Equals(layerName, StringComparison.Ordinal))
-                    {
-                        layerSlot.stringValue = "";
-                        tagManager.ApplyModifiedProperties();
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
         /// <summary>Checks if a value exists in a serialized array property.</summary>
         /// <param name="property">The serialized array property to search.</param>
         /// <param name="start">The starting index for the search.</param>

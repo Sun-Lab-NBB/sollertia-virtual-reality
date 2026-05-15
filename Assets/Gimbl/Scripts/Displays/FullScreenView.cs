@@ -74,19 +74,15 @@ namespace Gimbl
                         _rendering = true;
                     }
                 }
-                if (_rendering)
+                if (_rendering && _camera != null)
                 {
-                    if (_camera != null)
-                    {
-                        _camera.Render();
-                        bool alphaBlend = false;
-                        GUI.DrawTexture(
-                            new Rect(0, 0, position.width, position.height),
-                            _camera.targetTexture,
-                            ScaleMode.ScaleToFit,
-                            alphaBlend
-                        );
-                    }
+                    _camera.Render();
+                    GUI.DrawTexture(
+                        new Rect(0, 0, position.width, position.height),
+                        _camera.targetTexture,
+                        ScaleMode.ScaleToFit,
+                        alphaBlend: false
+                    );
                 }
             }
         }

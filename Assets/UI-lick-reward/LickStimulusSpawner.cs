@@ -44,14 +44,8 @@ namespace SL.UI
         /// <summary>Checks for pending indicators and spawns UI prefabs on the main thread.</summary>
         private void Update()
         {
-            if (_showLick)
-            {
-                CreateLickMessage();
-            }
-            if (_showStimulus)
-            {
-                CreateStimulusMessage();
-            }
+            TrySpawn(ref _showLick, lickPrefab);
+            TrySpawn(ref _showStimulus, stimulusPrefab);
         }
 
         /// <summary>Removes MQTT event listeners when this component is destroyed.</summary>
@@ -73,18 +67,16 @@ namespace SL.UI
             _showStimulus = true;
         }
 
-        /// <summary>Instantiates the lick indicator prefab on the canvas.</summary>
-        private void CreateLickMessage()
+        /// <summary>Consumes the pending flag and instantiates the supplied prefab on the canvas.</summary>
+        /// <param name="flag">The pending-show flag, cleared once the prefab is instantiated.</param>
+        /// <param name="prefab">The UI prefab to instantiate when the flag is set.</param>
+        private void TrySpawn(ref bool flag, GameObject prefab)
         {
-            _showLick = false;
-            Instantiate(lickPrefab, canvas.transform);
-        }
-
-        /// <summary>Instantiates the stimulus indicator prefab on the canvas.</summary>
-        private void CreateStimulusMessage()
-        {
-            _showStimulus = false;
-            Instantiate(stimulusPrefab, canvas.transform);
+            if (flag)
+            {
+                flag = false;
+                Instantiate(prefab, canvas.transform);
+            }
         }
     }
 }

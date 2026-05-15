@@ -960,7 +960,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   isActive: 1
-  settings: {fileID: 11400000, guid: e406f24d75ecb466c83d31286d955699, type: 2}
   _display: {fileID: 1135501256}
   _controller: {fileID: 731326252}
 --- !u!1 &1135501255
@@ -1256,7 +1255,6 @@ MonoBehaviour:
   estimateViewFrustum: 1
   setNearClipPlane: 0
   nearClipDistanceOffset: -0.01
-  isDebug: 0
   material: {fileID: 1266239251}
 --- !u!20 &1360300393
 Camera:
@@ -1416,7 +1414,6 @@ MonoBehaviour:
   estimateViewFrustum: 1
   setNearClipPlane: 0
   nearClipDistanceOffset: -0.01
-  isDebug: 0
   material: {fileID: 1338271412}
 --- !u!20 &1592300519
 Camera:
@@ -1632,7 +1629,6 @@ MonoBehaviour:
   estimateViewFrustum: 1
   setNearClipPlane: 0
   nearClipDistanceOffset: -0.01
-  isDebug: 0
   material: {fileID: 526423886}
 --- !u!20 &1791651019
 Camera:
