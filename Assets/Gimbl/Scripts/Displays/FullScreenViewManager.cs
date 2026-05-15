@@ -8,6 +8,7 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -35,7 +36,14 @@ namespace Gimbl
         /// <summary>Renders a button to refresh monitor positions.</summary>
         public void OnGUIRefreshMonitorPositions()
         {
-            if (GUILayout.Button("Refresh Monitor Positions"))
+            if (
+                GUILayout.Button(
+                    new GUIContent(
+                        "Refresh Monitor Positions",
+                        "Re-detect monitors from the OS, preserving existing camera assignments."
+                    )
+                )
+            )
             {
                 List<Monitor> refreshedMonitors = Monitor.EnumerateMonitors();
                 for (int i = 0; i < refreshedMonitors.Count; i++)
@@ -49,15 +57,61 @@ namespace Gimbl
             }
         }
 
-        /// <summary>Renders camera assignment fields for each monitor.</summary>
+        /// <summary>Renders a per-monitor row pairing the monitor coordinates with a camera dropdown.</summary>
+        /// <remarks>
+        /// Enumerates every <see cref="Camera"/> in the active scene each frame so the dropdown reflects
+        /// the current scene state without manual refresh. Selections that would alias another monitor's
+        /// camera are silently ignored to preserve the existing one-camera-per-monitor invariant.
+        /// </remarks>
         public void OnGUICameraObjectFields()
         {
+            // Filters out the Unity-default Main Camera so a stale instance does not appear in the
+            // dropdown if MainWindow.RemoveDefaultMainCamera has not run for the current scene yet.
+            Camera[] sceneCameras = UnityEngine
+                .Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)
+                .Where(camera =>
+                    !camera.CompareTag("MainCamera")
+                    && !string.Equals(camera.gameObject.name, "Main Camera", System.StringComparison.Ordinal)
+                )
+                .ToArray();
+            const string cameraTooltip =
+                "Scene Camera that renders to this monitor when full-screen views are launched. "
+                + "None leaves the monitor unused.";
+            GUIContent[] cameraOptions = new GUIContent[sceneCameras.Length + 1];
+            cameraOptions[0] = new GUIContent("None", cameraTooltip);
+            for (int i = 0; i < sceneCameras.Length; i++)
+            {
+                cameraOptions[i + 1] = new GUIContent(sceneCameras[i].name, cameraTooltip);
+            }
+
             for (int monitorIndex = 0; monitorIndex < monitors.Count; monitorIndex++)
             {
                 Monitor monitor = monitors[monitorIndex];
-                EditorGUILayout.LabelField($"Monitor {monitorIndex + 1} at ({monitor.left}, {monitor.top})");
                 Camera oldCamera = (Camera)EditorUtility.EntityIdToObject(monitor.cameraEntityId);
-                Camera newCamera = (Camera)EditorGUILayout.ObjectField("Camera", oldCamera, typeof(Camera), true);
+
+                int currentIndex = 0;
+                for (int i = 0; i < sceneCameras.Length; i++)
+                {
+                    if (sceneCameras[i] == oldCamera)
+                    {
+                        currentIndex = i + 1;
+                        break;
+                    }
+                }
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(
+                    new GUIContent(
+                        $"Monitor {monitorIndex + 1} ({monitor.left}, {monitor.top})",
+                        "OS-reported monitor index and its top-left origin in pixel coordinates."
+                    ),
+                    GUILayout.Width(170)
+                );
+                int newIndex = EditorGUILayout.Popup(currentIndex, cameraOptions);
+                EditorGUILayout.EndHorizontal();
+
+                Camera newCamera = newIndex == 0 ? null : sceneCameras[newIndex - 1];
+
                 if (newCamera != null)
                 {
                     EntityId entityId = newCamera.GetEntityId();
@@ -89,7 +143,16 @@ namespace Gimbl
         /// <summary>Renders a button to show full-screen views.</summary>
         public void OnGUIShowFullScreenViews()
         {
-            if (GUILayout.Button("Show Full-Screen Views"))
+            if (
+                GUILayout.Button(
+                    new GUIContent(
+                        "Show Full-Screen Views",
+                        "Open a borderless full-screen window per assigned monitor showing the chosen camera. "
+                            + "Stop Play Mode or close the windows to return to the editor. Only has effect "
+                            + "when the VR scene is playing."
+                    )
+                )
+            )
             {
                 ShowFullScreenViews(closeOldViews: true);
             }

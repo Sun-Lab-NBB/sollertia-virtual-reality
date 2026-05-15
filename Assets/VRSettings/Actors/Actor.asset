@@ -9,12 +9,6 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b836d202e184b654e97eb6ac411bd400, type: 3}
-  m_Name: LinearController
+  m_Script: {fileID: 11500000, guid: f575905289030cf4eba7468453793619, type: 3}
+  m_Name: Actor
   m_EditorClassIdentifier: 
-  deviceName: LinearTreadmill
-  isActive: 1
-  loopPath: 0
-  buttonTopics: []
-  gamepadSettings:
-    selectedGamepad: 0

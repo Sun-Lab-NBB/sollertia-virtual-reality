@@ -31,31 +31,37 @@ namespace SL.Tasks
         public const int RandomSeedSentinel = -1;
 
         /// <summary>The actor (animal) being tracked in the VR environment.</summary>
+        [HideInInspector]
         public ActorObject actor;
 
         /// <summary>
         /// Determines whether the animal must lick to trigger the stimulus (lick guidance mode toggle).
         /// </summary>
+        [HideInInspector]
         public bool requireLick = false;
 
         /// <summary>
         /// Determines whether the animal must wait in the occupancy zone (occupancy guidance mode toggle).
         /// </summary>
+        [HideInInspector]
         public bool requireWait = false;
 
         /// <summary>
         /// The total length of the pre-generated random segment sequence.
         /// Should overestimate the distance the animal will actually travel.
         /// </summary>
+        [HideInInspector]
         public float trackLength = 15000f;
 
         /// <summary>
         /// The seed for random segment generation. A specific seed produces the same cue pattern.
         /// Set to <see cref="RandomSeedSentinel"/> to use a nondeterministic seed.
         /// </summary>
+        [HideInInspector]
         public int trackSeed = RandomSeedSentinel;
 
         /// <summary>The path to the YAML configuration file, relative to Application.dataPath.</summary>
+        [HideInInspector]
         public string configPath;
 
         /// <summary>The current index in the segment sequence array.</summary>
@@ -139,11 +145,7 @@ namespace SL.Tasks
         {
             if (actor == null)
             {
-                ActorObject[] allActors = FindObjectsByType<ActorObject>(FindObjectsSortMode.None);
-                if (allActors.Length > 0)
-                {
-                    actor = allActors[0];
-                }
+                actor = FindAnyObjectByType<ActorObject>();
             }
         }
 

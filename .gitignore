@@ -88,10 +88,7 @@ crashlytics-build.properties
 
 # I want these folders around but not their contents
 /Assets/VRSettings/Actors/*
-!/Assets/VRSettings/Actors/rod.asset*
-
-/Assets/VRSettings/Controllers/*
-!/Assets/VRSettings/Controllers/LinearController.asset*
+!/Assets/VRSettings/Actors/Actor.asset*
 
 /Assets/VRSettings/Displays/*
 !/Assets/VRSettings/Displays/Display.asset*
