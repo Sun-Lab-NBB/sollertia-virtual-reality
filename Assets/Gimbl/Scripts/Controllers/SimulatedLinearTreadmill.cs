@@ -28,7 +28,7 @@ namespace Gimbl
         {
             _input = new SimulatedInput();
             _input.Enable();
-            _lickTrigger = new MQTTChannel("LickPort/");
+            _lickTrigger = new MQTTChannel(MQTTTopics.Lick);
         }
 
         /// <summary>Processes simulated input and movement each frame.</summary>

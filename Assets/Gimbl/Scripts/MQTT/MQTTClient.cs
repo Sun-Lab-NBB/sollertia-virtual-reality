@@ -91,9 +91,11 @@ namespace Gimbl
         /// <summary>Subscribes to session channels and broadcasts session start.</summary>
         private void Start()
         {
-            _startChannel = new MQTTChannel("Gimbl/Session/Start", isListener: false);
-            _stopChannel = new MQTTChannel("Gimbl/Session/Stop", isListener: false);
-            StartSessionAsync();
+            _startChannel = new MQTTChannel(MQTTTopics.SessionStart, isListener: false);
+            _stopChannel = new MQTTChannel(MQTTTopics.SessionStop, isListener: false);
+            // Discards the returned Task because the broadcast is genuinely fire-and-forget; any failure
+            // is logged inside StartSessionAsync and there is no caller to observe completion.
+            _ = StartSessionAsync();
         }
 
         /// <summary>Sends session stop message and cleans up subscriptions on application quit.</summary>
@@ -228,35 +230,44 @@ namespace Gimbl
         }
 
         /// <summary>Subscribes a channel to receive messages on the specified topic.</summary>
+        /// <remarks>
+        /// The channel is added to <see cref="_channelList"/> unconditionally so that <see cref="Publish"/>'s
+        /// no-broker fallback can route messages locally during keyboard-only test runs. The broker-side
+        /// <c>SubscribeAsync</c> only fires when the client is currently connected; a channel created while
+        /// the broker is offline will receive in-process loopback messages but will <b>not</b> auto-subscribe
+        /// once the broker comes online — callers that need broker-delivered messages after a late connect
+        /// must re-create the channel or trigger a new subscribe pass.
+        /// </remarks>
         /// <param name="channel">The MQTTChannel to receive messages.</param>
         /// <param name="topic">The MQTT topic to subscribe to.</param>
         /// <param name="qosLevel">The Quality of Service level for the subscription.</param>
         public void Subscribe(MQTTChannel channel, string topic, byte qosLevel)
         {
-            if (IsConnected())
+            lock (_channelList)
             {
-                MqttQualityOfServiceLevel qualityOfServiceLevel = (MqttQualityOfServiceLevel)qosLevel;
-                client
-                    .SubscribeAsync(
-                        new MqttClientSubscribeOptionsBuilder()
-                            .WithTopicFilter(f => f.WithTopic(topic).WithQualityOfServiceLevel(qualityOfServiceLevel))
-                            .Build()
-                    )
-                    .ContinueWith(t =>
-                    {
-                        if (t.IsFaulted)
-                        {
-                            string message =
-                                $"MQTT subscribe failed for '{topic}': {t.Exception?.InnerException?.Message}";
-                            Debug.LogError(message);
-                        }
-                    });
-
-                lock (_channelList)
-                {
-                    _channelList.Add(new Channel() { topic = topic, mqttChannel = channel });
-                }
+                _channelList.Add(new Channel() { topic = topic, mqttChannel = channel });
             }
+
+            if (!IsConnected())
+            {
+                return;
+            }
+
+            MqttQualityOfServiceLevel qualityOfServiceLevel = (MqttQualityOfServiceLevel)qosLevel;
+            client
+                .SubscribeAsync(
+                    new MqttClientSubscribeOptionsBuilder()
+                        .WithTopicFilter(f => f.WithTopic(topic).WithQualityOfServiceLevel(qualityOfServiceLevel))
+                        .Build()
+                )
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        string message = $"MQTT subscribe failed for '{topic}': {t.Exception?.InnerException?.Message}";
+                        Debug.LogError(message);
+                    }
+                });
         }
 
         /// <summary>Publishes a message to the specified topic.</summary>
@@ -301,7 +312,13 @@ namespace Gimbl
         }
 
         /// <summary>Sends the session start message after a brief delay.</summary>
-        private async void StartSessionAsync()
+        /// <remarks>
+        /// Returns <see cref="Task"/> rather than <c>void</c> so exceptions thrown after the awaited delay
+        /// surface through normal Task-error propagation if a future caller ever decides to observe them.
+        /// The body still catches and logs internally because the only current caller fires-and-forgets.
+        /// </remarks>
+        /// <returns>A task that completes once the session-start message has been published.</returns>
+        private async Task StartSessionAsync()
         {
             try
             {

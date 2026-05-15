@@ -82,8 +82,8 @@ namespace SL.Tasks
             TryGetComponent(out _boundaryRenderer);
 
             // Sets up MQTT channels.
-            _stimulusTrigger = new MQTTChannel("Gimbl/Stimulus/");
-            _lickTrigger = new MQTTChannel("LickPort/", isListener: true);
+            _stimulusTrigger = new MQTTChannel(MQTTTopics.Stimulus);
+            _lickTrigger = new MQTTChannel(MQTTTopics.Lick, isListener: true);
             _lickTrigger.receivedEvent.AddListener(OnLickDetected);
         }
 

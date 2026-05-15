@@ -144,10 +144,18 @@ namespace SL.Tasks
                 string body = reader.ReadToEnd();
 
                 Dictionary<string, object> request = MiniJson.Deserialize(body);
-                string tool = request.ContainsKey("tool") ? request["tool"].ToString() : "";
-                Dictionary<string, object> args = request.ContainsKey("args")
-                    ? request["args"] as Dictionary<string, object> ?? new Dictionary<string, object>()
-                    : new Dictionary<string, object>();
+                // Uses TryGetValue + null check so a JSON-null value for "tool" does not NRE on ToString();
+                // a missing or non-dictionary "args" value falls back to an empty dict so dispatched tools
+                // always receive a well-formed args parameter.
+                string tool =
+                    request.TryGetValue("tool", out object toolObject) && toolObject != null
+                        ? toolObject.ToString()
+                        : string.Empty;
+                Dictionary<string, object> args =
+                    request.TryGetValue("args", out object argsObject)
+                    && argsObject is Dictionary<string, object> argsDict
+                        ? argsDict
+                        : new Dictionary<string, object>();
 
                 responseJson = Dispatch(tool, args);
             }

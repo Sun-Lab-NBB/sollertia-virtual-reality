@@ -51,7 +51,7 @@ namespace SL.Tasks
                 return;
             }
 
-            _triggerDelayChannel = new MQTTChannel<TriggerDelayMessage>("Gimbl/TriggerDelay/", isListener: false);
+            _triggerDelayChannel = new MQTTChannel<TriggerDelayMessage>(MQTTTopics.Delay, isListener: false);
         }
 
         /// <summary>Sets the zone state to active when the animal enters the guidance zone collider.</summary>

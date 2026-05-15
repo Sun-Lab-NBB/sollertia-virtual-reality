@@ -88,17 +88,11 @@ namespace SL.Tasks
         /// <summary>The MQTT channel for sending the scene name data.</summary>
         private MQTTChannel<SceneNameMessage> _sceneNameChannel;
 
-        /// <summary>The MQTT channel for enabling lick requirement (lick guidance mode off).</summary>
-        private MQTTChannel _requireLickTrue;
+        /// <summary>The MQTT channel that toggles the lick requirement; payload value of true enables it.</summary>
+        private MQTTChannel<BoolMessage> _requireLickChannel;
 
-        /// <summary>The MQTT channel for disabling lick requirement (lick guidance mode on).</summary>
-        private MQTTChannel _requireLickFalse;
-
-        /// <summary>The MQTT channel for enabling wait requirement (occupancy guidance mode off).</summary>
-        private MQTTChannel _requireWaitTrue;
-
-        /// <summary>The MQTT channel for disabling wait requirement (occupancy guidance mode on).</summary>
-        private MQTTChannel _requireWaitFalse;
+        /// <summary>The MQTT channel that toggles the wait requirement; payload value of true enables it.</summary>
+        private MQTTChannel<BoolMessage> _requireWaitChannel;
 
         /// <summary>The number of segments visible in each corridor (corridor depth).</summary>
         private int _depth;
@@ -270,29 +264,25 @@ namespace SL.Tasks
             }
 
             // Sets up MQTT channels for cue sequence requests.
-            _cueSequenceTrigger = new MQTTChannel("CueSequenceTrigger/", isListener: true);
+            _cueSequenceTrigger = new MQTTChannel(MQTTTopics.CueSequenceTrigger, isListener: true);
             _cueSequenceTrigger.receivedEvent.AddListener(OnCueSequenceTrigger);
-            _cueSequenceChannel = new MQTTChannel<SequenceMessage>("CueSequence/", isListener: false);
+            _cueSequenceChannel = new MQTTChannel<SequenceMessage>(MQTTTopics.CueSequence, isListener: false);
 
             // Sets up MQTT channels for scene name requests.
             _sceneName = SceneManager.GetActiveScene().name;
-            _sceneNameTrigger = new MQTTChannel("SceneNameTrigger/", isListener: true);
+            _sceneNameTrigger = new MQTTChannel(MQTTTopics.SceneNameTrigger, isListener: true);
             _sceneNameTrigger.receivedEvent.AddListener(OnSceneNameTrigger);
-            _sceneNameChannel = new MQTTChannel<SceneNameMessage>("SceneName/", isListener: false);
+            _sceneNameChannel = new MQTTChannel<SceneNameMessage>(MQTTTopics.SceneName, isListener: false);
 
-            // Sets up MQTT channels for lick guidance mode control.
-            _requireLickTrue = new MQTTChannel("RequireLick/True/", isListener: true);
-            _requireLickTrue.receivedEvent.AddListener(SetRequireLickTrue);
+            // Sets up the MQTT channel for lick guidance mode control. The payload's bool value sets the
+            // lick-requirement flag directly: true enables (lick required), false disables (guidance mode).
+            _requireLickChannel = new MQTTChannel<BoolMessage>(MQTTTopics.RequireLick, isListener: true);
+            _requireLickChannel.receivedEvent.AddListener(OnRequireLick);
 
-            _requireLickFalse = new MQTTChannel("RequireLick/False/", isListener: true);
-            _requireLickFalse.receivedEvent.AddListener(SetRequireLickFalse);
-
-            // Sets up MQTT channels for occupancy guidance mode control.
-            _requireWaitTrue = new MQTTChannel("RequireWait/True/", isListener: true);
-            _requireWaitTrue.receivedEvent.AddListener(SetRequireWaitTrue);
-
-            _requireWaitFalse = new MQTTChannel("RequireWait/False/", isListener: true);
-            _requireWaitFalse.receivedEvent.AddListener(SetRequireWaitFalse);
+            // Sets up the MQTT channel for occupancy guidance mode control. The payload's bool value sets
+            // the wait-requirement flag directly: true enables (wait required), false disables (guidance).
+            _requireWaitChannel = new MQTTChannel<BoolMessage>(MQTTTopics.RequireWait, isListener: true);
+            _requireWaitChannel.receivedEvent.AddListener(OnRequireWait);
         }
 
         /// <summary>Checks animal position and handles corridor transitions each frame.</summary>
@@ -351,10 +341,8 @@ namespace SL.Tasks
         {
             _cueSequenceTrigger?.receivedEvent.RemoveListener(OnCueSequenceTrigger);
             _sceneNameTrigger?.receivedEvent.RemoveListener(OnSceneNameTrigger);
-            _requireLickTrue?.receivedEvent.RemoveListener(SetRequireLickTrue);
-            _requireLickFalse?.receivedEvent.RemoveListener(SetRequireLickFalse);
-            _requireWaitTrue?.receivedEvent.RemoveListener(SetRequireWaitTrue);
-            _requireWaitFalse?.receivedEvent.RemoveListener(SetRequireWaitFalse);
+            _requireLickChannel?.receivedEvent.RemoveListener(OnRequireLick);
+            _requireWaitChannel?.receivedEvent.RemoveListener(OnRequireWait);
         }
 
         /// <summary>MQTT callback that sends the cue sequence when requested.</summary>
@@ -370,28 +358,18 @@ namespace SL.Tasks
             _sceneNameChannel.Send(new SceneNameMessage() { name = _sceneName });
         }
 
-        /// <summary>MQTT callback that enables lick requirement (disables lick guidance mode).</summary>
-        private void SetRequireLickTrue()
+        /// <summary>MQTT callback that applies the lick-requirement toggle from the message payload.</summary>
+        /// <param name="message">The boolean payload; true enables the requirement, false disables it.</param>
+        private void OnRequireLick(BoolMessage message)
         {
-            requireLick = true;
+            requireLick = message.value;
         }
 
-        /// <summary>MQTT callback that disables lick requirement (enables lick guidance mode).</summary>
-        private void SetRequireLickFalse()
+        /// <summary>MQTT callback that applies the wait-requirement toggle from the message payload.</summary>
+        /// <param name="message">The boolean payload; true enables the requirement, false disables it.</param>
+        private void OnRequireWait(BoolMessage message)
         {
-            requireLick = false;
-        }
-
-        /// <summary>MQTT callback that enables wait requirement (disables occupancy guidance mode).</summary>
-        private void SetRequireWaitTrue()
-        {
-            requireWait = true;
-        }
-
-        /// <summary>MQTT callback that disables wait requirement (enables occupancy guidance mode).</summary>
-        private void SetRequireWaitFalse()
-        {
-            requireWait = false;
+            requireWait = message.value;
         }
 
         /// <summary>
@@ -496,6 +474,18 @@ namespace SL.Tasks
         {
             /// <summary>The name of the currently active Unity scene.</summary>
             public string name;
+        }
+
+        /// <summary>Wraps a single boolean payload for MQTT toggle channels.</summary>
+        /// <remarks>
+        /// Required because <see cref="UnityEngine.JsonUtility"/> cannot serialize or deserialize bare
+        /// primitives at the top level; the wrapper makes the value addressable via the JSON object
+        /// <c>{"value": true|false}</c> contract that <see cref="MQTTChannel{TMessage}"/> uses.
+        /// </remarks>
+        public class BoolMessage
+        {
+            /// <summary>The boolean payload value.</summary>
+            public bool value;
         }
     }
 }
