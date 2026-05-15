@@ -892,7 +892,6 @@ MonoBehaviour:
   isFading: 0
   isActive: 1
   _display: {fileID: 1135501256}
-  settings: {fileID: 11400000, guid: e406f24d75ecb466c83d31286d955699, type: 2}
   _controller: {fileID: 731326252}
   listener: {fileID: 945592021}
 --- !u!1 &1135501255
@@ -1187,7 +1186,6 @@ MonoBehaviour:
   estimateViewFrustrum: 1
   setNearClipPlane: 0
   nearClipDistanceOffset: -0.01
-  isDebug: 0
   material: {fileID: 1266239251}
 --- !u!20 &1360300393
 Camera:
@@ -1290,7 +1288,6 @@ MonoBehaviour:
   estimateViewFrustrum: 1
   setNearClipPlane: 0
   nearClipDistanceOffset: -0.01
-  isDebug: 0
   material: {fileID: 1338271412}
 --- !u!20 &1592300519
 Camera:
@@ -1502,7 +1499,6 @@ MonoBehaviour:
   estimateViewFrustrum: 1
   setNearClipPlane: 0
   nearClipDistanceOffset: -0.01
-  isDebug: 0
   material: {fileID: 526423886}
 --- !u!20 &1791651019
 Camera:

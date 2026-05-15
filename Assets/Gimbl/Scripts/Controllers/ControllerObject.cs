@@ -20,7 +20,7 @@ namespace Gimbl
         public ActorObject actor;
 
         /// <summary>The buffer for accumulating movement input between frames.</summary>
-        public ValueBuffer movement = new ValueBuffer(size: 100, circular: false);
+        public ValueBuffer movement = new ValueBuffer(size: 100);
 
 #if UNITY_EDITOR
         /// <summary>Parents this controller under the scene's Controllers root and registers it for undo.</summary>
@@ -34,13 +34,15 @@ namespace Gimbl
         /// <summary>
         /// Buffers values for accumulating input between frames.
         /// </summary>
+        /// <remarks>
+        /// Add overflow clamps the write index at the final slot rather than wrapping. Callers are expected
+        /// to drain the buffer (via <see cref="Sum"/> + <see cref="Clear"/>) each frame, so overflow should
+        /// never occur under normal operation and the clamp exists only as a safety against unbounded writes.
+        /// </remarks>
         public class ValueBuffer
         {
             /// <summary>The maximum size of the buffer.</summary>
             private readonly int _bufferSize;
-
-            /// <summary>Determines whether the buffer wraps around when full.</summary>
-            private readonly bool _isCircular;
 
             /// <summary>The array storing buffered values.</summary>
             private readonly float[] _values;
@@ -48,15 +50,13 @@ namespace Gimbl
             /// <summary>The current write position in the buffer.</summary>
             private int _counter;
 
-            /// <summary>Creates a new value buffer with the specified size and mode.</summary>
+            /// <summary>Creates a new value buffer with the specified size.</summary>
             /// <param name="size">The maximum number of values to buffer.</param>
-            /// <param name="circular">Determines whether the buffer wraps around when full.</param>
-            public ValueBuffer(int size, bool circular)
+            public ValueBuffer(int size)
             {
                 _bufferSize = size;
                 _values = new float[_bufferSize];
                 _counter = 0;
-                _isCircular = circular;
             }
 
             /// <summary>Adds a value to the buffer.</summary>
@@ -68,7 +68,7 @@ namespace Gimbl
 
                 if (_counter == _bufferSize)
                 {
-                    _counter = _isCircular ? 0 : _bufferSize - 1;
+                    _counter = _bufferSize - 1;
                 }
             }
 
@@ -77,9 +77,8 @@ namespace Gimbl
             public float Sum()
             {
                 float result = 0;
-                int limit = _isCircular ? _bufferSize : _counter;
 
-                for (int i = 0; i < limit; i++)
+                for (int i = 0; i < _counter; i++)
                 {
                     result += _values[i];
                 }
@@ -90,9 +89,7 @@ namespace Gimbl
             /// <summary>Clears all values from the buffer.</summary>
             public void Clear()
             {
-                int limit = _isCircular ? _bufferSize : _counter;
-
-                for (int i = 0; i < limit; i++)
+                for (int i = 0; i < _counter; i++)
                 {
                     _values[i] = 0;
                 }

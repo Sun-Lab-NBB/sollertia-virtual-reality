@@ -15,6 +15,12 @@ namespace SL.Config
     /// This mirrors the TaskTemplate class from sollertia-shared-assets vr_configuration module.
     /// The template name is derived from the YAML filename during loading.
     /// </summary>
+    /// <remarks>
+    /// Getter results are lazily computed once per template instance and cached in private fields.
+    /// The template is expected to be immutable after deserialization, so the caches never need
+    /// invalidation; any mutation of <see cref="cues"/>, <see cref="vrEnvironment"/>, or
+    /// <see cref="trialStructures"/> after first access will produce stale results.
+    /// </remarks>
     [Serializable]
     public class TaskTemplate
     {
@@ -37,26 +43,48 @@ namespace SL.Config
         /// </summary>
         public string templateName;
 
+        /// <summary>The cached cue-name to byte-code lookup, built on first access.</summary>
+        private Dictionary<string, byte> _cueNameToCodeCache;
+
+        /// <summary>The cached cue-name to Cue lookup, built on first access.</summary>
+        private Dictionary<string, Cue> _cueByNameCache;
+
+        /// <summary>The cached cue lengths in Unity units, built on first access.</summary>
+        private float[] _cueLengthsUnityCache;
+
+        /// <summary>The cached segment lengths in Unity units, built on first access.</summary>
+        private float[] _segmentLengthsUnityCache;
+
+        /// <summary>The cached trial-names array, built on first access.</summary>
+        private string[] _trialNamesCache;
+
+        /// <summary>The cached per-trial segment-length lookup in Unity units, built on first access.</summary>
+        private Dictionary<string, float> _trialLengthsUnityCache;
+
         /// <summary>Returns a map of cue name to byte code for MQTT encoding.</summary>
         /// <returns>A dictionary mapping cue names to their byte codes.</returns>
         public Dictionary<string, byte> GetCueNameToCode()
         {
-            return cues.ToDictionary(cue => cue.name, cue => (byte)cue.code);
+            return _cueNameToCodeCache ??= cues.ToDictionary(cue => cue.name, cue => (byte)cue.code);
         }
 
         /// <summary>Returns a map of cue name to Cue.</summary>
         /// <returns>A dictionary mapping cue names to their Cue instances.</returns>
         public Dictionary<string, Cue> GetCueByName()
         {
-            return cues.ToDictionary(cue => cue.name, cue => cue);
+            return _cueByNameCache ??= cues.ToDictionary(cue => cue.name, cue => cue);
         }
 
         /// <summary>Returns cue lengths in Unity units as an array.</summary>
         /// <returns>An array of cue lengths in Unity units.</returns>
         public float[] GetCueLengthsUnity()
         {
-            float cmPerUnit = vrEnvironment.cmPerUnityUnit;
-            return cues.Select(cue => cue.LengthUnity(cmPerUnit)).ToArray();
+            if (_cueLengthsUnityCache == null)
+            {
+                float cmPerUnit = vrEnvironment.cmPerUnityUnit;
+                _cueLengthsUnityCache = cues.Select(cue => cue.LengthUnity(cmPerUnit)).ToArray();
+            }
+            return _cueLengthsUnityCache;
         }
 
         /// <summary>
@@ -67,11 +95,15 @@ namespace SL.Config
         /// <returns>An array of segment lengths in Unity units, one entry per trial.</returns>
         public float[] GetSegmentLengthsUnity()
         {
-            Dictionary<string, Cue> cueMap = GetCueByName();
-            float cmPerUnit = vrEnvironment.cmPerUnityUnit;
-            return trialStructures
-                .Values.Select(trial => trial.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit)))
-                .ToArray();
+            if (_segmentLengthsUnityCache == null)
+            {
+                Dictionary<string, Cue> cueMap = GetCueByName();
+                float cmPerUnit = vrEnvironment.cmPerUnityUnit;
+                _segmentLengthsUnityCache = trialStructures
+                    .Values.Select(trial => trial.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit)))
+                    .ToArray();
+            }
+            return _segmentLengthsUnityCache;
         }
 
         /// <summary>
@@ -81,7 +113,7 @@ namespace SL.Config
         /// <returns>An array of trial names matching the trial_structures iteration order.</returns>
         public string[] GetTrialNames()
         {
-            return trialStructures.Keys.ToArray();
+            return _trialNamesCache ??= trialStructures.Keys.ToArray();
         }
 
         /// <summary>Calculates the total length of a single trial's segment in Unity units.</summary>
@@ -89,10 +121,16 @@ namespace SL.Config
         /// <returns>The total length of the trial's segment in Unity units.</returns>
         public float GetTrialLengthUnity(string trialName)
         {
-            TrialStructure trial = trialStructures[trialName];
-            Dictionary<string, Cue> cueMap = GetCueByName();
-            float cmPerUnit = vrEnvironment.cmPerUnityUnit;
-            return trial.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit));
+            if (_trialLengthsUnityCache == null)
+            {
+                Dictionary<string, Cue> cueMap = GetCueByName();
+                float cmPerUnit = vrEnvironment.cmPerUnityUnit;
+                _trialLengthsUnityCache = trialStructures.ToDictionary(
+                    entry => entry.Key,
+                    entry => entry.Value.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit))
+                );
+            }
+            return _trialLengthsUnityCache[trialName];
         }
     }
 }

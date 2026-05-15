@@ -7,10 +7,12 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace Gimbl
 {
@@ -20,6 +22,21 @@ namespace Gimbl
     [Serializable]
     public class Monitor
     {
+        /// <summary>The timeout for subprocess-based monitor enumeration on Linux and macOS.</summary>
+        private const int SubprocessTimeoutMilliseconds = 5000;
+
+        /// <summary>The pre-compiled regex matching xrandr `WxH+L+T` connected-monitor lines.</summary>
+        private static readonly Regex LinuxMonitorRegex = new Regex(
+            @"(\d+)x(\d+)\+(\d+)\+(\d+)",
+            RegexOptions.Compiled
+        );
+
+        /// <summary>The pre-compiled regex matching displayplacer Resolution/Origin pairs.</summary>
+        private static readonly Regex MacOsMonitorRegex = new Regex(
+            @"Resolution: (\d+)x(\d+).*?Origin: [(](\d+),(\d+)[)]",
+            RegexOptions.Compiled | RegexOptions.Singleline
+        );
+
         /// <summary>The left position of the monitor in pixels.</summary>
         public int left;
 
@@ -79,65 +96,13 @@ namespace Gimbl
                     0
                 );
             }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                using System.Diagnostics.Process xrandrProcess = new System.Diagnostics.Process();
-                xrandrProcess.StartInfo.UseShellExecute = false;
-                xrandrProcess.StartInfo.RedirectStandardOutput = true;
-                xrandrProcess.StartInfo.FileName = "xrandr";
-                xrandrProcess.Start();
-                string xrandrOutput = xrandrProcess.StandardOutput.ReadToEnd();
-                if (!xrandrProcess.WaitForExit(5000))
-                {
-                    xrandrProcess.Kill();
-                }
-                foreach (Match match in Regex.Matches(xrandrOutput, @"(\d+)x(\d+)\+(\d+)\+(\d+)"))
-                {
-                    if (
-                        match.Groups.Count >= 5
-                        && int.TryParse(match.Groups[1].Value, out int matchWidth)
-                        && int.TryParse(match.Groups[2].Value, out int matchHeight)
-                        && int.TryParse(match.Groups[3].Value, out int matchLeft)
-                        && int.TryParse(match.Groups[4].Value, out int matchTop)
-                    )
-                    {
-                        result.Add(new Monitor(matchLeft, matchTop, matchWidth, matchHeight));
-                    }
-                }
+                EnumerateViaSubprocess("xrandr", string.Empty, LinuxMonitorRegex, result);
             }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                using System.Diagnostics.Process displayplacerProcess = new System.Diagnostics.Process();
-                displayplacerProcess.StartInfo.UseShellExecute = false;
-                displayplacerProcess.StartInfo.RedirectStandardOutput = true;
-                displayplacerProcess.StartInfo.FileName = "/usr/local/bin/displayplacer";
-                displayplacerProcess.StartInfo.Arguments = "list";
-                displayplacerProcess.Start();
-                string displayplacerOutput = displayplacerProcess.StandardOutput.ReadToEnd();
-                if (!displayplacerProcess.WaitForExit(5000))
-                {
-                    displayplacerProcess.Kill();
-                }
-                foreach (
-                    Match match in Regex.Matches(
-                        displayplacerOutput,
-                        @"Resolution: (\d+)x(\d+)(.|\n)*?Origin: [(](\d+),(\d+)[)]"
-                    )
-                )
-                {
-                    if (
-                        match.Groups.Count >= 6
-                        && int.TryParse(match.Groups[1].Value, out int matchWidth)
-                        && int.TryParse(match.Groups[2].Value, out int matchHeight)
-                        && int.TryParse(match.Groups[4].Value, out int matchLeft)
-                        && int.TryParse(match.Groups[5].Value, out int matchTop)
-                    )
-                    {
-                        result.Add(new Monitor(matchLeft, matchTop, matchWidth, matchHeight));
-                    }
-                }
+                EnumerateViaSubprocess("/usr/local/bin/displayplacer", "list", MacOsMonitorRegex, result);
             }
 
             foreach (Monitor monitor in result)
@@ -149,6 +114,62 @@ namespace Gimbl
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Spawns a subprocess, reads its stdout to completion, and appends every parsed monitor match to
+        /// <paramref name="result"/>. Used by the Linux and macOS branches of <see cref="EnumerateMonitors"/>.
+        /// </summary>
+        /// <param name="command">The executable to invoke (full path or PATH-resolved name).</param>
+        /// <param name="arguments">The command-line arguments passed to <paramref name="command"/>.</param>
+        /// <param name="pattern">The regex producing groups (width, height, left, top) at indices 1-4.</param>
+        /// <param name="result">The collection that receives every successfully parsed monitor.</param>
+        private static void EnumerateViaSubprocess(
+            string command,
+            string arguments,
+            Regex pattern,
+            List<Monitor> result
+        )
+        {
+            using Process process = new Process();
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.FileName = command;
+            process.StartInfo.Arguments = arguments;
+
+            try
+            {
+                process.Start();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Monitor enumeration: failed to start '{command}': {exception.Message}");
+                return;
+            }
+
+            string output = process.StandardOutput.ReadToEnd();
+            if (!process.WaitForExit(SubprocessTimeoutMilliseconds))
+            {
+                process.Kill();
+                Debug.LogWarning(
+                    $"Monitor enumeration: '{command}' timed out after {SubprocessTimeoutMilliseconds}ms; "
+                        + "monitor list may be incomplete."
+                );
+            }
+
+            foreach (Match match in pattern.Matches(output))
+            {
+                if (
+                    match.Groups.Count >= 5
+                    && int.TryParse(match.Groups[1].Value, out int matchWidth)
+                    && int.TryParse(match.Groups[2].Value, out int matchHeight)
+                    && int.TryParse(match.Groups[3].Value, out int matchLeft)
+                    && int.TryParse(match.Groups[4].Value, out int matchTop)
+                )
+                {
+                    result.Add(new Monitor(matchLeft, matchTop, matchWidth, matchHeight));
+                }
+            }
         }
 
         /// <summary>The delegate for Windows monitor enumeration callback.</summary>

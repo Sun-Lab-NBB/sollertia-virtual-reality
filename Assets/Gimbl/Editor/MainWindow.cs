@@ -19,6 +19,14 @@ namespace Gimbl
     /// </summary>
     public class MainWindow : EditorWindow
     {
+        /// <summary>
+        /// Pre-resolved per-controller specs (display name + concrete subclass) cached on first use so
+        /// <see cref="EnsureControllers"/> never re-walks the <see cref="ControllerTypes"/> enum or
+        /// re-looks-up assembly types on its hot path.
+        /// </summary>
+        private static readonly (string DisplayName, System.Type ControllerType)[] CachedControllerSpecs =
+            BuildControllerSpecs();
+
         /// <summary>The scroll position for the window content.</summary>
         private Vector2 _scrollPosition = Vector2.zero;
 
@@ -27,6 +35,21 @@ namespace Gimbl
 
         /// <summary>Determines whether a scene change is pending after exiting play mode.</summary>
         private bool _exitPlayModeSceneChangeComing = false;
+
+        /// <summary>The cached <see cref="Task"/> reference for the active scene; null when missing or stale.</summary>
+        private Task _cachedTask;
+
+        /// <summary>The cached <see cref="ActorObject"/> reference for the active scene.</summary>
+        private ActorObject _cachedActor;
+
+        /// <summary>The cached <see cref="DisplayObject"/> reference for the active scene.</summary>
+        private DisplayObject _cachedDisplay;
+
+        /// <summary>The cached <see cref="GuidanceZone"/> reference for the active scene.</summary>
+        private GuidanceZone _cachedGuidanceZone;
+
+        /// <summary>The cached <see cref="OccupancyZone"/> reference for the active scene.</summary>
+        private OccupancyZone _cachedOccupancyZone;
 
         /// <summary>The full-screen view manager for camera mapping.</summary>
         public FullScreenViewManager fullScreenManager;
@@ -90,6 +113,7 @@ namespace Gimbl
             TagsAndLayers.AddTag("VRDisplay");
             fullScreenManager = new FullScreenViewManager();
             InitializeScene();
+            InvalidateSceneCache();
 
             EditorSceneManager.activeSceneChangedInEditMode += OnActiveSceneChanged;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
@@ -107,6 +131,7 @@ namespace Gimbl
         /// <param name="newScene">The new active scene.</param>
         private void OnActiveSceneChanged(Scene oldScene, Scene newScene)
         {
+            InvalidateSceneCache();
             if (_exitPlayModeSceneChangeComing)
             {
                 _exitPlayModeSceneChangeComing = false;
@@ -151,207 +176,213 @@ namespace Gimbl
 
         /// <summary>Renders the Task section that exposes per-scene Task settings.</summary>
         /// <remarks>
-        /// Locates the Task component via <see cref="UnityEngine.Object.FindAnyObjectByType{T}()"/> each frame
-        /// because Task references move with scene changes. Disables the controls in Play Mode since the live
-        /// guidance toggles are driven by MQTT during runtime. Hides <c>Require Lick</c> and <c>Require Wait</c>
-        /// when the active scene lacks a corresponding <see cref="GuidanceZone"/> or <see cref="OccupancyZone"/>
-        /// to keep the section focused on the toggles actually consumed by the current task.
+        /// Reads the cached <see cref="Task"/> reference (lazily refreshed on scene change). Disables the
+        /// controls in Play Mode since the live guidance toggles are driven by MQTT during runtime. Hides
+        /// <c>Require Lick</c> and <c>Require Wait</c> when the active scene lacks a corresponding
+        /// <see cref="GuidanceZone"/> or <see cref="OccupancyZone"/> to keep the section focused on the
+        /// toggles actually consumed by the current task.
         /// </remarks>
         private void DrawTaskSection()
         {
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
-            EditorGUILayout.LabelField("Task", LayoutSettings.SectionLabel);
-
-            Task task = FindAnyObjectByType<Task>();
-            if (task == null)
-            {
-                EditorGUILayout.HelpBox("No Task component found in the current scene.", MessageType.Info);
-                EditorGUILayout.EndVertical();
-                return;
-            }
-
-            if (task.actor == null)
-            {
-                ActorObject resolvedActor = FindAnyObjectByType<ActorObject>();
-                if (resolvedActor != null)
+            DrawSection(
+                "Task",
+                () =>
                 {
-                    task.actor = resolvedActor;
-                    EditorUtility.SetDirty(task);
+                    Task task = GetCachedTask();
+                    if (task == null)
+                    {
+                        EditorGUILayout.HelpBox("No Task component found in the current scene.", MessageType.Info);
+                        return;
+                    }
+
+                    if (task.actor == null)
+                    {
+                        ActorObject resolvedActor = GetCachedActor();
+                        if (resolvedActor != null)
+                        {
+                            task.actor = resolvedActor;
+                            EditorUtility.SetDirty(task);
+                        }
+                    }
+
+                    if (EditorApplication.isPlaying)
+                    {
+                        GUI.enabled = false;
+                    }
+
+                    bool hasLickZone = GetCachedGuidanceZone() != null;
+                    bool hasOccupancyZone = GetCachedOccupancyZone() != null;
+
+                    EditorGUI.BeginChangeCheck();
+                    bool newRequireLick = task.requireLick;
+                    if (hasLickZone)
+                    {
+                        newRequireLick = EditorGUILayout.Toggle(
+                            new GUIContent(
+                                "Require Lick: ",
+                                "When on, the animal must lick inside the stimulus zone to trigger the reward. "
+                                    + "When off, reaching the guidance zone automatically triggers the reward. "
+                                    + "Addressable via MQTT at runtime."
+                            ),
+                            task.requireLick,
+                            LayoutSettings.EditFieldOption
+                        );
+                    }
+                    bool newRequireWait = task.requireWait;
+                    if (hasOccupancyZone)
+                    {
+                        newRequireWait = EditorGUILayout.Toggle(
+                            new GUIContent(
+                                "Require Wait: ",
+                                "When on, the animal must remain in the occupancy zone to disarm the stimulus trigger. "
+                                    + "When off, the VR emits a warning to the experiment controller via MQTT, "
+                                    + "enabling it to interfere by activating brakes. Addressable via MQTT at runtime."
+                            ),
+                            task.requireWait,
+                            LayoutSettings.EditFieldOption
+                        );
+                    }
+                    float newTrackLength = EditorGUILayout.FloatField(
+                        new GUIContent(
+                            "Track Length: ",
+                            "Total length of the pre-generated random trial sequence in Unity units. "
+                                + "Should overestimate the distance the animal will actually travel in a session."
+                        ),
+                        task.trackLength,
+                        LayoutSettings.EditFieldOption
+                    );
+                    int newTrackSeed = EditorGUILayout.IntField(
+                        new GUIContent(
+                            "Track Seed: ",
+                            "Seed for the random trial-sequence generator. A specific seed reproduces the same "
+                                + "sequence; use -1 for a nondeterministic seed each run."
+                        ),
+                        task.trackSeed,
+                        LayoutSettings.EditFieldOption
+                    );
+
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        Undo.RecordObject(task, "Edit Task Settings");
+                        task.requireLick = newRequireLick;
+                        task.requireWait = newRequireWait;
+                        task.trackLength = newTrackLength;
+                        task.trackSeed = newTrackSeed;
+                        EditorUtility.SetDirty(task);
+                        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+                    }
+
+                    GUI.enabled = true;
                 }
-            }
-
-            if (EditorApplication.isPlaying)
-            {
-                GUI.enabled = false;
-            }
-
-            bool hasLickZone = FindAnyObjectByType<GuidanceZone>() != null;
-            bool hasOccupancyZone = FindAnyObjectByType<OccupancyZone>() != null;
-
-            EditorGUI.BeginChangeCheck();
-            bool newRequireLick = task.requireLick;
-            if (hasLickZone)
-            {
-                newRequireLick = EditorGUILayout.Toggle(
-                    new GUIContent(
-                        "Require Lick: ",
-                        "When on, the animal must lick inside the stimulus zone to trigger the reward. "
-                            + "When off, reaching the guidance zone automatically triggers the reward. "
-                            + "Addressable via MQTT at runtime."
-                    ),
-                    task.requireLick,
-                    LayoutSettings.EditFieldOption
-                );
-            }
-            bool newRequireWait = task.requireWait;
-            if (hasOccupancyZone)
-            {
-                newRequireWait = EditorGUILayout.Toggle(
-                    new GUIContent(
-                        "Require Wait: ",
-                        "When on, the animal must remain in the occupancy zone to disarm the stimulus trigger. "
-                            + "When off, the VR emits a warning to the experiment controller via MQTT, "
-                            + "enabling it to interfere by activating brakes. Addressable via MQTT at runtime."
-                    ),
-                    task.requireWait,
-                    LayoutSettings.EditFieldOption
-                );
-            }
-            float newTrackLength = EditorGUILayout.FloatField(
-                new GUIContent(
-                    "Track Length: ",
-                    "Total length of the pre-generated random trial sequence in Unity units. "
-                        + "Should overestimate the distance the animal will actually travel in a session."
-                ),
-                task.trackLength,
-                LayoutSettings.EditFieldOption
             );
-            int newTrackSeed = EditorGUILayout.IntField(
-                new GUIContent(
-                    "Track Seed: ",
-                    "Seed for the random trial-sequence generator. A specific seed reproduces the same "
-                        + "sequence; use -1 for a nondeterministic seed each run."
-                ),
-                task.trackSeed,
-                LayoutSettings.EditFieldOption
-            );
-
-            if (EditorGUI.EndChangeCheck())
-            {
-                Undo.RecordObject(task, "Edit Task Settings");
-                task.requireLick = newRequireLick;
-                task.requireWait = newRequireWait;
-                task.trackLength = newTrackLength;
-                task.trackSeed = newTrackSeed;
-                EditorUtility.SetDirty(task);
-                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-            }
-
-            GUI.enabled = true;
-            EditorGUILayout.EndVertical();
         }
 
         /// <summary>Renders the Actor section that exposes the active scene's Actor properties.</summary>
         private void DrawActorSection()
         {
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
-            EditorGUILayout.LabelField("Actor", LayoutSettings.SectionLabel);
-
-            ActorObject actor = FindAnyObjectByType<ActorObject>();
-            if (actor == null)
-            {
-                EditorGUILayout.HelpBox(
-                    "No Actor in the active scene. Close and reopen this window to auto-create one.",
-                    MessageType.Info
-                );
-            }
-            else
-            {
-                actor.EditMenu();
-            }
-            EditorGUILayout.EndVertical();
+            DrawSection(
+                "Actor",
+                () =>
+                {
+                    ActorObject actor = GetCachedActor();
+                    if (actor == null)
+                    {
+                        EditorGUILayout.HelpBox(
+                            "No Actor in the active scene. Close and reopen this window to auto-create one.",
+                            MessageType.Info
+                        );
+                    }
+                    else
+                    {
+                        actor.EditMenu();
+                    }
+                }
+            );
         }
 
         /// <summary>Renders the Display section for brightness and height of the active scene's Display.</summary>
         private void DrawDisplaySection()
         {
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
-            EditorGUILayout.LabelField("Display", LayoutSettings.SectionLabel);
-
-            DisplayObject display = FindAnyObjectByType<DisplayObject>();
-            if (display == null)
-            {
-                EditorGUILayout.HelpBox(
-                    "No Display in the active scene. Close and reopen this window to auto-create one.",
-                    MessageType.Info
-                );
-                EditorGUILayout.EndVertical();
-                return;
-            }
-
-            GUIContent blankShowTooltip = new GUIContent(
-                "",
-                "Set brightness to 0 (Blank) or restore the configured brightness (Show)."
-            );
-            EditorGUILayout.BeginHorizontal();
-            if (display.currentBrightness > 0)
-            {
-                blankShowTooltip.text = "Blank Display";
-                if (GUILayout.Button(blankShowTooltip))
+            DrawSection(
+                "Display",
+                () =>
                 {
-                    display.currentBrightness = 0;
-                }
-            }
-            else
-            {
-                blankShowTooltip.text = "Show Display";
-                if (GUILayout.Button(blankShowTooltip))
-                {
-                    display.currentBrightness = display.settings.brightness;
-                }
-            }
-            EditorGUILayout.EndHorizontal();
+                    DisplayObject display = GetCachedDisplay();
+                    if (display == null)
+                    {
+                        EditorGUILayout.HelpBox(
+                            "No Display in the active scene. Close and reopen this window to auto-create one.",
+                            MessageType.Info
+                        );
+                        return;
+                    }
 
-            SerializedObject serializedSettings = new SerializedObject(display.settings);
-            float previousHeight = display.settings.heightInVR;
-            float previousBrightness = display.settings.brightness;
-            EditorGUILayout.PropertyField(
-                serializedSettings.FindProperty("brightness"),
-                includeChildren: true,
-                LayoutSettings.EditFieldOption
+                    GUIContent blankShowTooltip = new GUIContent(
+                        "",
+                        "Set brightness to 0 (Blank) or restore the configured brightness (Show)."
+                    );
+                    EditorGUILayout.BeginHorizontal();
+                    if (display.currentBrightness > 0)
+                    {
+                        blankShowTooltip.text = "Blank Display";
+                        if (GUILayout.Button(blankShowTooltip))
+                        {
+                            display.currentBrightness = 0;
+                        }
+                    }
+                    else
+                    {
+                        blankShowTooltip.text = "Show Display";
+                        if (GUILayout.Button(blankShowTooltip))
+                        {
+                            display.currentBrightness = display.settings.brightness;
+                        }
+                    }
+                    EditorGUILayout.EndHorizontal();
+
+                    SerializedObject serializedSettings = new SerializedObject(display.settings);
+                    float previousHeight = display.settings.heightInVR;
+                    float previousBrightness = display.settings.brightness;
+                    EditorGUILayout.PropertyField(
+                        serializedSettings.FindProperty("brightness"),
+                        includeChildren: true,
+                        LayoutSettings.EditFieldOption
+                    );
+                    EditorGUILayout.PropertyField(
+                        serializedSettings.FindProperty("heightInVR"),
+                        includeChildren: true,
+                        LayoutSettings.EditFieldOption
+                    );
+                    serializedSettings.ApplyModifiedProperties();
+                    if (previousHeight != display.settings.heightInVR)
+                    {
+                        display.transform.localPosition = new Vector3(0, display.settings.heightInVR, 0);
+                    }
+                    if (previousBrightness != display.settings.brightness)
+                    {
+                        display.currentBrightness = display.settings.brightness;
+                    }
+                }
             );
-            EditorGUILayout.PropertyField(
-                serializedSettings.FindProperty("heightInVR"),
-                includeChildren: true,
-                LayoutSettings.EditFieldOption
-            );
-            serializedSettings.ApplyModifiedProperties();
-            if (previousHeight != display.settings.heightInVR)
-            {
-                display.transform.localPosition = new Vector3(0, display.settings.heightInVR, 0);
-            }
-            if (previousBrightness != display.settings.brightness)
-            {
-                display.currentBrightness = display.settings.brightness;
-            }
-            EditorGUILayout.EndVertical();
         }
 
         /// <summary>Renders the Camera Mapping section that wires display cameras to physical monitors.</summary>
         private void DrawCameraMappingSection()
         {
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
-            EditorGUILayout.LabelField("Camera Mapping", LayoutSettings.SectionLabel);
-
-            fullScreenManager.OnGUIRefreshMonitorPositions();
-            fullScreenManager.OnGUICameraObjectFields();
-            if (EditorApplication.isPlaying)
-            {
-                GUI.enabled = false;
-            }
-            fullScreenManager.OnGUIShowFullScreenViews();
-            GUI.enabled = true;
-            EditorGUILayout.EndVertical();
+            DrawSection(
+                "Camera Mapping",
+                () =>
+                {
+                    fullScreenManager.OnGUIRefreshMonitorPositions();
+                    fullScreenManager.OnGUICameraObjectFields();
+                    if (EditorApplication.isPlaying)
+                    {
+                        GUI.enabled = false;
+                    }
+                    fullScreenManager.OnGUIShowFullScreenViews();
+                    GUI.enabled = true;
+                }
+            );
         }
 
         /// <summary>Renders the MQTT section with broker IP/port and connection test.</summary>
@@ -361,50 +392,128 @@ namespace Gimbl
             {
                 GUI.enabled = false;
             }
-            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle.Style);
-            EditorGUILayout.LabelField("MQTT", LayoutSettings.SectionLabel);
-            _client.ipAddress = EditorGUILayout.TextField(
-                new GUIContent(
-                    "ip: ",
-                    "IP address of the MQTT broker that bridges this Unity scene to the experiment hardware."
-                ),
-                _client.ipAddress,
-                LayoutSettings.EditFieldOption
-            );
+            DrawSection(
+                "MQTT",
+                () =>
+                {
+                    _client.ipAddress = EditorGUILayout.TextField(
+                        new GUIContent(
+                            "ip: ",
+                            "IP address of the MQTT broker that bridges this Unity scene to the experiment hardware."
+                        ),
+                        _client.ipAddress,
+                        LayoutSettings.EditFieldOption
+                    );
 
-            string portText = EditorGUILayout.TextField(
-                new GUIContent(
-                    "port: ",
-                    "TCP port of the MQTT broker that bridges this Unity scene to the experiment hardware."
-                ),
-                _client.port.ToString(),
-                LayoutSettings.EditFieldOption
-            );
-            if (int.TryParse(portText, out int parsedPort))
-            {
-                _client.port = parsedPort;
-            }
+                    string portText = EditorGUILayout.TextField(
+                        new GUIContent(
+                            "port: ",
+                            "TCP port of the MQTT broker that bridges this Unity scene to the experiment hardware."
+                        ),
+                        _client.port.ToString(),
+                        LayoutSettings.EditFieldOption
+                    );
+                    if (int.TryParse(portText, out int parsedPort))
+                    {
+                        _client.port = parsedPort;
+                    }
 
-            if (GUI.changed)
-            {
-                EditorPrefs.SetString("SollertiaVR_MQTT_IP", _client.ipAddress);
-                EditorPrefs.SetInt("SollertiaVR_MQTT_Port", _client.port);
-            }
-            if (
-                GUILayout.Button(
-                    new GUIContent(
-                        "Test Connection",
-                        "Check whether the MQTT broker is reachable at the specified ip and port."
+                    if (GUI.changed)
+                    {
+                        EditorPrefs.SetString("SollertiaVR_MQTT_IP", _client.ipAddress);
+                        EditorPrefs.SetInt("SollertiaVR_MQTT_Port", _client.port);
+                    }
+                    if (
+                        GUILayout.Button(
+                            new GUIContent(
+                                "Test Connection",
+                                "Check whether the MQTT broker is reachable at the specified ip and port."
+                            )
+                        )
                     )
-                )
-            )
-            {
-                _client.Connect(verbose: true);
-                _client.Disconnect();
-            }
-
+                    {
+                        _client.Connect(verbose: true);
+                        _client.Disconnect();
+                    }
+                }
+            );
             GUI.enabled = true;
+        }
+
+        /// <summary>Renders a labelled vertical box surrounding the supplied body action.</summary>
+        /// <param name="title">The section heading shown above the body content.</param>
+        /// <param name="drawBody">The action that emits the section's inner GUI controls.</param>
+        /// <remarks>
+        /// Centralizes the open-vertical / label / close-vertical boilerplate every Task Parameters
+        /// section repeats. Returning early from <paramref name="drawBody"/> still closes the box because
+        /// the closing call lives in this helper.
+        /// </remarks>
+        private static void DrawSection(string title, System.Action drawBody)
+        {
+            EditorGUILayout.BeginVertical(LayoutSettings.MainBoxStyle);
+            EditorGUILayout.LabelField(title, LayoutSettings.SectionLabel);
+            drawBody();
             EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>Clears every per-scene cached component reference so the next access re-resolves.</summary>
+        private void InvalidateSceneCache()
+        {
+            _cachedTask = null;
+            _cachedActor = null;
+            _cachedDisplay = null;
+            _cachedGuidanceZone = null;
+            _cachedOccupancyZone = null;
+        }
+
+        /// <summary>Returns the cached <see cref="Task"/>, refreshing it from the scene on first access or after invalidation.</summary>
+        private Task GetCachedTask()
+        {
+            if (_cachedTask == null)
+            {
+                _cachedTask = FindAnyObjectByType<Task>();
+            }
+            return _cachedTask;
+        }
+
+        /// <summary>Returns the cached <see cref="ActorObject"/>, refreshing it from the scene on demand.</summary>
+        private ActorObject GetCachedActor()
+        {
+            if (_cachedActor == null)
+            {
+                _cachedActor = FindAnyObjectByType<ActorObject>();
+            }
+            return _cachedActor;
+        }
+
+        /// <summary>Returns the cached <see cref="DisplayObject"/>, refreshing it from the scene on demand.</summary>
+        private DisplayObject GetCachedDisplay()
+        {
+            if (_cachedDisplay == null)
+            {
+                _cachedDisplay = FindAnyObjectByType<DisplayObject>();
+            }
+            return _cachedDisplay;
+        }
+
+        /// <summary>Returns the cached <see cref="GuidanceZone"/>, refreshing it from the scene on demand.</summary>
+        private GuidanceZone GetCachedGuidanceZone()
+        {
+            if (_cachedGuidanceZone == null)
+            {
+                _cachedGuidanceZone = FindAnyObjectByType<GuidanceZone>();
+            }
+            return _cachedGuidanceZone;
+        }
+
+        /// <summary>Returns the cached <see cref="OccupancyZone"/>, refreshing it from the scene on demand.</summary>
+        private OccupancyZone GetCachedOccupancyZone()
+        {
+            if (_cachedOccupancyZone == null)
+            {
+                _cachedOccupancyZone = FindAnyObjectByType<OccupancyZone>();
+            }
+            return _cachedOccupancyZone;
         }
 
         /// <summary>Ensures required GameObjects and folders exist in the scene.</summary>
@@ -418,32 +527,20 @@ namespace Gimbl
             {
                 AssetDatabase.CreateFolder("Assets/VRSettings", "Displays");
             }
-            if (!AssetDatabase.IsValidFolder("Assets/VRSettings/Actors"))
-            {
-                AssetDatabase.CreateFolder("Assets/VRSettings", "Actors");
-            }
 
-            GameObject sceneObject;
             string[] defaultObjectNames = { "Actors", "Controllers", "MQTT Client" };
             foreach (string objectName in defaultObjectNames)
             {
-                if (!GameObject.Find(objectName))
+                GameObject sceneObject = GameObject.Find(objectName);
+                if (sceneObject == null)
                 {
                     Debug.Log($"Creating Object: {objectName}..");
                     sceneObject = new GameObject(objectName);
-                    switch (objectName)
+                    if (objectName == "MQTT Client")
                     {
-                        case "MQTT Client":
-                            sceneObject.AddComponent<MQTTClient>();
-                            break;
-                        default:
-                            break;
+                        sceneObject.AddComponent<MQTTClient>();
                     }
                     EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-                }
-                else
-                {
-                    sceneObject = GameObject.Find(objectName);
                 }
                 switch (objectName)
                 {
@@ -480,12 +577,16 @@ namespace Gimbl
         /// The auto-created Display owns the per-monitor cameras (via PerspectiveProjection) and the Actor
         /// owns the third-person tracking camera, so the Unity-default "Main Camera" left over by the new
         /// scene template renders nothing useful while still consuming display slot 0. Nothing in the C#
-        /// code references <c>Camera.main</c> or the <c>MainCamera</c> tag, so removing it is safe. Uses
-        /// <see cref="UnityEngine.Object.FindObjectsByType{T}(FindObjectsInactive, FindObjectsSortMode)"/>
-        /// instead of <c>GameObject.Find</c> so inactive and duplicate instances are also cleaned up.
+        /// code references <c>Camera.main</c> or the <c>MainCamera</c> tag, so removing it is safe. The
+        /// <c>Camera.main</c> short-circuit at the top skips the full scene scan when no MainCamera-tagged
+        /// camera is present (the common path after the first scene visit).
         /// </remarks>
         private static void RemoveDefaultMainCamera()
         {
+            if (Camera.main == null && GameObject.Find("Main Camera") == null)
+            {
+                return;
+            }
             Camera[] cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             bool anyRemoved = false;
             foreach (Camera camera in cameras)
@@ -537,7 +638,7 @@ namespace Gimbl
                     );
                     return;
                 }
-                display = DisplayObject.Create("Display", displayModels[0].name, DisplayType.Monitor);
+                display = DisplayObject.Create("Display", displayModels[0].name);
                 EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             }
 
@@ -549,12 +650,12 @@ namespace Gimbl
 
         /// <summary>Ensures the active scene contains one controller GameObject per supported ControllerTypes.</summary>
         /// <remarks>
-        /// Iterates every <see cref="ControllerTypes"/> enum value, resolves it to a concrete subclass of
-        /// <see cref="ControllerObject"/> via the <see cref="ControllerObject"/> assembly, and creates a
-        /// matching GameObject under the scene's "Controllers" root when none of that exact type already
-        /// exists. The created GameObject is named after the enum value and gets a settings asset via
-        /// <see cref="ControllerObject.InitiateController"/>, which reuses any existing asset at the matching
-        /// path. The Actor.Controller assignment is left untouched so user-chosen swaps survive auto-create.
+        /// Iterates the static <see cref="CachedControllerSpecs"/> table (resolved once via reflection at
+        /// type-init) and creates a controller GameObject under the scene's "Controllers" root whenever
+        /// none of that exact type already exists. The created GameObject is named after the enum value
+        /// and gets a settings asset via <see cref="ControllerObject.InitiateController"/>, which reuses
+        /// any existing asset at the matching path. The Actor.Controller assignment is left untouched so
+        /// user-chosen swaps survive auto-create.
         /// </remarks>
         public static void EnsureControllers()
         {
@@ -567,29 +668,19 @@ namespace Gimbl
             ControllerObject[] existingControllers = FindObjectsByType<ControllerObject>(FindObjectsSortMode.None);
             bool createdAny = false;
 
-            foreach (ControllerTypes controllerType in System.Enum.GetValues(typeof(ControllerTypes)))
+            foreach ((string displayName, System.Type controllerType) in CachedControllerSpecs)
             {
-                System.Type resolvedType = typeof(ControllerObject).Assembly.GetType($"Gimbl.{controllerType}");
-                if (resolvedType == null)
+                if (controllerType == null)
                 {
-                    Debug.LogError(
-                        $"MainWindow.EnsureControllers: could not resolve controller type 'Gimbl.{controllerType}'."
-                    );
                     continue;
                 }
-                if (existingControllers.Any(existing => existing.GetType() == resolvedType))
+                if (existingControllers.Any(existing => existing.GetType() == controllerType))
                 {
                     continue;
                 }
 
-                string displayName = controllerType switch
-                {
-                    ControllerTypes.LinearTreadmill => "Linear",
-                    ControllerTypes.SimulatedLinearTreadmill => "Simulated Linear",
-                    _ => controllerType.ToString(),
-                };
                 GameObject controllerGameObject = new GameObject(displayName);
-                ControllerObject controller = (ControllerObject)controllerGameObject.AddComponent(resolvedType);
+                ControllerObject controller = (ControllerObject)controllerGameObject.AddComponent(controllerType);
                 controller.InitiateController();
                 ControllerOutput output = controllerGameObject.AddComponent<ControllerOutput>();
                 output.master = controller;
@@ -600,6 +691,38 @@ namespace Gimbl
             {
                 EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             }
+        }
+
+        /// <summary>
+        /// Resolves the (display-name, runtime-type) pair for every <see cref="ControllerTypes"/> enum
+        /// value once. Logged errors for unresolved subclasses surface here instead of in
+        /// <see cref="EnsureControllers"/>, keeping the per-scene path allocation-free.
+        /// </summary>
+        private static (string DisplayName, System.Type ControllerType)[] BuildControllerSpecs()
+        {
+            System.Reflection.Assembly controllerAssembly = typeof(ControllerObject).Assembly;
+            return System
+                .Enum.GetValues(typeof(ControllerTypes))
+                .Cast<ControllerTypes>()
+                .Select(controllerType =>
+                {
+                    System.Type resolvedType = controllerAssembly.GetType($"Gimbl.{controllerType}");
+                    if (resolvedType == null)
+                    {
+                        Debug.LogError(
+                            $"MainWindow.BuildControllerSpecs: could not resolve controller type "
+                                + $"'Gimbl.{controllerType}'."
+                        );
+                    }
+                    string displayName = controllerType switch
+                    {
+                        ControllerTypes.LinearTreadmill => "Linear",
+                        ControllerTypes.SimulatedLinearTreadmill => "Simulated Linear",
+                        _ => controllerType.ToString(),
+                    };
+                    return (DisplayName: displayName, ControllerType: resolvedType);
+                })
+                .ToArray();
         }
     }
 }

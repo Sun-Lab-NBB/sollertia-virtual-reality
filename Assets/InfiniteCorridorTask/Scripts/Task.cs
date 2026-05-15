@@ -88,17 +88,11 @@ namespace SL.Tasks
         /// <summary>The MQTT channel for sending the scene name data.</summary>
         private MQTTChannel<SceneNameMessage> _sceneNameChannel;
 
-        /// <summary>The MQTT channel for enabling lick requirement (lick guidance mode off).</summary>
-        private MQTTChannel _requireLickTrue;
+        /// <summary>The MQTT channel that toggles the lick requirement; payload value of true enables it.</summary>
+        private MQTTChannel<BoolMessage> _requireLickChannel;
 
-        /// <summary>The MQTT channel for disabling lick requirement (lick guidance mode on).</summary>
-        private MQTTChannel _requireLickFalse;
-
-        /// <summary>The MQTT channel for enabling wait requirement (occupancy guidance mode off).</summary>
-        private MQTTChannel _requireWaitTrue;
-
-        /// <summary>The MQTT channel for disabling wait requirement (occupancy guidance mode on).</summary>
-        private MQTTChannel _requireWaitFalse;
+        /// <summary>The MQTT channel that toggles the wait requirement; payload value of true enables it.</summary>
+        private MQTTChannel<BoolMessage> _requireWaitChannel;
 
         /// <summary>The number of segments visible in each corridor (corridor depth).</summary>
         private int _depth;
@@ -129,25 +123,39 @@ namespace SL.Tasks
         private float[] _cueLengths;
 
         /// <summary>
-        /// Maps corridor ID string to (x-position, first segment length).
-        /// Used for teleporting the animal between corridors.
+        /// Maps a base-<see cref="_trialCount"/> encoding of the current corridor's segment indices to its
+        /// (x-position, first segment length). Indexed by <see cref="ComputeCorridorKey"/>; the encoding lets
+        /// the runtime avoid allocating a string key every frame.
         /// </summary>
-        private Dictionary<string, (float xPosition, float firstSegmentLength)> _corridorMap;
+        private (float xPosition, float firstSegmentLength)[] _corridorMap;
 
         /// <summary>The current corridor segment indices.</summary>
         private List<int> _currentSegment;
 
+        /// <summary>The cached integer corridor key for <see cref="_currentSegment"/>, refreshed only on advance.</summary>
+        private int _currentCorridorKey;
+
         /// <summary>The cached actor position for updates.</summary>
         private Vector3 _position;
 
-        /// <summary>Validates and auto-assigns the actor reference in the editor.</summary>
+#if UNITY_EDITOR
+        /// <summary>Editor-only validation that auto-assigns the actor reference when missing.</summary>
+        /// <remarks>
+        /// Skips while assemblies are recompiling because Unity batches OnValidate callbacks across every
+        /// modified script and a scene-wide find runs once per Task per modified script during a compile.
+        /// </remarks>
         private void OnValidate()
         {
+            if (UnityEditor.EditorApplication.isCompiling)
+            {
+                return;
+            }
             if (actor == null)
             {
                 actor = FindAnyObjectByType<ActorObject>();
             }
         }
+#endif
 
         /// <summary>Initializes the task, loads configuration, and sets up MQTT channels.</summary>
         private void Start()
@@ -207,15 +215,17 @@ namespace SL.Tasks
             _cueLengths = _template.GetCueLengthsUnity();
             _depth = _template.vrEnvironment.segmentsPerCorridor;
 
-            // Builds corridor map for teleportation.
-            // Maps corridor segment combination to (x-position, first segment length).
-            _corridorMap = new Dictionary<string, (float xPosition, float firstSegmentLength)>();
+            // Builds corridor map for teleportation. The outer loop index `i` IS the encoded corridor
+            // key for the iteration's segment combination, by construction: the inner loop decomposes
+            // `i` into base-_trialCount digits, which is the inverse of <see cref="ComputeCorridorKey"/>.
+            int corridorCount = (int)Mathf.Pow(_trialCount, _depth);
+            _corridorMap = new (float xPosition, float firstSegmentLength)[corridorCount];
 
             int[] corridorSegments = new int[_depth];
             float currentCorridorX = 0;
             float corridorXShift = _template.vrEnvironment.CorridorSpacingUnity;
 
-            for (int i = 0; i < Mathf.Pow(_trialCount, _depth); i++)
+            for (int i = 0; i < corridorCount; i++)
             {
                 // Generates segment combination for current corridor index.
                 for (int j = 0; j < _depth; j++)
@@ -223,10 +233,7 @@ namespace SL.Tasks
                     corridorSegments[j] = i / (int)Mathf.Pow(_trialCount, _depth - j - 1) % _trialCount;
                 }
 
-                _corridorMap[string.Join("-", corridorSegments)] = (
-                    currentCorridorX,
-                    _segmentLengths[corridorSegments[0]]
-                );
+                _corridorMap[i] = (currentCorridorX, _segmentLengths[corridorSegments[0]]);
                 currentCorridorX += corridorXShift;
             }
 
@@ -236,47 +243,46 @@ namespace SL.Tasks
             // Initializes current segment tracking.
             _currentSegmentIndex = 0;
             _currentSegment = new List<int>(_segmentSequenceArray.Take(_depth));
+            _currentCorridorKey = ComputeCorridorKey(_currentSegment);
 
             // Positions actor at the first corridor.
             if (actor != null)
             {
-                string corridorKey = string.Join("-", _currentSegment);
-                if (_corridorMap.TryGetValue(corridorKey, out var corridorData))
+                if (_currentCorridorKey >= 0 && _currentCorridorKey < _corridorMap.Length)
                 {
+                    (float xPosition, float firstSegmentLength) corridorData = _corridorMap[_currentCorridorKey];
                     _position = actor.transform.position;
                     _position.x = corridorData.xPosition;
                     actor.transform.position = _position;
                 }
                 else
                 {
-                    Debug.LogError($"Task: Corridor key '{corridorKey}' not found in corridor map.");
+                    Debug.LogError(
+                        $"Task: Corridor key '{_currentCorridorKey}' out of bounds [0, {_corridorMap.Length})."
+                    );
                 }
             }
 
             // Sets up MQTT channels for cue sequence requests.
-            _cueSequenceTrigger = new MQTTChannel("CueSequenceTrigger/", isListener: true);
+            _cueSequenceTrigger = new MQTTChannel(MQTTTopics.CueSequenceTrigger, isListener: true);
             _cueSequenceTrigger.receivedEvent.AddListener(OnCueSequenceTrigger);
-            _cueSequenceChannel = new MQTTChannel<SequenceMessage>("CueSequence/", isListener: false);
+            _cueSequenceChannel = new MQTTChannel<SequenceMessage>(MQTTTopics.CueSequence, isListener: false);
 
             // Sets up MQTT channels for scene name requests.
             _sceneName = SceneManager.GetActiveScene().name;
-            _sceneNameTrigger = new MQTTChannel("SceneNameTrigger/", isListener: true);
+            _sceneNameTrigger = new MQTTChannel(MQTTTopics.SceneNameTrigger, isListener: true);
             _sceneNameTrigger.receivedEvent.AddListener(OnSceneNameTrigger);
-            _sceneNameChannel = new MQTTChannel<SceneNameMessage>("SceneName/", isListener: false);
+            _sceneNameChannel = new MQTTChannel<SceneNameMessage>(MQTTTopics.SceneName, isListener: false);
 
-            // Sets up MQTT channels for lick guidance mode control.
-            _requireLickTrue = new MQTTChannel("RequireLick/True/", isListener: true);
-            _requireLickTrue.receivedEvent.AddListener(SetRequireLickTrue);
+            // Sets up the MQTT channel for lick guidance mode control. The payload's bool value sets the
+            // lick-requirement flag directly: true enables (lick required), false disables (guidance mode).
+            _requireLickChannel = new MQTTChannel<BoolMessage>(MQTTTopics.RequireLick, isListener: true);
+            _requireLickChannel.receivedEvent.AddListener(OnRequireLick);
 
-            _requireLickFalse = new MQTTChannel("RequireLick/False/", isListener: true);
-            _requireLickFalse.receivedEvent.AddListener(SetRequireLickFalse);
-
-            // Sets up MQTT channels for occupancy guidance mode control.
-            _requireWaitTrue = new MQTTChannel("RequireWait/True/", isListener: true);
-            _requireWaitTrue.receivedEvent.AddListener(SetRequireWaitTrue);
-
-            _requireWaitFalse = new MQTTChannel("RequireWait/False/", isListener: true);
-            _requireWaitFalse.receivedEvent.AddListener(SetRequireWaitFalse);
+            // Sets up the MQTT channel for occupancy guidance mode control. The payload's bool value sets
+            // the wait-requirement flag directly: true enables (wait required), false disables (guidance).
+            _requireWaitChannel = new MQTTChannel<BoolMessage>(MQTTTopics.RequireWait, isListener: true);
+            _requireWaitChannel.receivedEvent.AddListener(OnRequireWait);
         }
 
         /// <summary>Checks animal position and handles corridor transitions each frame.</summary>
@@ -285,12 +291,12 @@ namespace SL.Tasks
             if (actor == null)
                 return;
 
-            string corridorKey = string.Join("-", _currentSegment);
-            if (!_corridorMap.TryGetValue(corridorKey, out var corridorData))
+            if (_currentCorridorKey < 0 || _currentCorridorKey >= _corridorMap.Length)
             {
-                Debug.LogError($"Task: Corridor key '{corridorKey}' not found in corridor map.");
+                Debug.LogError($"Task: Corridor key '{_currentCorridorKey}' out of bounds [0, {_corridorMap.Length}).");
                 return;
             }
+            (float xPosition, float firstSegmentLength) corridorData = _corridorMap[_currentCorridorKey];
 
             _position = actor.transform.position;
 
@@ -306,6 +312,7 @@ namespace SL.Tasks
                 {
                     _currentSegment.RemoveAt(0);
                     _currentSegment.Add(_segmentSequenceArray[_currentSegmentIndex + _depth - 1]);
+                    _currentCorridorKey = ComputeCorridorKey(_currentSegment);
                 }
                 else
                 {
@@ -314,15 +321,17 @@ namespace SL.Tasks
                 }
 
                 // Teleports to new corridor.
-                string newCorridorKey = string.Join("-", _currentSegment);
-                if (_corridorMap.TryGetValue(newCorridorKey, out var newCorridorData))
+                if (_currentCorridorKey >= 0 && _currentCorridorKey < _corridorMap.Length)
                 {
+                    (float xPosition, float firstSegmentLength) newCorridorData = _corridorMap[_currentCorridorKey];
                     _position.x = newCorridorData.xPosition;
                     actor.transform.position = _position;
                 }
                 else
                 {
-                    Debug.LogError($"Task: New corridor key '{newCorridorKey}' not found in corridor map.");
+                    Debug.LogError(
+                        $"Task: New corridor key '{_currentCorridorKey}' out of bounds [0, {_corridorMap.Length})."
+                    );
                 }
             }
         }
@@ -332,10 +341,8 @@ namespace SL.Tasks
         {
             _cueSequenceTrigger?.receivedEvent.RemoveListener(OnCueSequenceTrigger);
             _sceneNameTrigger?.receivedEvent.RemoveListener(OnSceneNameTrigger);
-            _requireLickTrue?.receivedEvent.RemoveListener(SetRequireLickTrue);
-            _requireLickFalse?.receivedEvent.RemoveListener(SetRequireLickFalse);
-            _requireWaitTrue?.receivedEvent.RemoveListener(SetRequireWaitTrue);
-            _requireWaitFalse?.receivedEvent.RemoveListener(SetRequireWaitFalse);
+            _requireLickChannel?.receivedEvent.RemoveListener(OnRequireLick);
+            _requireWaitChannel?.receivedEvent.RemoveListener(OnRequireWait);
         }
 
         /// <summary>MQTT callback that sends the cue sequence when requested.</summary>
@@ -351,28 +358,37 @@ namespace SL.Tasks
             _sceneNameChannel.Send(new SceneNameMessage() { name = _sceneName });
         }
 
-        /// <summary>MQTT callback that enables lick requirement (disables lick guidance mode).</summary>
-        private void SetRequireLickTrue()
+        /// <summary>MQTT callback that applies the lick-requirement toggle from the message payload.</summary>
+        /// <param name="message">The boolean payload; true enables the requirement, false disables it.</param>
+        private void OnRequireLick(BoolMessage message)
         {
-            requireLick = true;
+            requireLick = message.value;
         }
 
-        /// <summary>MQTT callback that disables lick requirement (enables lick guidance mode).</summary>
-        private void SetRequireLickFalse()
+        /// <summary>MQTT callback that applies the wait-requirement toggle from the message payload.</summary>
+        /// <param name="message">The boolean payload; true enables the requirement, false disables it.</param>
+        private void OnRequireWait(BoolMessage message)
         {
-            requireLick = false;
+            requireWait = message.value;
         }
 
-        /// <summary>MQTT callback that enables wait requirement (disables occupancy guidance mode).</summary>
-        private void SetRequireWaitTrue()
+        /// <summary>
+        /// Encodes the segment indices of a corridor as a single integer for indexing into
+        /// <see cref="_corridorMap"/>. Reads the sequence as digits of a base-<see cref="_trialCount"/> number
+        /// so that the corridor-map build loop (which decomposes its outer index back into digits) and the
+        /// runtime lookup produce identical integers.
+        /// </summary>
+        /// <param name="segments">The ordered segment indices that identify a corridor.</param>
+        /// <returns>The integer key matching the build-time index in <see cref="_corridorMap"/>.</returns>
+        private int ComputeCorridorKey(IList<int> segments)
         {
-            requireWait = true;
-        }
-
-        /// <summary>MQTT callback that disables wait requirement (enables occupancy guidance mode).</summary>
-        private void SetRequireWaitFalse()
-        {
-            requireWait = false;
+            int key = 0;
+            int count = segments.Count;
+            for (int i = 0; i < count; i++)
+            {
+                key = key * _trialCount + segments[i];
+            }
+            return key;
         }
 
         /// <summary>Samples a trial name from a named probability distribution over trial transitions.</summary>
@@ -409,8 +425,13 @@ namespace SL.Tasks
 
             System.Random random = seed == RandomSeedSentinel ? new System.Random() : new System.Random(seed);
 
-            List<int> segmentSequence = new List<int>();
-            List<byte> cueSequence = new List<byte>();
+            // Estimates the number of segments the loop will append so the backing arrays grow at most once
+            // during generation. The estimate uses the shortest segment to overshoot rather than undershoot.
+            float minSegmentLength = _segmentLengths.Min();
+            int estimatedSegmentCount =
+                minSegmentLength > 0f ? Mathf.Max(16, Mathf.CeilToInt(length / minSegmentLength) + _depth) : 16;
+            List<int> segmentSequence = new List<int>(estimatedSegmentCount);
+            List<byte> cueSequence = new List<byte>(estimatedSegmentCount * 4);
 
             int choice = random.Next(_trialCount);
 
@@ -453,6 +474,18 @@ namespace SL.Tasks
         {
             /// <summary>The name of the currently active Unity scene.</summary>
             public string name;
+        }
+
+        /// <summary>Wraps a single boolean payload for MQTT toggle channels.</summary>
+        /// <remarks>
+        /// Required because <see cref="UnityEngine.JsonUtility"/> cannot serialize or deserialize bare
+        /// primitives at the top level; the wrapper makes the value addressable via the JSON object
+        /// <c>{"value": true|false}</c> contract that <see cref="MQTTChannel{TMessage}"/> uses.
+        /// </remarks>
+        public class BoolMessage
+        {
+            /// <summary>The boolean payload value.</summary>
+            public bool value;
         }
     }
 }

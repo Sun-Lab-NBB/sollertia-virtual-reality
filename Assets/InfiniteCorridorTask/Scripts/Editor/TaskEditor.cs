@@ -18,7 +18,7 @@ namespace SL.Tasks
         public override void OnInspectorGUI()
         {
             EditorGUILayout.HelpBox(
-                "Task settings are managed via Window > Gimbl > Settings (Task section).",
+                "Task settings are managed via Window > Task Parameters (Task section).",
                 MessageType.Info
             );
         }

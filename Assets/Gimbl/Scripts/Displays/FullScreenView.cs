@@ -34,17 +34,36 @@ namespace Gimbl
             Views.Add(this);
         }
 
-        /// <summary>Registers the quit handler when enabled.</summary>
+        /// <summary>Registers the quit and play-mode handlers when enabled.</summary>
+        /// <remarks>
+        /// The play-mode subscription closes the view when Play Mode ends. Without it the borderless
+        /// window outlives the scene restore that Unity performs on exit, which clears the camera's
+        /// programmatically assigned <c>targetTexture</c> and leaves the OnGUI render path drawing
+        /// against a null texture (visible as a stale afterimage plus a console error).
+        /// </remarks>
         private void OnEnable()
         {
             EditorApplication.wantsToQuit -= OnEditorWantsToQuit;
             EditorApplication.wantsToQuit += OnEditorWantsToQuit;
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
         }
 
-        /// <summary>Unregisters the quit handler when disabled.</summary>
+        /// <summary>Unregisters the quit and play-mode handlers when disabled.</summary>
         private void OnDisable()
         {
             EditorApplication.wantsToQuit -= OnEditorWantsToQuit;
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+        }
+
+        /// <summary>Closes the view when Play Mode ends so the post-restore null targetTexture cannot fire.</summary>
+        /// <param name="state">The current Play Mode transition.</param>
+        private void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.ExitingPlayMode)
+            {
+                Close();
+            }
         }
 
         /// <summary>Handles GUI events and renders the camera view.</summary>
@@ -74,19 +93,15 @@ namespace Gimbl
                         _rendering = true;
                     }
                 }
-                if (_rendering)
+                if (_rendering && _camera != null && _camera.targetTexture != null)
                 {
-                    if (_camera != null)
-                    {
-                        _camera.Render();
-                        bool alphaBlend = false;
-                        GUI.DrawTexture(
-                            new Rect(0, 0, position.width, position.height),
-                            _camera.targetTexture,
-                            ScaleMode.ScaleToFit,
-                            alphaBlend
-                        );
-                    }
+                    _camera.Render();
+                    GUI.DrawTexture(
+                        new Rect(0, 0, position.width, position.height),
+                        _camera.targetTexture,
+                        ScaleMode.ScaleToFit,
+                        alphaBlend: false
+                    );
                 }
             }
         }

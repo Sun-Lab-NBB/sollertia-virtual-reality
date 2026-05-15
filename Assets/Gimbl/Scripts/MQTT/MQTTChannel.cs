@@ -64,10 +64,13 @@ namespace Gimbl
     /// </summary>
     /// <typeparam name="TMessage">The type of the message payload to serialize and deserialize.</typeparam>
     /// <remarks>
-    /// The typed <see cref="receivedEvent"/> intentionally hides the base <see cref="MQTTChannel.receivedEvent"/>
-    /// via the <c>new</c> modifier. Subscribers must hold a reference of type <see cref="MQTTChannel{TMessage}"/>
-    /// (not the base <see cref="MQTTChannel"/>) to observe deserialized payloads; a base-typed reference will
-    /// expose only the parameterless event.
+    /// The typed <see cref="receivedEvent"/> shadows the base <see cref="MQTTChannel.receivedEvent"/> via
+    /// the <c>new</c> modifier because <see cref="UnityEngine.Events.UnityEvent"/> and
+    /// <see cref="UnityEngine.Events.UnityEvent{T0}"/> are unrelated types with no shared parameterized
+    /// contract: a virtual property cannot express both signatures, so the payload type would be lost
+    /// under a clean override. Callers that need the deserialized payload must reference the channel as
+    /// <see cref="MQTTChannel{TMessage}"/>; a base <see cref="MQTTChannel"/> reference exposes only the
+    /// parameterless trigger event and will silently miss the typed callback.
     /// </remarks>
     public class MQTTChannel<TMessage> : MQTTChannel
     {

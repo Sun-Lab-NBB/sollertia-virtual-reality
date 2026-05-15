@@ -51,9 +51,8 @@ namespace Gimbl
         /// <summary>Instantiates a new display from a Resources model prefab and creates its settings asset.</summary>
         /// <param name="displayName">The name to assign to the new display GameObject and its settings asset.</param>
         /// <param name="modelName">The prefab name under <c>Resources/Displays/</c> to instantiate.</param>
-        /// <param name="type">The display type that drives per-mesh camera creation.</param>
         /// <returns>The created <see cref="DisplayObject"/>, or null when the model prefab cannot be found.</returns>
-        public static DisplayObject Create(string displayName, string modelName, DisplayType type)
+        public static DisplayObject Create(string displayName, string modelName)
         {
             UnityEngine.Object modelPrefab = Resources.Load($"Displays/{modelName}");
             if (modelPrefab == null)
@@ -71,27 +70,24 @@ namespace Gimbl
             AssetDatabase.CreateAsset(displaySettings, $"Assets/VRSettings/Displays/{displayName}.asset");
             display.settings = displaySettings;
 
-            if (type == DisplayType.Monitor)
+            foreach (MeshRenderer mesh in displayGameObject.GetComponentsInChildren<MeshRenderer>())
             {
-                foreach (MeshRenderer mesh in displayGameObject.GetComponentsInChildren<MeshRenderer>())
-                {
-                    mesh.GetComponent<MeshCollider>().enabled = false;
-                    // Mesh prefab names follow *Monitor; rename the camera to "<role> View" so the
-                    // dropdown in Camera Mapping surfaces the role (Left View, Right View, Center View).
-                    string cameraName = mesh.name.Replace("Monitor", " View");
-                    GameObject cameraObject = new GameObject(cameraName);
-                    cameraObject.transform.SetParent(mesh.transform.parent);
-                    cameraObject.transform.localPosition = Vector3.zero;
-                    Camera cameraComponent = cameraObject.AddComponent<Camera>();
-                    cameraComponent.nearClipPlane = 0.3f;
-                    cameraComponent.targetDisplay = 8;
-                    cameraComponent.clearFlags = CameraClearFlags.Skybox;
-                    cameraComponent.backgroundColor = Color.black;
-                    PerspectiveProjection projection = cameraObject.AddComponent<PerspectiveProjection>();
-                    projection.projectionScreen = mesh.gameObject;
-                    projection.setNearClipPlane = false;
-                    mesh.enabled = false;
-                }
+                mesh.GetComponent<MeshCollider>().enabled = false;
+                // Mesh prefab names follow *Monitor; rename the camera to "<role> View" so the
+                // dropdown in Camera Mapping surfaces the role (Left View, Right View, Center View).
+                string cameraName = mesh.name.Replace("Monitor", " View");
+                GameObject cameraObject = new GameObject(cameraName);
+                cameraObject.transform.SetParent(mesh.transform.parent);
+                cameraObject.transform.localPosition = Vector3.zero;
+                Camera cameraComponent = cameraObject.AddComponent<Camera>();
+                cameraComponent.nearClipPlane = 0.3f;
+                cameraComponent.targetDisplay = 8;
+                cameraComponent.clearFlags = CameraClearFlags.Skybox;
+                cameraComponent.backgroundColor = Color.black;
+                PerspectiveProjection projection = cameraObject.AddComponent<PerspectiveProjection>();
+                projection.projectionScreen = mesh.gameObject;
+                projection.setNearClipPlane = false;
+                mesh.enabled = false;
             }
 
             Undo.RegisterCreatedObjectUndo(displayGameObject, "Create Display");

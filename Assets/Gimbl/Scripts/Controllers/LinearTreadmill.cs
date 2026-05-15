@@ -13,29 +13,29 @@ namespace Gimbl
     /// </summary>
     public class LinearTreadmill : ControllerObject
     {
-        /// <summary>The MQTT topic the real LinearTreadmill subscribes to for movement data.</summary>
-        private const string DataTopic = "LinearTreadmill/Data";
-
         /// <summary>The accumulated movement since last frame.</summary>
         private float _moved;
 
         /// <summary>The cached actor position for updates.</summary>
         private Vector3 _position;
 
-        /// <summary>The cached actor rotation for updates.</summary>
-        private Quaternion _newRotation;
-
         /// <summary>The MQTT channel subscribed to incoming treadmill data; null for simulated treadmills.</summary>
         private MQTTChannel<TreadmillMessage> _dataChannel;
 
-        /// <summary>Sets up the MQTT listener for this treadmill on start.</summary>
+        /// <summary>Subscribes to the hardware-treadmill MQTT data topic on start.</summary>
+        /// <remarks>
+        /// <see cref="SimulatedLinearTreadmill"/> hides this method via its own private <c>Start</c> and
+        /// intentionally does not chain to it, so the hardware subscription stays inactive for keyboard
+        /// runs. The lifecycle contract relies on Unity dispatching <c>Start</c> per most-derived type
+        /// only: promoting either <c>Start</c> to <c>protected virtual</c> or wiring a base call from the
+        /// simulated subclass would double-subscribe to <see cref="MQTTTopics.Motion"/>; both are deliberate
+        /// non-options. If a third controller subclass appears, follow the same pattern (hide via its own
+        /// <c>Start</c>; do not chain).
+        /// </remarks>
         private void Start()
         {
-            if (this is not SimulatedLinearTreadmill)
-            {
-                _dataChannel = new MQTTChannel<TreadmillMessage>(DataTopic);
-                _dataChannel.receivedEvent.AddListener(OnMessage);
-            }
+            _dataChannel = new MQTTChannel<TreadmillMessage>(MQTTTopics.Motion);
+            _dataChannel.receivedEvent.AddListener(OnMessage);
         }
 
         /// <summary>Removes the MQTT listener so the treadmill stops receiving data after destruction.</summary>
@@ -60,12 +60,9 @@ namespace Gimbl
                     _moved = movement.Sum();
 
                     _position = actor.transform.position;
-                    _newRotation = actor.transform.rotation;
-
                     _position.z += _moved;
 
                     actor.transform.position = _position;
-                    actor.transform.rotation = _newRotation;
                 }
 
                 movement.Clear();

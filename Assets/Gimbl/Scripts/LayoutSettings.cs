@@ -12,7 +12,7 @@ namespace Gimbl
     /// <remarks>
     /// Widths are sized to fit the longest expected line — the Camera Mapping row of
     /// <c>"Monitor N (x, y) [Camera View ▾]"</c>. The 170 px monitor label, ~95 px dropdown content,
-    /// and 15 px of MainBox padding together land just under the 280 px <see cref="MainBox"/> width.
+    /// and 15 px of MainBox padding together land just under the 280 px <see cref="MainBoxStyle"/> width.
     /// </remarks>
     public static class LayoutSettings
     {
@@ -29,26 +29,13 @@ namespace Gimbl
             richText = true,
         };
 
-        /// <summary>
-        /// Defines the style for main content boxes in editor windows.
-        /// </summary>
-        public class MainBox
+        /// <summary>The style for main content boxes in editor windows.</summary>
+        public static readonly GUIStyle MainBoxStyle = new GUIStyle("HelpBox")
         {
-            /// <summary>The GUI style for main boxes.</summary>
-            public readonly GUIStyle Style;
-
-            /// <summary>Creates a new main box style based on HelpBox.</summary>
-            public MainBox()
-            {
-                Style = new GUIStyle("HelpBox");
-                Style.margin = new RectOffset(10, 10, 10, 5);
-                Style.padding = new RectOffset(10, 5, 5, 15);
-                Style.fixedWidth = 280;
-            }
-        }
-
-        /// <summary>The main box style instance for primary content.</summary>
-        public static readonly MainBox MainBoxStyle = new MainBox();
+            margin = new RectOffset(10, 10, 10, 5),
+            padding = new RectOffset(10, 5, 5, 15),
+            fixedWidth = 280,
+        };
     }
 }
 #endif

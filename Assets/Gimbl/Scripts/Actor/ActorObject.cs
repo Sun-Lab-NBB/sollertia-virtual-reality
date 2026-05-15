@@ -22,9 +22,6 @@ namespace Gimbl
     [System.Serializable]
     public class ActorObject : MonoBehaviour
     {
-        /// <summary>The actor's configuration settings asset.</summary>
-        public ActorSettings settings;
-
         /// <summary>The serialized backing field for the Display property.</summary>
         [SerializeField]
         private DisplayObject _display;
@@ -95,10 +92,6 @@ namespace Gimbl
         public void InitiateActor(string modelName, bool trackCamera)
         {
             gameObject.transform.SetParent(GameObject.Find("Actors").transform);
-
-            ActorSettings asset = ScriptableObject.CreateInstance<ActorSettings>();
-            AssetDatabase.CreateAsset(asset, $"Assets/VRSettings/Actors/{gameObject.name}.asset");
-            settings = asset;
 
             // Adds character controller for collision detection.
             CharacterController characterController = gameObject.AddComponent<CharacterController>();
@@ -189,31 +182,6 @@ namespace Gimbl
             if (layer != -1)
             {
                 model.layer = layer;
-            }
-        }
-
-        /// <summary>Deletes this actor after user confirmation.</summary>
-        public void DeleteActor()
-        {
-            bool accept = EditorUtility.DisplayDialog(
-                $"Remove Actor {name}?",
-                $"Are you sure you want to delete Actor {name}?",
-                "Delete",
-                "Cancel"
-            );
-
-            if (accept)
-            {
-                TagsAndLayers.RemoveLayer(name);
-
-                // Unparents attached displays before deletion.
-                PerspectiveProjection perspectiveProjection = GetComponentInChildren<PerspectiveProjection>();
-                if (perspectiveProjection != null)
-                {
-                    perspectiveProjection.transform.parent.transform.SetParent(parent: null, worldPositionStays: true);
-                }
-
-                Undo.DestroyObjectImmediate(gameObject);
             }
         }
 

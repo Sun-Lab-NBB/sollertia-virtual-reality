@@ -331,8 +331,8 @@ task is generated. To load a task into a scene, follow these steps:
       non-functional. To fix this, change this parameter to specify the correct path (relative to the local root) or
       recreate the task. See the ['creating new tasks'](#creating-new-tasks) section for more details about this file.
 5. Select File > Save As to save the scene in *Assets/Scenes*.
-6. Select the **DisplaysWindow** tab located to the right of the Inspector tab. If the tab is not present, reopen it
-   by selecting Window > Gimbl. Press `Refresh Monitor Positions`. This reveals a list of the monitors connected
+6. Select the **Parameters** tab located to the right of the Inspector tab. If the tab is not present, reopen it
+   by selecting Window > Task Parameters. Press `Refresh Monitor Positions` in the Camera Mapping section. This reveals a list of the monitors connected
    to the computer. Assign **Camera: LeftMonitor**, **Camera: RightMonitor**, and **Camera: CenterMonitor** to the
    corresponding monitors used for display to the animal. To verify that the monitors were assigned correctly, press
    `Show Full-Screen Views`. For more information about configuring displays, consult the

@@ -21,7 +21,7 @@ namespace SL.Tasks
     /// Manages stimulus delivery based on animal behavior within the trigger zone.
     /// The trigger mode is determined by the presence of child GuidanceZone or OccupancyZone components.
     /// </summary>
-    public class StimulusTriggerZone : MonoBehaviour
+    public class StimulusTriggerZone : MonoBehaviour, IResettable
     {
         /// <summary>
         /// Determines whether the stimulus boundary should be visible when this zone is active.
@@ -82,8 +82,8 @@ namespace SL.Tasks
             TryGetComponent(out _boundaryRenderer);
 
             // Sets up MQTT channels.
-            _stimulusTrigger = new MQTTChannel("Gimbl/Stimulus/");
-            _lickTrigger = new MQTTChannel("LickPort/", isListener: true);
+            _stimulusTrigger = new MQTTChannel(MQTTTopics.Stimulus);
+            _lickTrigger = new MQTTChannel(MQTTTopics.Lick, isListener: true);
             _lickTrigger.receivedEvent.AddListener(OnLickDetected);
         }
 
@@ -130,9 +130,16 @@ namespace SL.Tasks
             isActive = true;
             _lickDetectedInZone = false;
             _inZone = false;
+            UpdateBoundaryVisibility(showBoundary);
+        }
+
+        /// <summary>Toggles the cached boundary renderer, no-op when the renderer is absent.</summary>
+        /// <param name="visible">The desired renderer enabled state.</param>
+        private void UpdateBoundaryVisibility(bool visible)
+        {
             if (_boundaryRenderer != null)
             {
-                _boundaryRenderer.enabled = showBoundary;
+                _boundaryRenderer.enabled = visible;
             }
         }
 
@@ -191,10 +198,7 @@ namespace SL.Tasks
         private void TriggerStimulus()
         {
             Debug.Log("StimulusTriggerZone: Stimulus triggered.");
-            if (_boundaryRenderer != null)
-            {
-                _boundaryRenderer.enabled = false;
-            }
+            UpdateBoundaryVisibility(false);
             _stimulusTrigger.Send();
             isActive = false;
             _lickDetectedInZone = false;

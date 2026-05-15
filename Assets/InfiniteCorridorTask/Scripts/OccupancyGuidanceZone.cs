@@ -14,7 +14,7 @@ namespace SL.Tasks
     /// Handles occupancy guidance mode as a secondary trigger zone for OccupancyZone.
     /// When guidance mode is active and the animal enters, sends brake activation message with remaining duration.
     /// </summary>
-    public class OccupancyGuidanceZone : MonoBehaviour
+    public class OccupancyGuidanceZone : MonoBehaviour, IResettable
     {
         /// <summary>Determines whether the animal is currently inside this guidance zone.</summary>
         [HideInInspector]
@@ -51,7 +51,7 @@ namespace SL.Tasks
                 return;
             }
 
-            _triggerDelayChannel = new MQTTChannel<TriggerDelayMessage>("Gimbl/TriggerDelay/", isListener: false);
+            _triggerDelayChannel = new MQTTChannel<TriggerDelayMessage>(MQTTTopics.Delay, isListener: false);
         }
 
         /// <summary>Sets the zone state to active when the animal enters the guidance zone collider.</summary>

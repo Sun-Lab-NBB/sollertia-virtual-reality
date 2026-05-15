@@ -16,7 +16,7 @@ namespace SL.Tasks
     /// <summary>
     /// Tracks animal occupancy duration within a zone and manages boundary arm/disarm state.
     /// </summary>
-    public class OccupancyZone : MonoBehaviour
+    public class OccupancyZone : MonoBehaviour, IResettable
     {
         /// <summary>
         /// The duration in milliseconds that the animal must occupy the zone to disarm the boundary.
@@ -91,7 +91,7 @@ namespace SL.Tasks
         }
 
         /// <summary>Returns the elapsed time in milliseconds since the occupancy timer started.</summary>
-        public long GetElapsedMilliseconds()
+        internal long GetElapsedMilliseconds()
         {
             return _occupancyTimer.ElapsedMilliseconds;
         }

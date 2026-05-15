@@ -18,8 +18,19 @@ namespace Gimbl
     /// <summary>
     /// Manages camera-to-monitor assignments and full-screen view creation.
     /// </summary>
+    /// <remarks>
+    /// The constructor unconditionally calls <see cref="LoadCameras"/>, which guarantees
+    /// <see cref="_savedFullScreenViews"/> is non-null (loaded or newly created) before any other method
+    /// runs. <see cref="SaveCameras"/> relies on this invariant; do not call it on an instance that has
+    /// bypassed the constructor.
+    /// </remarks>
     public class FullScreenViewManager
     {
+        /// <summary>The tooltip shown on every camera dropdown entry.</summary>
+        private const string CameraOptionTooltip =
+            "Scene Camera that renders to this monitor when full-screen views are launched. "
+            + "None leaves the monitor unused.";
+
         /// <summary>The list of detected monitors in the system.</summary>
         public List<Monitor> monitors;
 
@@ -65,78 +76,12 @@ namespace Gimbl
         /// </remarks>
         public void OnGUICameraObjectFields()
         {
-            // Filters out the Unity-default Main Camera so a stale instance does not appear in the
-            // dropdown if MainWindow.RemoveDefaultMainCamera has not run for the current scene yet.
-            Camera[] sceneCameras = UnityEngine
-                .Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)
-                .Where(camera =>
-                    !camera.CompareTag("MainCamera")
-                    && !string.Equals(camera.gameObject.name, "Main Camera", System.StringComparison.Ordinal)
-                )
-                .ToArray();
-            const string cameraTooltip =
-                "Scene Camera that renders to this monitor when full-screen views are launched. "
-                + "None leaves the monitor unused.";
-            GUIContent[] cameraOptions = new GUIContent[sceneCameras.Length + 1];
-            cameraOptions[0] = new GUIContent("None", cameraTooltip);
-            for (int i = 0; i < sceneCameras.Length; i++)
-            {
-                cameraOptions[i + 1] = new GUIContent(sceneCameras[i].name, cameraTooltip);
-            }
+            Camera[] sceneCameras = EnumerateAssignableCameras();
+            GUIContent[] cameraOptions = BuildCameraOptions(sceneCameras);
 
             for (int monitorIndex = 0; monitorIndex < monitors.Count; monitorIndex++)
             {
-                Monitor monitor = monitors[monitorIndex];
-                Camera oldCamera = (Camera)EditorUtility.EntityIdToObject(monitor.cameraEntityId);
-
-                int currentIndex = 0;
-                for (int i = 0; i < sceneCameras.Length; i++)
-                {
-                    if (sceneCameras[i] == oldCamera)
-                    {
-                        currentIndex = i + 1;
-                        break;
-                    }
-                }
-
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(
-                    new GUIContent(
-                        $"Monitor {monitorIndex + 1} ({monitor.left}, {monitor.top})",
-                        "OS-reported monitor index and its top-left origin in pixel coordinates."
-                    ),
-                    GUILayout.Width(170)
-                );
-                int newIndex = EditorGUILayout.Popup(currentIndex, cameraOptions);
-                EditorGUILayout.EndHorizontal();
-
-                Camera newCamera = newIndex == 0 ? null : sceneCameras[newIndex - 1];
-
-                if (newCamera != null)
-                {
-                    EntityId entityId = newCamera.GetEntityId();
-                    bool alreadyUsed = false;
-                    foreach (Monitor otherMonitor in monitors)
-                    {
-                        if (otherMonitor.cameraEntityId == entityId)
-                        {
-                            alreadyUsed = true;
-                            break;
-                        }
-                    }
-                    if (!alreadyUsed)
-                    {
-                        monitor.cameraEntityId = entityId;
-                    }
-                }
-                else
-                {
-                    monitor.cameraEntityId = EntityId.None;
-                }
-                if (newCamera != oldCamera)
-                {
-                    SaveCameras();
-                }
+                RenderMonitorRow(monitorIndex, sceneCameras, cameraOptions);
             }
         }
 
@@ -164,10 +109,10 @@ namespace Gimbl
         /// </param>
         public void ShowFullScreenViews(bool closeOldViews)
         {
-            List<FullScreenView> existingViews = new List<FullScreenView>(FullScreenView.Views);
-            foreach (FullScreenView view in existingViews)
+            if (closeOldViews)
             {
-                if (closeOldViews)
+                List<FullScreenView> existingViews = new List<FullScreenView>(FullScreenView.Views);
+                foreach (FullScreenView view in existingViews)
                 {
                     view.Close();
                 }
@@ -175,24 +120,16 @@ namespace Gimbl
 
             foreach (Monitor monitor in monitors)
             {
-                Camera camera = (Camera)EditorUtility.EntityIdToObject(monitor.cameraEntityId);
-                if (camera != null)
+                Camera camera = GetCameraFor(monitor);
+                if (camera == null)
                 {
-                    FullScreenView window = EditorWindow.CreateInstance<FullScreenView>();
-
-                    float pixelsPerPointX = (monitor.left < 0) ? monitor.pixelsPerPoint : monitors[0].pixelsPerPoint;
-                    int windowX = (int)(monitor.left / pixelsPerPointX);
-                    float pixelsPerPointY = (monitor.top < 0) ? monitor.pixelsPerPoint : monitors[0].pixelsPerPoint;
-                    int windowY = (int)(monitor.top / pixelsPerPointY);
-
-                    int windowWidth = (int)(monitor.width / monitor.pixelsPerPoint);
-                    int windowHeight = (int)(monitor.height / monitor.pixelsPerPoint);
-
-                    window.position = new Rect(windowX, windowY, windowWidth, windowHeight);
-                    window.cameraEntityId = camera.GetEntityId();
-
-                    window.ShowPopup();
+                    continue;
                 }
+
+                FullScreenView window = EditorWindow.CreateInstance<FullScreenView>();
+                window.position = ComputeWindowRect(monitor);
+                window.cameraEntityId = camera.GetEntityId();
+                window.ShowPopup();
             }
         }
 
@@ -202,8 +139,8 @@ namespace Gimbl
             _savedFullScreenViews.cameraNames.Clear();
             for (int monitorIndex = 0; monitorIndex < monitors.Count; monitorIndex++)
             {
-                Camera camera = (Camera)EditorUtility.EntityIdToObject(monitors[monitorIndex].cameraEntityId);
-                string path = (camera != null) ? PathName(camera.gameObject) : "";
+                Camera camera = GetCameraFor(monitors[monitorIndex]);
+                string path = camera != null ? PathName(camera.gameObject) : string.Empty;
                 _savedFullScreenViews.cameraNames.Add(path);
             }
             AssetDatabase.Refresh();
@@ -249,6 +186,117 @@ namespace Gimbl
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
             }
+        }
+
+        /// <summary>Returns every Camera in the active scene that is not the Unity-default Main Camera.</summary>
+        /// <remarks>
+        /// Filters by tag and name so a stale Main Camera left over from a fresh scene template does not
+        /// appear in the dropdown when <see cref="MainWindow"/>'s removal pass has not yet run.
+        /// </remarks>
+        private static Camera[] EnumerateAssignableCameras()
+        {
+            return UnityEngine
+                .Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)
+                .Where(camera =>
+                    !camera.CompareTag("MainCamera")
+                    && !string.Equals(camera.gameObject.name, "Main Camera", System.StringComparison.Ordinal)
+                )
+                .ToArray();
+        }
+
+        /// <summary>Builds the dropdown <see cref="GUIContent"/> array for the supplied scene cameras.</summary>
+        /// <param name="cameras">The cameras to include after the leading "None" option.</param>
+        /// <returns>An array sized <c>cameras.Length + 1</c> with "None" at index 0.</returns>
+        private static GUIContent[] BuildCameraOptions(Camera[] cameras)
+        {
+            GUIContent[] options = new GUIContent[cameras.Length + 1];
+            options[0] = new GUIContent("None", CameraOptionTooltip);
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                options[i + 1] = new GUIContent(cameras[i].name, CameraOptionTooltip);
+            }
+            return options;
+        }
+
+        /// <summary>Renders the dropdown row for a single monitor and applies the user's selection.</summary>
+        /// <param name="monitorIndex">The index of the monitor being rendered.</param>
+        /// <param name="sceneCameras">The cameras presented in the dropdown.</param>
+        /// <param name="cameraOptions">The pre-built <see cref="GUIContent"/> dropdown entries.</param>
+        private void RenderMonitorRow(int monitorIndex, Camera[] sceneCameras, GUIContent[] cameraOptions)
+        {
+            Monitor monitor = monitors[monitorIndex];
+            Camera oldCamera = GetCameraFor(monitor);
+
+            int currentIndex = 0;
+            for (int i = 0; i < sceneCameras.Length; i++)
+            {
+                if (sceneCameras[i] == oldCamera)
+                {
+                    currentIndex = i + 1;
+                    break;
+                }
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(
+                new GUIContent(
+                    $"Monitor {monitorIndex + 1} ({monitor.left}, {monitor.top})",
+                    "OS-reported monitor index and its top-left origin in pixel coordinates."
+                ),
+                GUILayout.Width(170)
+            );
+            int newIndex = EditorGUILayout.Popup(currentIndex, cameraOptions);
+            EditorGUILayout.EndHorizontal();
+
+            Camera newCamera = newIndex == 0 ? null : sceneCameras[newIndex - 1];
+
+            if (newCamera != null)
+            {
+                EntityId entityId = newCamera.GetEntityId();
+                bool alreadyUsed = false;
+                foreach (Monitor otherMonitor in monitors)
+                {
+                    if (otherMonitor.cameraEntityId == entityId)
+                    {
+                        alreadyUsed = true;
+                        break;
+                    }
+                }
+                if (!alreadyUsed)
+                {
+                    monitor.cameraEntityId = entityId;
+                }
+            }
+            else
+            {
+                monitor.cameraEntityId = EntityId.None;
+            }
+            if (newCamera != oldCamera)
+            {
+                SaveCameras();
+            }
+        }
+
+        /// <summary>Resolves the camera currently bound to the supplied monitor, or null when unbound.</summary>
+        /// <param name="monitor">The monitor whose camera assignment is being read.</param>
+        /// <returns>The resolved camera, or null when the assignment is empty or the camera was destroyed.</returns>
+        private static Camera GetCameraFor(Monitor monitor)
+        {
+            return (Camera)EditorUtility.EntityIdToObject(monitor.cameraEntityId);
+        }
+
+        /// <summary>Computes the borderless-window rect for the supplied monitor, adjusted for DPI scale.</summary>
+        /// <param name="monitor">The monitor whose window position and size are being computed.</param>
+        /// <returns>The window rect in editor-space pixels.</returns>
+        private Rect ComputeWindowRect(Monitor monitor)
+        {
+            float pixelsPerPointX = monitor.left < 0 ? monitor.pixelsPerPoint : monitors[0].pixelsPerPoint;
+            float pixelsPerPointY = monitor.top < 0 ? monitor.pixelsPerPoint : monitors[0].pixelsPerPoint;
+            int windowX = (int)(monitor.left / pixelsPerPointX);
+            int windowY = (int)(monitor.top / pixelsPerPointY);
+            int windowWidth = (int)(monitor.width / monitor.pixelsPerPoint);
+            int windowHeight = (int)(monitor.height / monitor.pixelsPerPoint);
+            return new Rect(windowX, windowY, windowWidth, windowHeight);
         }
 
         /// <summary>Returns the full hierarchy path name for a GameObject.</summary>

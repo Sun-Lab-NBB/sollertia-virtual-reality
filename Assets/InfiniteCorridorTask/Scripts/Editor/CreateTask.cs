@@ -44,6 +44,24 @@ namespace SL.Tasks
         /// </remarks>
         private const string TemplateScenePath = "Assets/Scenes/ExperimentTemplate.unity";
 
+        /// <summary>The project-relative root folder for every InfiniteCorridorTask-owned asset.</summary>
+        private const string BaseFolder = "Assets/InfiniteCorridorTask";
+
+        /// <summary>The project-relative folder containing per-task YAML configuration templates.</summary>
+        private const string ConfigurationsFolder = BaseFolder + "/Configurations";
+
+        /// <summary>The project-relative folder holding generated and hand-authored segment prefabs.</summary>
+        private const string PrefabsFolder = BaseFolder + "/Prefabs";
+
+        /// <summary>The project-relative folder holding shared cue prefabs.</summary>
+        private const string CuesFolder = BaseFolder + "/Cues";
+
+        /// <summary>The project-relative folder holding shared cue, floor, and wall materials.</summary>
+        private const string MaterialsFolder = BaseFolder + "/Materials";
+
+        /// <summary>The project-relative folder holding cue textures referenced by templates.</summary>
+        private const string TexturesFolder = BaseFolder + "/Textures";
+
         /// <summary>The canonical reference material whose shader is reused by all generated cue materials.</summary>
         /// <remarks>
         /// This material lives in source control and is protected from deletion via the McpBridge's
@@ -54,8 +72,16 @@ namespace SL.Tasks
         /// fresh project clone produces visually identical cues without needing a pre-existing legacy
         /// material to bootstrap from.
         /// </remarks>
-        private const string CueShaderReferenceMaterialPath =
-            "Assets/InfiniteCorridorTask/Materials/_CueShaderReference.mat";
+        private const string CueShaderReferenceMaterialPath = MaterialsFolder + "/_CueShaderReference.mat";
+
+        /// <summary>The vertical offset for trigger-zone GameObjects, slightly above the segment floor.</summary>
+        private const float ZoneVerticalOffset = 0.505f;
+
+        /// <summary>The vertical center for cue walls, segment walls, and the reset-zone marker.</summary>
+        private const float WallVerticalCenter = 0.5f;
+
+        /// <summary>The Z-axis depth of guidance-zone box colliders inside lick and occupancy zones.</summary>
+        private const float GuidanceColliderDepth = 0.4f;
 
         /// <summary>
         /// Formats a cue's centimeter length as the suffix used in cue prefab and material filenames.
@@ -92,15 +118,14 @@ namespace SL.Tasks
         /// <param name="template">The template whose owned segment prefabs are removed.</param>
         private static void CleanGeneratedSegments(TaskTemplate template)
         {
-            string prefabsPath = "Assets/InfiniteCorridorTask/Prefabs/";
-
+            // The final AssetDatabase.SaveAssets + Refresh in BuildSegmentPrefabs flushes these deletions
+            // along with the subsequent cue and segment writes; skipping intermediate SaveAssets calls
+            // here keeps the generation pipeline to a single project-wide reimport rather than three.
             foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
                 string segmentName = CanonicalSegmentName(template, trialEntry.Key);
-                AssetDatabase.DeleteAsset(Path.Combine(prefabsPath, $"{segmentName}.prefab"));
+                AssetDatabase.DeleteAsset(Path.Combine(PrefabsFolder, $"{segmentName}.prefab"));
             }
-
-            AssetDatabase.SaveAssets();
         }
 
         /// <summary>
@@ -307,7 +332,7 @@ namespace SL.Tasks
             // CreateSceneFromTemplate's CopyAsset call will surface the failure.
             if (!AssetDatabase.IsValidFolder(TasksFolder))
             {
-                AssetDatabase.CreateFolder("Assets/InfiniteCorridorTask", "Tasks");
+                AssetDatabase.CreateFolder(BaseFolder, "Tasks");
             }
 
             string absoluteTemplatePath = Path.Combine(Application.dataPath, configPath);
@@ -399,10 +424,8 @@ namespace SL.Tasks
                 return "error: Failed to build segment prefabs.";
             }
 
-            string prefabsPath = "Assets/InfiniteCorridorTask/Prefabs/";
-
             // Loads padding prefab
-            string paddingPath = Path.Combine(prefabsPath, $"{template.vrEnvironment.paddingPrefabName}.prefab");
+            string paddingPath = Path.Combine(PrefabsFolder, $"{template.vrEnvironment.paddingPrefabName}.prefab");
             GameObject padding = AssetDatabase.LoadAssetAtPath<GameObject>(paddingPath);
 
             if (padding == null)
@@ -420,7 +443,7 @@ namespace SL.Tasks
             {
                 trials[i] = template.trialStructures[trialNames[i]];
                 string canonicalName = CanonicalSegmentName(template, trialNames[i]);
-                string segmentPath = Path.Combine(prefabsPath, $"{canonicalName}.prefab");
+                string segmentPath = Path.Combine(PrefabsFolder, $"{canonicalName}.prefab");
                 segmentPrefabs[i] = AssetDatabase.LoadAssetAtPath<GameObject>(segmentPath);
 
                 if (segmentPrefabs[i] == null)
@@ -430,7 +453,11 @@ namespace SL.Tasks
             }
 
             // Measures actual prefab lengths and compares with configuration
-            float[] measuredSegmentLengths = Utility.GetSegmentLengths(segmentPrefabs);
+            float[] measuredSegmentLengths = new float[segmentPrefabs.Length];
+            for (int i = 0; i < segmentPrefabs.Length; i++)
+            {
+                measuredSegmentLengths[i] = Utility.GetPrefabLength(segmentPrefabs[i]);
+            }
             float[] segmentLengths = template.GetSegmentLengthsUnity();
 
             for (int i = 0; i < trialCount; i++)
@@ -681,9 +708,6 @@ namespace SL.Tasks
         /// <returns>True if all required cue prefabs were built or already exist, false on error.</returns>
         private static bool BuildCuePrefabs(TaskTemplate template)
         {
-            string cuesPath = "Assets/InfiniteCorridorTask/Cues/";
-            string materialsPath = "Assets/InfiniteCorridorTask/Materials/";
-            string texturesPath = "Assets/InfiniteCorridorTask/Textures/";
             float cmPerUnit = template.vrEnvironment.cmPerUnityUnit;
 
             // Inherits the shader from the project's historical hand-authored cue materials so generated
@@ -691,12 +715,12 @@ namespace SL.Tasks
             // Materials/ folder and uses the legacy diffuse shader that handles the Right wall's negative
             // X scale correctly (the modern Standard and Unlit shaders both fail at this — Standard
             // breaks lit normals under inverted geometry, Unlit drops lighting entirely).
-            Shader cueShader = LoadReferenceCueShader(materialsPath);
+            Shader cueShader = LoadReferenceCueShader(MaterialsFolder + "/");
 
             // Ensures the Cues directory exists
-            if (!AssetDatabase.IsValidFolder("Assets/InfiniteCorridorTask/Cues"))
+            if (!AssetDatabase.IsValidFolder(CuesFolder))
             {
-                AssetDatabase.CreateFolder("Assets/InfiniteCorridorTask", "Cues");
+                AssetDatabase.CreateFolder(BaseFolder, "Cues");
             }
 
             Mesh quadMesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
@@ -707,7 +731,7 @@ namespace SL.Tasks
                 // (e.g., A at 30 cm in MF vs A at 40 cm in SSO) resolve to distinct prefabs and materials.
                 string lengthLabel = FormatCueLengthLabel(cue.lengthCm);
                 string cueAssetStem = $"Cue_{cue.name}_{lengthLabel}cm";
-                string cuePrefabPath = Path.Combine(cuesPath, $"{cueAssetStem}.prefab");
+                string cuePrefabPath = Path.Combine(CuesFolder, $"{cueAssetStem}.prefab");
 
                 if (AssetDatabase.LoadAssetAtPath<GameObject>(cuePrefabPath) != null)
                 {
@@ -718,7 +742,7 @@ namespace SL.Tasks
 
                 // Loads the shared texture once for both material variants.
                 Texture2D cueTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                    Path.Combine(texturesPath, cue.texture)
+                    Path.Combine(TexturesFolder, cue.texture)
                 );
                 if (cueTexture == null)
                 {
@@ -732,7 +756,7 @@ namespace SL.Tasks
                 // modern Standard shader breaks under negative scales (the lit normal does not invert
                 // with mesh winding), and Unlit shaders drop lighting entirely. Legacy/Diffuse retains
                 // the lit corridor feel while keeping the texture-mirror trick a single-material affair.
-                string materialPath = Path.Combine(materialsPath, $"{cueAssetStem}.mat");
+                string materialPath = Path.Combine(MaterialsFolder, $"{cueAssetStem}.mat");
                 Material cueMaterial = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
                 if (cueMaterial == null)
                 {
@@ -750,7 +774,7 @@ namespace SL.Tasks
 
                 GameObject right = new GameObject("Right");
                 right.transform.SetParent(cueGameObject.transform);
-                right.transform.localPosition = new Vector3(0.49f, 0.5f, lengthUnity / 2f);
+                right.transform.localPosition = new Vector3(0.49f, WallVerticalCenter, lengthUnity / 2f);
                 right.transform.localRotation = Quaternion.Euler(0, 90, 0);
                 right.transform.localScale = new Vector3(-lengthUnity, 1, 1);
                 right.AddComponent<MeshFilter>().sharedMesh = quadMesh;
@@ -758,7 +782,7 @@ namespace SL.Tasks
 
                 GameObject left = new GameObject("Left");
                 left.transform.SetParent(cueGameObject.transform);
-                left.transform.localPosition = new Vector3(-0.49f, 0.5f, lengthUnity / 2f);
+                left.transform.localPosition = new Vector3(-0.49f, WallVerticalCenter, lengthUnity / 2f);
                 left.transform.localRotation = Quaternion.Euler(0, -90, 0);
                 left.transform.localScale = new Vector3(lengthUnity, 1, 1);
                 left.AddComponent<MeshFilter>().sharedMesh = quadMesh;
@@ -770,8 +794,11 @@ namespace SL.Tasks
                 Debug.Log($"BuildCuePrefabs: Created {cuePrefabPath}");
             }
 
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+            // The cue prefabs are immediately discoverable via AssetDatabase.LoadAssetAtPath because
+            // PrefabUtility.SaveAsPrefabAsset registers each new asset on the spot. The project-wide
+            // SaveAssets + Refresh that BuildSegmentPrefabs runs at the end of the pipeline flushes
+            // every cue and segment write together, so the intermediate flush that used to live here
+            // is redundant.
             return true;
         }
 
@@ -786,9 +813,6 @@ namespace SL.Tasks
         /// <returns>True if all segment prefabs were built successfully, false on error.</returns>
         private static bool BuildSegmentPrefabs(TaskTemplate template)
         {
-            string prefabsPath = "Assets/InfiniteCorridorTask/Prefabs/";
-            string cuesPath = "Assets/InfiniteCorridorTask/Cues/";
-            string materialsPath = "Assets/InfiniteCorridorTask/Materials/";
             float cmPerUnit = template.vrEnvironment.cmPerUnityUnit;
             float cueOffsetUnity = template.vrEnvironment.CueOffsetUnity;
             Dictionary<string, Cue> cueMap = template.GetCueByName();
@@ -797,8 +821,10 @@ namespace SL.Tasks
             Mesh planeMesh = Resources.GetBuiltinResource<Mesh>("New-Plane.fbx");
 
             // Loads shared materials
-            Material floorMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(materialsPath, "Floor.mat"));
-            Material wallMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(materialsPath, "Wall.mat"));
+            Material floorMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                Path.Combine(MaterialsFolder, "Floor.mat")
+            );
+            Material wallMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(MaterialsFolder, "Wall.mat"));
 
             if (floorMaterial == null || wallMaterial == null)
             {
@@ -808,13 +834,13 @@ namespace SL.Tasks
 
             // Loads zone template prefabs
             GameObject stimulusZonePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                Path.Combine(prefabsPath, "StimulusTriggerZone.prefab")
+                Path.Combine(PrefabsFolder, "StimulusTriggerZone.prefab")
             );
             GameObject occupancyZonePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                Path.Combine(prefabsPath, "OccupancyTriggerZone.prefab")
+                Path.Combine(PrefabsFolder, "OccupancyTriggerZone.prefab")
             );
             GameObject resetZonePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                Path.Combine(prefabsPath, "ResetZone.prefab")
+                Path.Combine(PrefabsFolder, "ResetZone.prefab")
             );
 
             foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
@@ -822,7 +848,7 @@ namespace SL.Tasks
                 string trialName = trialEntry.Key;
                 TrialStructure trial = trialEntry.Value;
                 string canonicalSegmentName = CanonicalSegmentName(template, trialName);
-                string segmentPrefabPath = Path.Combine(prefabsPath, $"{canonicalSegmentName}.prefab");
+                string segmentPrefabPath = Path.Combine(PrefabsFolder, $"{canonicalSegmentName}.prefab");
 
                 // Calculates total segment length in Unity units
                 float totalLengthUnity = trial.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit));
@@ -840,7 +866,7 @@ namespace SL.Tasks
                     float cueLengthUnity = cue.LengthUnity(cmPerUnit);
 
                     string lengthLabel = FormatCueLengthLabel(cue.lengthCm);
-                    string cuePrefabPath = Path.Combine(cuesPath, $"Cue_{cueName}_{lengthLabel}cm.prefab");
+                    string cuePrefabPath = Path.Combine(CuesFolder, $"Cue_{cueName}_{lengthLabel}cm.prefab");
                     GameObject cuePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(cuePrefabPath);
 
                     if (cuePrefab == null)
@@ -873,7 +899,7 @@ namespace SL.Tasks
 
                 GameObject leftWall = new GameObject("LeftWall");
                 leftWall.transform.SetParent(walls.transform);
-                leftWall.transform.localPosition = new Vector3(-0.5f, 0.5f, totalLengthUnity / 2f);
+                leftWall.transform.localPosition = new Vector3(-0.5f, WallVerticalCenter, totalLengthUnity / 2f);
                 leftWall.transform.localRotation = Quaternion.Euler(0, -90, 0);
                 leftWall.transform.localScale = new Vector3(totalLengthUnity, 1, 1);
                 leftWall.AddComponent<MeshFilter>().sharedMesh = quadMesh;
@@ -881,7 +907,7 @@ namespace SL.Tasks
 
                 GameObject rightWall = new GameObject("RightWall");
                 rightWall.transform.SetParent(walls.transform);
-                rightWall.transform.localPosition = new Vector3(0.5f, 0.5f, totalLengthUnity / 2f);
+                rightWall.transform.localPosition = new Vector3(0.5f, WallVerticalCenter, totalLengthUnity / 2f);
                 rightWall.transform.localRotation = Quaternion.Euler(0, 90, 0);
                 rightWall.transform.localScale = new Vector3(totalLengthUnity, 1, 1);
                 rightWall.AddComponent<MeshFilter>().sharedMesh = quadMesh;
@@ -927,7 +953,7 @@ namespace SL.Tasks
                 {
                     GameObject resetZone = PrefabUtility.InstantiatePrefab(resetZonePrefab) as GameObject;
                     resetZone.transform.SetParent(segmentGameObject.transform);
-                    resetZone.transform.localPosition = new Vector3(0, 0.5f, cueOffsetUnity);
+                    resetZone.transform.localPosition = new Vector3(0, WallVerticalCenter, cueOffsetUnity);
                 }
 
                 PrefabUtility.SaveAsPrefabAsset(segmentGameObject, segmentPrefabPath);
@@ -962,15 +988,9 @@ namespace SL.Tasks
         {
             GameObject zone = PrefabUtility.InstantiatePrefab(zonePrefab) as GameObject;
             zone.transform.SetParent(parent.transform);
-            zone.transform.localPosition = new Vector3(0, 0.505f, zoneCenterUnity);
+            zone.transform.localPosition = new Vector3(0, ZoneVerticalOffset, zoneCenterUnity);
 
-            // Configures root BoxCollider to span the trigger zone
-            BoxCollider rootCollider = zone.GetComponent<BoxCollider>();
-            if (rootCollider != null)
-            {
-                rootCollider.size = new Vector3(1, 1, zoneSizeUnity);
-                rootCollider.center = Vector3.zero;
-            }
+            ConfigureRootZoneCollider(zone, zoneSizeUnity);
 
             // Configures GuidanceRegion at the stimulus location
             GuidanceZone guidanceZone = zone.GetComponentInChildren<GuidanceZone>();
@@ -979,7 +999,7 @@ namespace SL.Tasks
                 BoxCollider guidanceCollider = guidanceZone.GetComponent<BoxCollider>();
                 if (guidanceCollider != null)
                 {
-                    guidanceCollider.size = new Vector3(1, 1, 0.4f);
+                    guidanceCollider.size = new Vector3(1, 1, GuidanceColliderDepth);
                     guidanceCollider.center = new Vector3(0, 0, stimulusLocationUnity - zoneCenterUnity);
                 }
             }
@@ -1017,15 +1037,9 @@ namespace SL.Tasks
 
             GameObject zone = PrefabUtility.InstantiatePrefab(zonePrefab) as GameObject;
             zone.transform.SetParent(parent.transform);
-            zone.transform.localPosition = new Vector3(0, 0.505f, rootZ);
+            zone.transform.localPosition = new Vector3(0, ZoneVerticalOffset, rootZ);
 
-            // Configures root BoxCollider (stimulus boundary trigger area)
-            BoxCollider rootCollider = zone.GetComponent<BoxCollider>();
-            if (rootCollider != null)
-            {
-                rootCollider.size = new Vector3(1, 1, zoneSizeUnity);
-                rootCollider.center = Vector3.zero;
-            }
+            ConfigureRootZoneCollider(zone, zoneSizeUnity);
 
             // Configures OccupancyRegion to cover the occupancy zone range
             float occupancyCenterOffset = zoneCenterUnity - rootZ;
@@ -1048,11 +1062,11 @@ namespace SL.Tasks
                 BoxCollider occupancyGuidanceCollider = occupancyGuidanceZone.GetComponent<BoxCollider>();
                 if (occupancyGuidanceCollider != null)
                 {
-                    occupancyGuidanceCollider.size = new Vector3(1, 1, 0.4f);
+                    occupancyGuidanceCollider.size = new Vector3(1, 1, GuidanceColliderDepth);
                     occupancyGuidanceCollider.center = new Vector3(
                         0,
                         0,
-                        occupancyCenterOffset + zoneSizeUnity / 2f - 0.2f
+                        occupancyCenterOffset + zoneSizeUnity / 2f - GuidanceColliderDepth / 2f
                     );
                 }
             }
@@ -1062,6 +1076,23 @@ namespace SL.Tasks
             if (stimulusZone != null)
             {
                 stimulusZone.showBoundary = showBoundary;
+            }
+        }
+
+        /// <summary>
+        /// Resizes a zone GameObject's root <see cref="BoxCollider"/> to span the supplied length and
+        /// recenters it on the local origin. Used by both <see cref="PlaceLickZone"/> and
+        /// <see cref="PlaceOccupancyZone"/> to apply identical root-collider geometry.
+        /// </summary>
+        /// <param name="zone">The zone GameObject whose root BoxCollider is being adjusted.</param>
+        /// <param name="zoneSizeUnity">The desired Z-axis length of the zone in Unity units.</param>
+        private static void ConfigureRootZoneCollider(GameObject zone, float zoneSizeUnity)
+        {
+            BoxCollider rootCollider = zone.GetComponent<BoxCollider>();
+            if (rootCollider != null)
+            {
+                rootCollider.size = new Vector3(1, 1, zoneSizeUnity);
+                rootCollider.center = Vector3.zero;
             }
         }
 
