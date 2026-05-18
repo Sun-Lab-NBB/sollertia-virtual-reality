@@ -2,232 +2,364 @@
 
 ## Session start behavior
 
-At the beginning of each coding session, before making any code changes, you should build a comprehensive
-understanding of the codebase by invoking the `/explore-codebase` skill (automation plugin).
+At the beginning of each coding session, before making any code changes, you should build a comprehensive understanding
+of the codebase by invoking the `/explore-codebase` skill (`automation` plugin).
 
 This ensures you:
 - Understand the Unity project architecture before modifying code
 - Follow existing patterns and conventions
-- Don't introduce inconsistencies or break MQTT integrations
+- Do not introduce inconsistencies or break the MQTT contract with `sollertia-experiment`
 
 ## Style guide compliance
 
-Before writing, modifying, or reviewing code or documentation, invoke the style skill that matches the file type.
-These skills live in the ataraxis marketplace **automation** plugin:
+You MUST invoke the appropriate skill before performing ANY of the following tasks:
 
-| File type                  | Skill             |
-|----------------------------|-------------------|
-| C# source files (`.cs`)    | `/csharp-style`   |
-| README (`README.md`)       | `/readme-style`   |
-| Skill / CLAUDE.md files    | `/skill-design`   |
-| Git commit messages        | `/commit`         |
-| Project directory layout   | `/project-layout` |
+| Task                                       | Skill to invoke   |
+|--------------------------------------------|-------------------|
+| Writing or modifying C# code               | `/csharp-style`   |
+| Writing or modifying README files          | `/readme-style`   |
+| Writing git commit messages                | `/commit`         |
+| Writing or modifying skill files / this MD | `/skill-design`   |
+| Creating or verifying project structure    | `/project-layout` |
 
-Every contribution must follow the applicable style conventions and every review must check for compliance. Key C#
-conventions include:
-- XML documentation comments with `<summary>`, `<param>`, `<returns>` tags
-- Private fields with `_camelCase`, public members with `PascalCase`
-- Allman brace style (braces on new lines)
-- Third person imperative mood for comments and documentation
-- 120 character line limit enforced by CSharpier
-- Commit messages use past tense verbs (Added, Fixed, Updated) and end with periods
+Each skill contains a verification checklist that you MUST complete before submitting any work. Failure to invoke the
+appropriate skill results in style violations that block release.
 
 ## Cross-referenced library verification
 
-Sollertia platform projects often depend on other `ataraxis-*` or `sollertia-*` libraries. These libraries may be stored
-locally in the same parent directory as this project (`/home/cyberaxolotl/Desktop/GitHubRepos/`).
+This project depends on `sollertia-shared-assets` (which relays MCP tool calls into the `McpBridge` HTTP listener) and
+exchanges MQTT 5.0 traffic with `sollertia-experiment`. Local clones of both libraries typically live alongside this
+repository under `/home/cyberaxolotl/Desktop/GitHubRepos/`.
 
 **Before writing code that interacts with a cross-referenced library, you MUST:**
 
-1. **Check for local version**: Look for the library in the parent directory (e.g.,
-   `../sollertia-shared-assets/`, `../sollertia-experiment/`).
+1. **Check for local version**: Look for the library in the parent directory (e.g., `../sollertia-shared-assets/`,
+   `../sollertia-experiment/`).
 
-2. **Compare versions**: If a local copy exists, compare its version against the latest release or
-   main branch on GitHub:
-   - Read the local package.json or version file to get the current version
+2. **Compare versions**: If a local copy exists, compare its version against the latest release or main branch on
+   GitHub:
+   - Read the local `pyproject.toml` to get the current version
    - Use `gh api repos/Sun-Lab-NBB/{repo-name}/releases/latest` to check the latest release
+   - Alternatively, check the main branch version on GitHub
 
-3. **Handle version mismatches**: If the local version differs from the latest release, notify the
-   user with the following options:
+3. **Handle version mismatches**: If the local version differs from the latest release or main branch, notify the user
+   with the following options:
    - **Use online version**: Fetch documentation and API details from the GitHub repository
    - **Update local copy**: The user will pull the latest changes locally before proceeding
 
-4. **Proceed with correct source**: Use whichever version the user selects as the authoritative
-   reference for API usage, patterns, and documentation.
+4. **Proceed with correct source**: Use whichever version the user selects as the authoritative reference for API
+   usage, patterns, and documentation.
 
-**Why this matters**: Skills and documentation may reference outdated APIs. Always verify against the
-actual library state to prevent integration errors.
+**Why this matters**: Skills and documentation may reference outdated APIs. Always verify against the actual library
+state to prevent integration errors.
 
 ## Available skills
 
-Agentic coverage for this project is split across three plugin sources. Install the sollertia marketplace's `unity`
-and `assets` plugins together with the ataraxis marketplace's `automation` plugin to make all skills available.
+Agentic coverage for this project is distributed across two marketplaces. Install the sollertia marketplace's `unity`
+and `assets` plugins together with the ataraxis marketplace's `automation` plugin to make the full skill set available.
+The `unity` plugin depends on the `assets` plugin for the backing `slsa mcp` server that drives the `McpBridge` relay.
 
 ### Unity Editor skills (sollertia marketplace, `unity` plugin)
 
-| Skill                            | Purpose                                                                    |
-|----------------------------------|----------------------------------------------------------------------------|
-| `/unity-mcp-environment-setup`   | Diagnoses the `localhost:8090` McpBridge relay                             |
-| `/scenes`                        | Lists / opens / creates scenes and enumerates Unity assets                 |
-| `/task-prefabs`                  | Generates, inspects, and validates task prefabs from YAML templates        |
-| `/play-mode`                     | Enters, exits, and queries Editor Play Mode                                |
-| `/mqtt-contract`                 | Documents every MQTT topic Unity publishes or subscribes to                |
-| `/task-generator`                | Documents the `CreateTask` pipeline and hand-authored segment prefab layout|
-| `/gimbl-framework`               | Reference for the embedded GIMBL VR framework (Actor, MQTT, Displays)      |
-| `/scene-setup`                   | Configures Display rig, `SimulatedLinearTreadmill`, and UI feedback canvas |
+| Skill                          | Description                                                                |
+|--------------------------------|----------------------------------------------------------------------------|
+| `/unity-mcp-environment-setup` | Diagnose the `localhost:8090` `McpBridge` HTTP relay                       |
+| `/scenes`                      | List, open, and create Unity scenes; enumerate Unity assets                |
+| `/task-prefabs`                | Generate, inspect, validate, and delete task prefabs from YAML templates   |
+| `/zone-prefabs`                | Manufacture new hand-authored trigger zone prefabs by copying and editing  |
+| `/task-parameters`             | Read and write the consolidated `Window → Task Parameters` editor surface  |
+| `/play-mode`                   | Enter, exit, and query Editor Play Mode                                    |
+| `/mqtt-contract`               | Authoritative catalog of every MQTT topic Unity publishes or subscribes to |
+| `/task-generator`              | Reference for the `CreateTask` pipeline and hand-authored zone prefabs     |
+| `/gimbl-framework`             | Reference for the inlined GIMBL VR framework (Actor, MQTT, Displays)       |
+| `/scene-setup`                 | Configure the Display rig, controllers, and UI feedback via Task Parameters|
 
 ### Configuration and experiment skills (sollertia marketplace, `assets` plugin)
 
-| Skill                         | Purpose                                                                    |
-|-------------------------------|----------------------------------------------------------------------------|
-| `/task-templates`             | Authors and validates `TaskTemplate` YAML files under `Configurations/`    |
-| `/experiment-configuration`   | Authors per-project experiment configurations that reference a template    |
-| `/assets-mcp-environment-setup`     | Diagnoses the backing `slsa mcp` MCP server                                |
+| Skill                           | Description                                                              |
+|---------------------------------|--------------------------------------------------------------------------|
+| `/task-templates`               | Author and validate reusable Unity `TaskTemplate` YAMLs                  |
+| `/experiment-configuration`     | Author per-project experiment configurations that reference a template   |
+| `/library-extension`            | Orchestrate cross-cutting changes to extend the shared-assets vocabulary |
+| `/assets-mcp-environment-setup` | Diagnose and resolve `slsa mcp` server connectivity issues               |
 
 ### Shared development skills (ataraxis marketplace, `automation` plugin)
 
-| Skill                | Purpose                                                        |
-|----------------------|----------------------------------------------------------------|
-| `/explore-codebase`  | Builds a comprehensive codebase understanding at session start |
-| `/csharp-style`      | Applies C# conventions, including Unity-specific patterns      |
-| `/readme-style`      | Applies README conventions                                     |
-| `/commit`            | Drafts style-compliant commit messages                         |
-| `/skill-design`      | Authors new skills and CLAUDE.md files                         |
-| `/project-layout`    | Applies directory-structure conventions (C# Unity archetype)   |
+| Skill               | Description                                                                |
+|---------------------|----------------------------------------------------------------------------|
+| `/explore-codebase` | Perform in-depth codebase exploration at session start                     |
+| `/csharp-style`     | Apply Sun Lab C# coding conventions (REQUIRED for C# changes)              |
+| `/readme-style`     | Apply Sun Lab README conventions (REQUIRED for README changes)             |
+| `/commit`           | Draft Sun Lab style-compliant git commit messages                          |
+| `/skill-design`     | Generate, update, and verify skill files and this CLAUDE.md                |
+| `/project-layout`   | Apply Sun Lab project directory structure conventions (C# Unity archetype) |
 
-## Skill workflow guide
+You MUST invoke `/library-extension` (assets plugin) when adding a new `TriggerType` member or otherwise extending the
+shared-assets template vocabulary, because the Python registry parity check on the `slsa mcp` side fails at import time
+if any downstream entry is missing. The Unity counterpart of such a change is captured in the extension contracts table
+below.
 
-Combine skills for common tasks:
+## MCP server
 
-| Task type                        | Skills to invoke (in order)                                                |
-|----------------------------------|----------------------------------------------------------------------------|
-| Session start                    | `/explore-codebase`                                                        |
-| Writing C# code                  | `/csharp-style` (plus `/mqtt-contract` for MQTT-adjacent changes)          |
-| Authoring a new YAML template    | `/task-templates` (assets plugin), then `/task-prefabs` to validate        |
-| Creating a task prefab           | `/task-prefabs` (generate → inspect → validate)                            |
-| Modifying a segment prefab       | `/task-generator`, then `/task-prefabs` to revalidate                      |
-| Adding or changing MQTT topics   | `/mqtt-contract` (cross-check with sollertia-experiment expectations)      |
-| Setting up a scene for testing   | `/scenes`, then `/scene-setup` for displays + simulated treadmill          |
-| Exercising a task in Play Mode   | `/play-mode`                                                               |
-| Writing / updating README        | `/readme-style`                                                            |
-| Writing commit messages          | `/commit`                                                                  |
-| Creating or modifying skills     | `/skill-design`                                                            |
+This project does not host a standalone MCP server. Instead, the `McpBridge` editor plugin
+(`Assets/InfiniteCorridorTask/Scripts/Editor/McpBridge.cs`) starts an HTTP listener on `127.0.0.1:8090`, `[::1]:8090`,
+and `localhost:8090` when the Unity Editor loads. The backing MCP server is `slsa mcp` from `sollertia-shared-assets`;
+its `interfaces/unity_tools.py` module relays each tool call to the bridge over HTTP and surfaces the JSON response back
+to the agent.
 
-**Workflow examples:**
+The bridge dispatches **14 tools** in `McpBridge.Dispatch` (`McpBridge.cs` switch expression around line 180). Tools
+are grouped here by concern but live side by side in the same dispatcher:
 
-1. **New coding session**: Invoke `/explore-codebase` first to understand the project, then the style skill that
-   matches the file type you will edit.
+| Category               | Tool                               | Description                                                          |
+|------------------------|------------------------------------|----------------------------------------------------------------------|
+| Task prefab generation | `generate_task_prefab`             | Build cues, segments, and the task prefab from a YAML template       |
+| Task prefab generation | `validate_prefab_against_template` | Compare cue inventory, segment lengths, cue order, and zone geometry |
+| Asset inspection       | `inspect_prefab`                   | Return hierarchy, components, and BoxCollider details for a prefab   |
+| Asset inspection       | `list_unity_assets`                | List assets by type filter within a search path                      |
+| Asset lifecycle        | `delete_unity_asset`               | Delete a regenerable asset (refuses hand-authored protected paths)   |
+| Scene management       | `list_scenes`                      | Enumerate every `.unity` asset and report the active scene           |
+| Scene management       | `open_scene`                       | Open a scene with explicit `unsaved_changes` policy                  |
+| Scene management       | `create_scene`                     | Copy `ExperimentTemplate.unity` and optionally add a task prefab     |
+| Scene management       | `inspect_scene`                    | Return the active scene's root hierarchy and dirty flag              |
+| Play Mode control      | `enter_play_mode`                  | Trigger `EditorApplication.EnterPlaymode`                            |
+| Play Mode control      | `exit_play_mode`                   | Trigger `EditorApplication.ExitPlaymode`                             |
+| Play Mode control      | `get_play_state`                   | Return `playing`, `compiling`, or `edit` plus the active scene name  |
+| Task Parameters        | `read_task_parameters`             | Snapshot Actor, MQTT, Display, Camera Mapping, and Task fields       |
+| Task Parameters        | `write_task_parameters`            | Apply a subset of Task Parameters fields and return the new snapshot |
 
-2. **Adding a new task template**: Invoke `/task-templates` (assets plugin) to author the YAML, then `/task-prefabs`
-   to generate and validate the corresponding Unity prefab.
+Project conventions for bridge tools:
+- The HTTP listener captures requests on a worker thread and the editor thread drains a `ConcurrentQueue` via
+  `EditorApplication.update`. Tool handlers run on the editor thread and may call Unity APIs freely.
+- Every response is built through the shared `Ok(payload)` / `Error(message)` helpers, which serialize through
+  `MiniJson` and always include a `success` boolean. Match this contract when adding new tools.
+- `delete_unity_asset` is bounded by `DeleteAllowedPrefixes` (regenerable directories) and `DeleteProtectedPaths`
+  (hand-authored anchors) declared at the top of `McpBridge.cs`. Adding a regenerable directory requires extending the
+  allow list; protecting a new hand-authored asset requires extending the protected set. Both lists also reject path
+  traversal and absolute paths.
+- `read_task_parameters` and `write_task_parameters` share a single `AcquireSceneComponents` walk per request so reads
+  and writes operate on a consistent snapshot of the active scene.
 
-3. **Fixing a bug in `Task.cs`**: If unfamiliar with the codebase, invoke `/explore-codebase`. Then invoke
-   `/csharp-style` and `/mqtt-contract` (if MQTT wiring is involved) before editing.
+For bridge connectivity issues (Editor not running, port 8090 not reachable), invoke `/unity-mcp-environment-setup`.
+For backing `slsa mcp` issues, invoke `/assets-mcp-environment-setup`.
 
-4. **Updating README documentation**: Invoke `/explore-codebase` to understand the current implementation, then
-   `/readme-style`. Cross-reference every technical claim against actual source files before publishing.
+## Downstream library integration
 
-## Related libraries
+This project is one corner of the Sollertia data-acquisition triangle. Changes to MQTT topics, YAML schema, or the
+bridge surface ripple through the other two libraries:
 
-This project integrates with other Sollertia platform libraries:
+- **sollertia-experiment** (acquisition runtime). The MQTT counterparty for every topic in `MQTTTopics`. Owns the
+  publish side of `CueSequenceTrigger`, `SceneNameTrigger`, `RequireLick`, `RequireWait`, `Motion`, and the hardware
+  side of `Lick`. Subscribes to `SessionStart`, `SessionStop`, `Stimulus`, `Delay`, `CueSequence`, and `SceneName`.
+  Topic renames here require an in-lockstep update on the experiment side; the `/mqtt-contract` skill is the canonical
+  index for both ends.
+- **sollertia-shared-assets** (configuration schema and MCP relay). Owns the Python `TaskTemplate`, `Cue`,
+  `TrialStructure`, and `VREnvironment` `YamlConfig` classes; the C# classes under
+  `Assets/InfiniteCorridorTask/Scripts/` mirror that schema. `interfaces/unity_tools.py` is the HTTP client for
+  `McpBridge`. Adding a new bridge tool requires a matching `@mcp.tool()` wrapper in `unity_tools.py`. Schema changes
+  (a new YAML field) must land in both repositories before the templates that use them parse successfully.
 
-| Library                      | Relationship          | Integration points                                    |
-|------------------------------|-----------------------|-------------------------------------------------------|
-| `sollertia-experiment`       | Data acquisition      | MQTT communication, cue sequence exchange, scene info |
-| `sollertia-shared-assets`    | Configuration schemas | Task template and experiment configuration classes    |
-| `GIMBL` (inlined)            | VR framework          | `ActorObject`, `MQTTChannel`, `Display` system        |
-
-**When working on MQTT integration**, invoke the `/mqtt-contract` skill first — it is the source of truth for topic
-names, payload shapes, and direction (publisher vs listener). The same topics must match `sollertia-experiment`
-expectations on the other side.
+You MUST treat the C# `TaskTemplate`, `Cue`, `TrialStructure`, and `VREnvironment` classes as a mirror of their Python
+originals. When the Python schema gains a field, update the C# class with a matching `[Serializable]` field; the YAML
+deserializer is configured for `UnderscoredNamingConvention`, so the C# member name must be the camelCase counterpart
+of the underscored YAML key (e.g., `cue_offset_cm` becomes `cueOffsetCm`).
 
 ## Project context
 
-This is **sollertia-unity-tasks**, a Unity 6 project that provides VR behavioral experiment tasks for the Sollertia
-platform's mesoscope data acquisition systems. It creates infinite corridor environments where animals navigate through
-visual cue sequences while receiving stimuli based on behavior.
+This is **sollertia-unity-tasks**, a Unity 6 C# project that produces VR behavioral tasks for the Sollertia mesoscope
+data-acquisition platform. It is part of the Sollertia AI-assisted scientific data acquisition and processing platform,
+built on the Ataraxis framework, and developed in the Sun (NeuroAI) lab at Cornell University. Tasks are infinite linear
+corridors built from prefabricated visual cue segments and driven over MQTT 5.0 by `sollertia-experiment`.
 
 ### Key areas
 
-| Directory                                     | Purpose                                     |
-|-----------------------------------------------|---------------------------------------------|
-| `Assets/InfiniteCorridorTask/Scripts/`        | Core C# scripts for task logic              |
-| `Assets/InfiniteCorridorTask/Scripts/Editor/` | `McpBridge` HTTP listener and MiniJson      |
-| `Assets/InfiniteCorridorTask/Configurations/` | YAML task template files                    |
-| `Assets/InfiniteCorridorTask/Prefabs/`        | Segment and zone prefabs                    |
-| `Assets/InfiniteCorridorTask/Tasks/`          | Generated task prefabs                      |
-| `Assets/UI-lick-reward/`                      | UI feedback system for lick/stimulus events |
-| `Assets/Gimbl/`                               | Inlined GIMBL VR framework                  |
-| `Assets/Scenes/`                              | Scene assets (including `ExperimentTemplate.unity`) |
+| Directory                                     | Purpose                                                                |
+|-----------------------------------------------|------------------------------------------------------------------------|
+| `Assets/InfiniteCorridorTask/Scripts/`        | Runtime C# (`Task`, zones, `ConfigLoader`, schema mirror classes)      |
+| `Assets/InfiniteCorridorTask/Scripts/Editor/` | `CreateTask`, `McpBridge`, `TaskEditor`, `MiniJson`                    |
+| `Assets/InfiniteCorridorTask/Configurations/` | YAML task templates                                                    |
+| `Assets/InfiniteCorridorTask/Cues/`           | Generated cue prefabs (length-suffixed, shared across templates)       |
+| `Assets/InfiniteCorridorTask/Prefabs/`        | Hand-authored zone prefabs and generated segment prefabs               |
+| `Assets/InfiniteCorridorTask/Tasks/`          | Generated task prefabs (one per template)                              |
+| `Assets/InfiniteCorridorTask/Materials/`      | Generated cue materials and the canonical `_CueShaderReference.mat`    |
+| `Assets/InfiniteCorridorTask/Textures/`       | Cue textures referenced by YAML templates                              |
+| `Assets/UI-lick-reward/`                      | On-screen lick and stimulus feedback canvas                            |
+| `Assets/Gimbl/Scripts/`                       | Inlined GIMBL runtime (Actor, Controllers, Displays, MQTT)             |
+| `Assets/Gimbl/Editor/`                        | `MainWindow` Task Parameters editor window                             |
+| `Assets/Scenes/`                              | `ExperimentTemplate.unity` plus per-task generated scenes              |
+| `Assets/Plugins/`                             | Inlined `MQTTnet.dll` and `YamlDotNet.dll`                             |
 
 ### Architecture
 
-- **Task system**: MonoBehaviour-based controller managing corridor generation and animal tracking
-- **Zone system**: Hierarchical zone components (`StimulusTriggerZone`, `GuidanceZone`, `OccupancyZone`)
-- **MQTT integration**: Type-safe channels for communication with sollertia-experiment
-- **Configuration**: YAML-based task templates loaded at runtime
-- **Prefab generation**: `CreateTask` editor tool and `McpBridge` relay create task prefabs from template files
-- **Editor MCP bridge**: HTTP listener on `localhost:8090` that exposes 12 Unity Editor operations to MCP clients
+- **Schema mirror**: `TaskTemplate`, `Cue`, `TrialStructure`, and `VREnvironment` under
+  `Assets/InfiniteCorridorTask/Scripts/` mirror the Python `YamlConfig` classes in `sollertia-shared-assets`.
+  `ConfigLoader.LoadTemplate` deserializes via `YamlDotNet` using `UnderscoredNamingConvention` and validates cue
+  codes, the trial-name pattern `^[A-Za-z0-9_]+$`, the `trigger_type` literal set, transition-target existence, and the
+  per-trial transition-probability sum.
+- **Task runtime**: `Task` (`Assets/InfiniteCorridorTask/Scripts/Task.cs`) is a `MonoBehaviour` attached to the
+  generated task prefab. `Start` loads the YAML, builds a `_corridorMap` keyed by a base-`trialCount` integer encoding
+  of the current segment combination, pre-generates the random maze sequence with an optional seed, and opens MQTT
+  channels for cue sequence requests, scene name requests, and lick / wait toggles. `Update` checks the actor's local
+  Z position against the current corridor's first-segment length and teleports the actor to the next corridor when
+  the segment is traversed.
+- **Zone composition**: `StimulusTriggerZone` switches between lick and occupancy modes based on the presence of a
+  `GuidanceZone` or `OccupancyZone` child. `OccupancyGuidanceZone` lives under `OccupancyZone` and publishes `Delay`
+  (carrying the remaining occupancy duration in milliseconds) when the animal enters in guidance mode. `ResetZone`
+  discovers every `IResettable` in the scene at `Start` and resets state on each lap.
+- **CreateTask pipeline**: `CreateTask.CreateFromTemplate` runs a cross-template cue-texture preflight, regenerates
+  every segment prefab the template owns, reuses or rebuilds cue prefabs keyed by `(name, lengthCm)`, instantiates the
+  full corridor combination tree, places trigger and reset zones according to each trial's `trigger_type`, and saves a
+  task prefab at `Assets/InfiniteCorridorTask/Tasks/{templateName}.prefab`. The Editor menu wraps this with a scene
+  copy from `ExperimentTemplate.unity` and a `MainWindow.EnsureControllers` call that auto-adds both the hardware and
+  the simulated linear treadmill controllers.
+- **Task Parameters window**: `MainWindow` (`Assets/Gimbl/Editor/MainWindow.cs`) is a single consolidated editor window
+  registered under `Window → Task Parameters` that exposes the Actor, MQTT, Display, Camera Mapping, and Task fields
+  for the active scene. `TaskEditor` replaces the default `Task` Inspector with a HelpBox pointing at this window so
+  every task field is configured through `MainWindow`, not the Inspector.
+- **MQTT client**: `MQTTClient` (`Assets/Gimbl/Scripts/MQTT/MQTTClient.cs`) wraps `MQTTnet` in MQTT 5.0 mode
+  (`MqttProtocolVersion.V500`), loads broker IP and port from `EditorPrefs`, and falls back to `127.0.0.1:1883` when
+  unset. `MQTTChannel<TMessage>` deserializes JSON payloads via `UnityEngine.JsonUtility`. When the broker is
+  unreachable, `MQTTClient.Publish` routes messages in-process so keyboard-only test runs still reach local subscribers
+  (for example, `LickStimulusSpawner`).
+- **HTTP MCP relay**: `McpBridge` is an `[InitializeOnLoad]` static class that drains an `HttpListener` queue on
+  `EditorApplication.update`, deserializes the JSON request via `MiniJson`, dispatches to one of 14 tool handlers, and
+  returns a JSON response built by `Ok(...)` or `Error(...)`. The relay surface is owned by this repository; the
+  Python wrapper lives in `sollertia-shared-assets/src/sollertia_shared_assets/interfaces/unity_tools.py`.
 
-### Key patterns
+### Extension contracts
 
-- **MQTT event system**: `MQTTChannel` and `MQTTChannel<T>` for type-safe messaging
-- **Corridor teleportation**: Animals teleport between corridor combinations as they progress
-- **Zone hierarchy**: Parent-child zone relationships determine stimulus behavior modes
-- **Template-driven tasks**: YAML files define all task parameters; no hardcoded values
+The project exposes six concentrated extension points. Each one has a matching skill and, where applicable, a Python
+counterpart in `sollertia-shared-assets`.
+
+| Extension                | Touch points                                                                  | Skill              |
+|--------------------------|-------------------------------------------------------------------------------|--------------------|
+| New task template        | YAML in `Configurations/`; `/task-prefabs` to materialize cues and segments   | `/task-templates`  |
+| New cue texture          | PNG in `Textures/`; reference it from a YAML `texture` field                  | `/task-templates`  |
+| New trigger zone type    | Zone script + prefab + `ConfigLoader` literal + `CreateTask` branch + Python  | `/zone-prefabs`    |
+| New MQTT topic           | `MQTTTopics` constant + publisher and subscriber on both Unity and experiment | `/mqtt-contract`   |
+| New `McpBridge` tool     | `Dispatch` case + handler method + `@mcp.tool()` wrapper in `unity_tools.py`  | n/a (manual)       |
+| New treadmill controller | `ControllerObject` subclass + `ControllerTypes` enum entry                    | `/gimbl-framework` |
+
+Detailed checklists for the non-trivial extensions:
+
+- **New task template**: Place the YAML under `Assets/InfiniteCorridorTask/Configurations/` using the
+  `ProjectAbbreviation_TaskDescription.yaml` naming convention. The header must include `Project`, `Purpose`, `Layout`,
+  and `Related` fields as YAML comments. Run `generate_task_prefab_tool` from `/task-prefabs` to materialize the cue,
+  segment, and task prefabs, then `validate_prefab_against_template_tool` to confirm cue order, segment Z-length, and
+  zone geometry match the template.
+- **New trigger zone type**: Author the new modifier `MonoBehaviour` under
+  `Assets/InfiniteCorridorTask/Scripts/` (implementing `IResettable` if it holds per-lap state). Invoke
+  `/zone-prefabs` to copy the closest canonical template (`StimulusTriggerZone.prefab` for lick mode or
+  `OccupancyTriggerZone.prefab` for occupancy mode), swap the modifier script GUIDs, rename regions, and override
+  field defaults; the skill owns the YAML-edit workflow and the `inspect_prefab_tool` validation step. Then wire the
+  new prefab into the runtime: add a literal branch to `ConfigLoader.ValidateTemplate`; extend
+  `McpBridge.DeleteProtectedPaths` to protect the new prefab; add a `Place...Zone` helper in `CreateTask.cs` and
+  dispatch to it from `BuildSegmentPrefabs` (see `/task-generator`); invoke `/library-extension` (assets plugin) for
+  the Python `TriggerType` registry update and the import-time parity check.
+- **New MQTT topic**: Add a `public const string` constant to `Assets/Gimbl/Scripts/MQTT/MQTTTopics.cs` with
+  `Direction`, `Payload`, and `Callers` remarks; subscribe or publish from the appropriate runtime script; coordinate a
+  matching publisher or subscriber in `sollertia-experiment` in the same release; update the `/mqtt-contract` skill
+  catalog so both repositories share a single source of truth.
+- **New `McpBridge` tool**: Add a new switch case in `McpBridge.Dispatch`; implement a
+  `private static string ToolName(Dictionary<string, object> args)` method that returns `Ok(...)` or `Error(...)`;
+  if the tool reads or writes scene state, fold it into `AcquireSceneComponents` and `BuildSnapshot` so
+  `read_task_parameters` keeps reflecting the full surface; add a wrapper `@mcp.tool()` function under
+  `sollertia-shared-assets/src/sollertia_shared_assets/interfaces/unity_tools.py`; update this CLAUDE.md's MCP server
+  table and the README's MCP Bridge table in the same change.
+- **New treadmill controller**: Subclass `ControllerObject`; if the new controller adds an MQTT subscription, hide
+  `Start` per the `LinearTreadmill` / `SimulatedLinearTreadmill` non-chaining contract documented inline in
+  `LinearTreadmill.cs`; add an entry to the `ControllerTypes` enum (the only required registry — `MainWindow` resolves
+  the runtime type via reflection from the enum name); add a display-name case to `MainWindow.BuildControllerSpecs`
+  if the enum-to-display mapping is not the default `ToString` value.
 
 ### Code standards
 
-- CSharpier formatter with 120 character line limit
-- EditorConfig enforcing Allman brace style and naming conventions
-- XML documentation for all public and private members
-- See `/csharp-style` for the complete convention reference
+- Unity `6000.3.15f1` (Unity 6); the project compiles against the `.NET 4.x` profile shipped with Unity.
+- Apache 2.0 licensed; the license string lives in `LICENSE`.
+- 120 character line limit enforced by CSharpier (`.csharpierrc.yaml`); naming, brace style, and spacing enforced by
+  `.editorconfig`.
+- Allman brace style; `_camelCase` private fields; PascalCase public properties and methods; camelCase Inspector
+  fields (for example, `public bool requireLick;`); XML documentation on every public and private member.
+- See `/csharp-style` for the complete conventions and verification checklist.
 
-## Formatting
+### Project-specific conventions
 
-Run CSharpier before committing changes:
+- **Hand-authored vs generated assets**: `Padding.prefab`, `ResetZone.prefab`, `StimulusTriggerZone.prefab`,
+  `OccupancyTriggerZone.prefab`, `Materials/_CueShaderReference.mat`, and `Scenes/ExperimentTemplate.unity` are
+  hand-authored. Everything under `Cues/`, every segment prefab under `Prefabs/`, every `Cue_*_*cm.mat` material under
+  `Materials/`, every prefab under `Tasks/`, and every scene other than `ExperimentTemplate.unity` is generated by
+  `CreateTask`. Hand-authored assets are protected from `delete_unity_asset` by `McpBridge.DeleteProtectedPaths`; you
+  MUST NOT remove entries from that list to weaken the protections.
+- **Cue identity**: Cue prefabs and materials are keyed by `(cue.name, cue.length_cm)` and shared across templates.
+  `CreateTask.ValidateCueDefinitionsAcrossTemplates` runs before any mutation and refuses to generate when two
+  templates declare the same `(name, length)` pair with different textures. Resolve the conflict by renaming the cue,
+  changing its length, or unifying the textures; do NOT bypass the preflight.
+- **Segment regeneration**: `CreateTask.CleanGeneratedSegments` deletes every segment prefab the template owns before
+  each generation pass so trial-parameter edits never produce stale geometry under an unchanged
+  `TemplateName_TrialName` filename. Cue prefabs and materials are preserved across runs; only segments are
+  always-regenerate.
+- **MQTT topics**: Topics are flat PascalCase identifiers with no hierarchical separators, declared as
+  `public const string` in `MQTTTopics.cs`. Match this convention when adding new topics, and update both the Unity
+  publisher / subscriber list and the `sollertia-experiment` counterpart in the same release.
+- **Inspector vs Parameters window**: The `Task` component's public fields are `[HideInInspector]` and `TaskEditor`
+  replaces the default Inspector with a pointer to `Window → Task Parameters`. Configure every task field through
+  `MainWindow`, not the Inspector.
+- **MQTT 5.0 only**: The client connects with `MqttProtocolVersion.V500`. Brokers must accept MQTT 5.0 connections
+  (Mosquitto `2.0+`). This matches the `sollertia-experiment` MQTT runtime.
+
+### Workflow guidance
+
+**Authoring a new task template:**
+
+1. Invoke `/task-templates` (assets plugin) for the YAML schema and file-naming convention.
+2. Place the YAML under `Assets/InfiniteCorridorTask/Configurations/` with the `Project / Purpose / Layout / Related`
+   header comments.
+3. Invoke `/task-prefabs` and run `generate_task_prefab_tool` to materialize the cue, segment, and task prefabs.
+4. Run `validate_prefab_against_template_tool` from the same skill to confirm cue order, segment Z-length, and zone
+   geometry match the template.
+
+**Modifying a runtime zone or `Task.cs`:**
+
+1. Invoke `/csharp-style` and, when the change touches MQTT, `/mqtt-contract`.
+2. Read the affected script under `Assets/InfiniteCorridorTask/Scripts/`.
+3. Preserve the `IResettable` contract on any zone that needs per-lap state reset.
+4. Run CSharpier (`csharpier .`) before committing.
+
+**Modifying the `CreateTask` pipeline or `McpBridge`:**
+
+1. Invoke `/task-generator` for the prefab-generation pipeline; read `McpBridge.cs` directly for the relay surface.
+2. Keep the cross-template cue-texture preflight intact; new branches must run after the preflight, not before.
+3. New `delete_unity_asset` paths require additions to `DeleteAllowedPrefixes`; new hand-authored assets require
+   additions to `DeleteProtectedPaths`. Updating one without the other leaves the bridge unsafe.
+4. For new tools, also update
+   `sollertia-shared-assets/src/sollertia_shared_assets/interfaces/unity_tools.py`.
+
+**Adding or modifying MQTT topics:**
+
+1. Invoke `/mqtt-contract`. The skill is the source of truth for direction, payload shape, and counterparties.
+2. Add or rename the constant in `Assets/Gimbl/Scripts/MQTT/MQTTTopics.cs` and update every publisher and subscriber
+   that references it. The `Direction`, `Payload`, and `Callers` remarks on each constant must stay accurate.
+3. Open an issue or matching PR on `sollertia-experiment` so the counterpart subscribes or publishes under the same
+   name in the same release.
+
+**Reading or writing Task Parameters programmatically:**
+
+1. Invoke `/task-parameters`. The skill owns `read_task_parameters_tool` and `write_task_parameters_tool` and is the
+   sole programmatic entry point for the Actor / MQTT / Display / Camera Mapping / Task fields (the Inspector is
+   replaced by a HelpBox pointing at `Window → Task Parameters`).
+2. Always read the current snapshot before writing — the response includes `options` (the allow-list for each enum
+   field) and `visibility` (whether each conditionally-rendered control is currently rendered). Writes that violate
+   either are rejected by the bridge with a descriptive error.
+3. Editor-time writes to `task.require_lick` / `task.require_wait` are zone-gated; for mid-run toggles, publish on
+   the `RequireLick` / `RequireWait` MQTT topics instead (see `/mqtt-contract`).
+
+**Running CSharpier and the Editor generation flow:**
 
 ```bash
-# Format all files
-csharpier .
-
-# Check without modifying (CI mode)
-csharpier --check .
+csharpier .                       # Format every C# file under the repository
+csharpier --check .               # Verify formatting without modifying (CI mode)
 ```
 
-## Task template workflow
-
-Task template files follow:
-- **Naming convention**: `ProjectAbbreviation_TaskDescription.yaml` (e.g., `SSO_Merging.yaml`)
-- **Header format**: Each file must include Project, Purpose, Layout, and Related fields as YAML comments
-- **Template name derivation**: The template name and Unity scene name are derived from the filename
-
-See `/task-templates` (assets plugin) for the complete YAML authoring reference, and `/task-prefabs` for the Unity
-generation and validation surface.
-
-### Validating templates against prefabs
-
-The `unity:task-prefabs` skill owns `validate_prefab_against_template_tool`, which is the **only** mechanism for
-verifying that prefabs match the template. The validator reports per-cue prefab existence plus per-segment match flags
-for cue ordering, segment Z-length, and zone positions. Use it after any template or segment prefab change. Do not
-attempt to reconstruct validation by reading prefab YAML manually — the MCP validator is the single source of truth.
-Existing cue and segment prefabs are reused by `generate_task_prefab_tool`; force regeneration after a template edit
-by deleting the affected prefabs via `delete_unity_asset_tool` (also owned by `/task-prefabs`) before re-running
-generation.
-
-## Creating new tasks
-
-1. Create or modify a YAML task template file in `Assets/InfiniteCorridorTask/Configurations/`
-2. Generate and validate via `/task-prefabs` (`generate_task_prefab_tool` → `validate_prefab_against_template_tool`)
-3. Or use the Editor menu directly: `CreateTask → New Task`, select the YAML file, and save the generated prefab
-4. Create a scene via `/scenes` (`create_scene_tool` with `task_prefab_path`) or from `ExperimentTemplate` in the Editor
-
-## Testing workflow
-
-1. Open a scene containing the task prefab via `/scenes` (`open_scene_tool`; pass `unsaved_changes="save"` or
-   `"discard"` if the active scene is dirty — the tool returns an error otherwise so the user can choose)
-2. Assign an Actor in the Task Inspector
-3. Configure displays via `Window → Task Parameters` (opens the consolidated Parameters window — see `/scene-setup`)
-4. Use `SimulatedLinearTreadmill` for manual testing without hardware (see `/scene-setup`)
-5. Enter Play Mode via `/play-mode` and exercise the task with keyboard input
-6. Monitor MQTT topics with an external client for debugging (topic catalog in `/mqtt-contract`)
+The Editor menu `CreateTask → New Task` invokes the full generation pipeline (template selection → prefab build →
+scene copy → save). The MCP path is equivalent: `generate_task_prefab_tool` produces the prefab and `create_scene_tool`
+copies the scene. Both flows share `CreateTask.CreateFromTemplate` and `CreateTask.CreateSceneFromTemplate`, so the
+agentic and manual paths produce byte-equivalent assets.
