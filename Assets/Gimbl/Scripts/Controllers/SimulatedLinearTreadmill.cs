@@ -5,7 +5,6 @@
 /// messages, enabling testing without physical hardware.
 /// </summary>
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace Gimbl
 {
@@ -17,13 +16,13 @@ namespace Gimbl
         /// <summary>The movement speed multiplier for input scaling.</summary>
         private const float MovementSpeedMultiplier = 8.0f;
 
-        /// <summary>The Unity Input System action map for keyboard/mouse simulation.</summary>
+        /// <summary>The Unity Input System action map for keyboard simulation.</summary>
         private SimulatedInput _input;
 
         /// <summary>The MQTT channel for sending simulated lick trigger events.</summary>
         private MQTTChannel _lickTrigger;
 
-        /// <summary>Initializes the Input System for keyboard/mouse simulation on start.</summary>
+        /// <summary>Initializes the Input System for keyboard simulation on start.</summary>
         private void Start()
         {
             _input = new SimulatedInput();
@@ -32,16 +31,14 @@ namespace Gimbl
         }
 
         /// <summary>Processes simulated input and movement each frame.</summary>
+        /// <remarks>
+        /// The lick trigger fires on every press of the Jump action (spacebar), routed through
+        /// <see cref="_lickTrigger"/> to the <see cref="MQTTTopics.Lick"/> channel.
+        /// </remarks>
         public override void Update()
         {
             GetSimulatedInput();
-            if (
-                actor != null
-                && (
-                    _input.Player.Jump.WasPressedThisFrame()
-                    || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-                )
-            )
+            if (actor != null && _input.Player.Jump.WasPressedThisFrame())
             {
                 _lickTrigger?.Send();
             }

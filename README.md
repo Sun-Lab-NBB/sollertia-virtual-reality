@@ -226,8 +226,8 @@ and the camera-to-monitor mapping is scene-bound — a mismatch causes the wrong
 monitor.
 
 For manual testing without hardware, select **Simulated Linear** as the Actor's controller. The
-`SimulatedLinearTreadmill` reads keyboard input via the Unity Input System and publishes synthetic `Lick` messages on
-jump key or left mouse button press.
+`SimulatedLinearTreadmill` reads keyboard input via the Unity Input System and publishes a synthetic `Lick` message
+on every press of the Jump action (spacebar).
 
 ### MQTT Contract
 

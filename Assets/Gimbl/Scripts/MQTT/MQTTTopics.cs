@@ -53,8 +53,8 @@ namespace Gimbl
         /// <summary>Lick-port event indicating the animal licked the spout.</summary>
         /// <remarks>
         /// Direction: bidirectional. Hardware lickports publish from sollertia-experiment;
-        /// <see cref="SimulatedLinearTreadmill"/> publishes synthetic licks (jump key or left mouse)
-        /// for keyboard-only test runs.
+        /// <see cref="SimulatedLinearTreadmill"/> publishes synthetic licks on the Jump action
+        /// (spacebar) for keyboard-only test runs.
         /// Payload: empty trigger (no body).
         /// Callers (subscribe): <see cref="SL.UI.LickStimulusSpawner"/>,
         /// <see cref="SL.Tasks.StimulusTriggerZone"/>.
