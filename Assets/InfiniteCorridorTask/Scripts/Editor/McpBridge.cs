@@ -34,14 +34,21 @@ namespace SL.Tasks
         /// <summary>The tolerance for comparing measured prefab lengths against configured lengths.</summary>
         private const float LengthComparisonEpsilon = 0.01f;
 
-        /// <summary>The set of project-relative directory prefixes under which assets may be deleted.</summary>
+        /// <summary>
+        /// The set of project-relative directory prefixes under which non-scene assets may be deleted via
+        /// <c>delete_unity_asset</c>.
+        /// </summary>
+        /// <remarks>
+        /// Scenes are intentionally absent — they are deleted exclusively through <see cref="DeleteScene"/>,
+        /// which also cascade-deletes the per-scene <c>savedFullScreenViews</c> companion. Adding a scenes
+        /// entry here would let scene paths bypass that cascade.
+        /// </remarks>
         private static readonly string[] DeleteAllowedPrefixes =
         {
             "Assets/InfiniteCorridorTask/Tasks/",
             "Assets/InfiniteCorridorTask/Prefabs/",
             "Assets/InfiniteCorridorTask/Cues/",
             "Assets/InfiniteCorridorTask/Materials/",
-            "Assets/Scenes/",
         };
 
         /// <summary>The set of hand-authored asset paths that are protected from deletion.</summary>
@@ -190,14 +197,13 @@ namespace SL.Tasks
         {
             return tool switch
             {
-                "generate_task_prefab" => GenerateTaskPrefab(args),
+                "create_task" => GenerateTask(args),
+                "delete_task" => DestroyTask(args),
                 "inspect_prefab" => InspectPrefab(args),
-                "validate_prefab_against_template" => ValidatePrefabAgainstTemplate(args),
-                "delete_unity_asset" => DeleteUnityAsset(args),
-                "list_unity_assets" => ListUnityAssets(args),
+                "delete_asset" => DeleteAsset(args),
+                "list_assets" => ListAssets(args),
                 "list_scenes" => ListScenes(),
                 "open_scene" => OpenScene(args),
-                "create_scene" => CreateScene(args),
                 "inspect_scene" => InspectScene(),
                 "enter_play_mode" => EnterPlayMode(),
                 "exit_play_mode" => ExitPlayMode(),
@@ -209,14 +215,24 @@ namespace SL.Tasks
         }
 
         /// <summary>
-        /// Generates a Task prefab from a YAML template by delegating to CreateTask.CreateFromTemplate.
+        /// Generates a Task end-to-end from a YAML template: builds the task prefab and the matching scene
+        /// in one call by chaining <see cref="CreateTask.CreateFromTemplate"/> and
+        /// <see cref="CreateTask.CreateSceneFromTemplate"/>.
         /// </summary>
-        /// <param name="args">The tool arguments containing template_name and optional save_path.</param>
-        /// <returns>A JSON response with the generated prefab path or an error message.</returns>
-        private static string GenerateTaskPrefab(Dictionary<string, object> args)
+        /// <remarks>
+        /// Mirrors the <c>CreateTask/New Task</c> Editor menu so the agentic and manual paths produce
+        /// byte-equivalent assets. The prefab lands at <c>Assets/InfiniteCorridorTask/Tasks/&lt;template&gt;.prefab</c>
+        /// and the scene at <c>Assets/Scenes/&lt;template&gt;.unity</c>; both paths are auto-resolved from the
+        /// template basename to eliminate the agentic surface's need to manage them separately. Refuses to
+        /// clobber an existing scene at the resolved path so an automated client never silently destroys a
+        /// hand-edited scene — use <c>delete_scene</c> first to regenerate. The prefab itself is always
+        /// regenerated because the template is authoritative.
+        /// </remarks>
+        /// <param name="args">The tool arguments containing template_name.</param>
+        /// <returns>A JSON response with the generated prefab and scene paths or an error message.</returns>
+        private static string GenerateTask(Dictionary<string, object> args)
         {
             string templateName = GetString(args, "template_name");
-            string savePath = GetString(args, "save_path", defaultValue: "");
 
             if (string.IsNullOrEmpty(templateName))
             {
@@ -240,13 +256,20 @@ namespace SL.Tasks
             // Path.Combine treat the value as absolute on Linux/macOS and discard the data path.
             string relativeConfigPath = Path.Combine("InfiniteCorridorTask", "Configurations", $"{templateName}.yaml");
 
-            if (string.IsNullOrEmpty(savePath))
+            string prefabSavePath = Path.Combine("Assets", "InfiniteCorridorTask", "Tasks", $"{templateName}.prefab");
+            string sceneSavePath = Path.Combine("Assets", "Scenes", $"{templateName}.unity");
+
+            // Refuses to clobber an existing scene before generating the prefab so a regeneration cycle
+            // is an explicit two-step action: delete_scene first, then create_task. Checking up front
+            // avoids leaving a regenerated prefab behind without the matching scene on overwrite refusal.
+            if (File.Exists(sceneSavePath))
             {
-                savePath = Path.Combine("Assets", "InfiniteCorridorTask", "Tasks", $"{templateName}.prefab");
+                string message = $"Scene already exists at: {sceneSavePath}. Call delete_scene first to regenerate.";
+                return Error(message);
             }
 
-            // Ensures the Tasks output directory exists
-            string tasksDirectory = Path.GetDirectoryName(savePath);
+            // Ensures the Tasks output directory exists before CreateFromTemplate writes the prefab.
+            string tasksDirectory = Path.GetDirectoryName(prefabSavePath);
             if (!string.IsNullOrEmpty(tasksDirectory) && !AssetDatabase.IsValidFolder(tasksDirectory))
             {
                 string parent = Path.GetDirectoryName(tasksDirectory);
@@ -257,21 +280,132 @@ namespace SL.Tasks
                 }
             }
 
-            string result = CreateTask.CreateFromTemplate(absoluteTemplatePath, relativeConfigPath, savePath);
+            string prefabResult = CreateTask.CreateFromTemplate(
+                absoluteTemplatePath,
+                relativeConfigPath,
+                prefabSavePath
+            );
 
-            if (result.StartsWith(CreateTaskErrorPrefix, StringComparison.Ordinal))
+            if (prefabResult.StartsWith(CreateTaskErrorPrefix, StringComparison.Ordinal))
             {
-                return Error(result.Substring(CreateTaskErrorPrefix.Length).Trim());
+                return Error(prefabResult.Substring(CreateTaskErrorPrefix.Length).Trim());
             }
 
-            return Ok(
-                new Dictionary<string, object>
-                {
-                    { "message", result },
-                    { "prefab_path", savePath },
-                    { "template_name", templateName },
-                }
+            CreateTask.SceneCreationResult sceneResult = CreateTask.CreateSceneFromTemplate(
+                sceneSavePath: sceneSavePath,
+                taskPrefabPath: prefabSavePath,
+                overwriteExisting: false
             );
+
+            if (!sceneResult.Success)
+            {
+                string message =
+                    $"Prefab generated at {prefabSavePath} but scene creation failed: {sceneResult.Message}";
+                return Error(message);
+            }
+
+            Dictionary<string, object> response = new Dictionary<string, object>
+            {
+                { "message", sceneResult.Message },
+                { "template_name", templateName },
+                { "prefab_path", prefabSavePath },
+                { "scene_path", sceneSavePath },
+                { "simulated_controller_added", sceneResult.SimulatedControllerAdded },
+            };
+
+            return Ok(response);
+        }
+
+        /// <summary>
+        /// Removes every Unity artifact that <see cref="GenerateTask"/> produces for a given template in a
+        /// single call: the scene plus its <c>savedFullScreenViews</c> companion, the task prefab, and
+        /// every segment prefab whose filename begins with the template basename.
+        /// </summary>
+        /// <remarks>
+        /// Mirrors <c>create_task</c> so the two tools cover the full lifecycle of a task's generated
+        /// artifacts. Cue prefabs and cue materials are intentionally **not** removed because they are
+        /// shared across every template that declares a matching <c>(name, length_cm)</c> identity;
+        /// deleting them would corrupt sibling tasks. Use <c>delete_unity_asset</c> for individual cue
+        /// cleanup. The template YAML is also preserved as the source of truth.
+        /// </remarks>
+        /// <param name="args">The tool arguments containing template_name.</param>
+        /// <returns>A JSON response listing every deleted path or an error message.</returns>
+        private static string DestroyTask(Dictionary<string, object> args)
+        {
+            string templateName = GetString(args, "template_name");
+
+            if (string.IsNullOrEmpty(templateName))
+            {
+                return Error("Missing required argument: template_name");
+            }
+
+            string scenePath = Path.Combine("Assets", "Scenes", $"{templateName}.unity");
+            string prefabPath = Path.Combine("Assets", "InfiniteCorridorTask", "Tasks", $"{templateName}.prefab");
+            string segmentPrefix = $"Assets/InfiniteCorridorTask/Prefabs/{templateName}_";
+
+            List<string> deletedPaths = new List<string>();
+            string companionDeleted = null;
+
+            // Deletes the scene first so Unity can release the active-scene lock before any prefab the
+            // scene instantiates is removed. The active-scene swap mirrors DeleteScene.
+            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(scenePath) != null)
+            {
+                Scene activeScene = SceneManager.GetActiveScene();
+                if (string.Equals(activeScene.path, scenePath, StringComparison.Ordinal))
+                {
+                    EditorSceneManager.OpenScene("Assets/Scenes/ExperimentTemplate.unity", OpenSceneMode.Single);
+                }
+                if (AssetDatabase.DeleteAsset(scenePath))
+                {
+                    deletedPaths.Add(scenePath);
+                    companionDeleted = TryDeleteScenePerSceneCompanions(scenePath);
+                }
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(prefabPath) != null)
+            {
+                if (AssetDatabase.DeleteAsset(prefabPath))
+                {
+                    deletedPaths.Add(prefabPath);
+                }
+            }
+
+            // Sweeps every segment prefab whose filename begins with ``<template>_``. Filenames are owned
+            // outright by the template basename + trial key, so a prefix match is sufficient to identify
+            // segment prefabs without cross-checking the template YAML.
+            string[] guids = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/InfiniteCorridorTask/Prefabs" });
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!path.StartsWith(segmentPrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (AssetDatabase.DeleteAsset(path))
+                {
+                    deletedPaths.Add(path);
+                }
+            }
+
+            AssetDatabase.Refresh();
+
+            if (deletedPaths.Count == 0)
+            {
+                return Error($"No artifacts found for template '{templateName}'.");
+            }
+
+            Dictionary<string, object> response = new Dictionary<string, object>
+            {
+                { "message", $"Deleted task: {templateName}" },
+                { "template_name", templateName },
+                { "deleted_paths", deletedPaths },
+                { "deleted", true },
+            };
+            if (companionDeleted != null)
+            {
+                response["companion_deleted"] = companionDeleted;
+            }
+            return Ok(response);
         }
 
         /// <summary>Reads a prefab and returns its hierarchy, components, and zone configuration.</summary>
@@ -297,158 +431,35 @@ namespace SL.Tasks
             return Ok(new Dictionary<string, object> { { "prefab_path", prefabPath }, { "hierarchy", hierarchy } });
         }
 
-        /// <summary>
-        /// Validates that the prefabs match the template's cue inventory, segment geometry, and zone positions.
-        /// </summary>
-        /// <param name="args">The tool arguments containing template_name.</param>
-        /// <returns>A JSON response with cue prefab existence and per-segment validation results.</returns>
-        private static string ValidatePrefabAgainstTemplate(Dictionary<string, object> args)
-        {
-            string templateName = GetString(args, "template_name");
-
-            if (string.IsNullOrEmpty(templateName))
-            {
-                return Error("Missing required argument: template_name");
-            }
-
-            string absoluteTemplatePath = Path.Combine(
-                Application.dataPath,
-                "InfiniteCorridorTask",
-                "Configurations",
-                $"{templateName}.yaml"
-            );
-
-            if (!File.Exists(absoluteTemplatePath))
-            {
-                return Error($"Template not found: {absoluteTemplatePath}");
-            }
-
-            TaskTemplate template;
-            try
-            {
-                template = ConfigLoader.LoadTemplate(absoluteTemplatePath);
-            }
-            catch (Exception exception)
-            {
-                return Error($"Failed to load template: {exception.Message}");
-            }
-
-            string prefabsPath = "Assets/InfiniteCorridorTask/Prefabs/";
-            string cuesPath = "Assets/InfiniteCorridorTask/Cues/";
-            float cmPerUnit = template.vrEnvironment.cmPerUnityUnit;
-            float[] expectedSegmentLengthsUnity = template.GetSegmentLengthsUnity();
-
-            // Reports cue prefab existence on disk so callers can spot missing assets without walking each segment.
-            // Mirrors the length-suffixed path produced by CreateTask.BuildCuePrefabs so cues that share a letter
-            // across templates resolve to distinct assets.
-            List<Dictionary<string, object>> cuePrefabResults = new List<Dictionary<string, object>>();
-            foreach (Cue cue in template.cues)
-            {
-                string lengthLabel = CreateTask.FormatCueLengthLabel(cue.lengthCm);
-                string cuePrefabPath = Path.Combine(cuesPath, $"Cue_{cue.name}_{lengthLabel}cm.prefab");
-                bool exists = AssetDatabase.LoadAssetAtPath<GameObject>(cuePrefabPath) != null;
-                cuePrefabResults.Add(
-                    new Dictionary<string, object>
-                    {
-                        { "cue_name", cue.name },
-                        { "prefab_path", cuePrefabPath },
-                        { "exists", exists },
-                    }
-                );
-            }
-
-            List<Dictionary<string, object>> trialResults = new List<Dictionary<string, object>>();
-            string[] trialNames = template.GetTrialNames();
-            for (int trialIndex = 0; trialIndex < trialNames.Length; trialIndex++)
-            {
-                string trialName = trialNames[trialIndex];
-                TrialStructure trial = template.trialStructures[trialName];
-                // Segment prefab filenames follow ``TemplateName_TrialName`` so the canonical name is derived
-                // directly from the template name and the trial key — no geometry encoding is involved.
-                string canonicalSegmentName = CreateTask.CanonicalSegmentName(template, trialName);
-                string segmentPath = Path.Combine(prefabsPath, $"{canonicalSegmentName}.prefab");
-                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(segmentPath);
-
-                Dictionary<string, object> trialResult = new Dictionary<string, object>
-                {
-                    { "trial", trialName },
-                    { "canonical_name", canonicalSegmentName },
-                    { "prefab_exists", prefab != null },
-                };
-
-                if (prefab == null)
-                {
-                    trialResults.Add(trialResult);
-                    continue;
-                }
-
-                // Compares the cue ordering encoded in the prefab against the trial's cue sequence.
-                List<string> actualCueOrder = GetCueOrderFromSegmentPrefab(prefab);
-                trialResult["cue_order"] = actualCueOrder;
-                trialResult["expected_cue_order"] = trial.cueSequence;
-                trialResult["cue_order_match"] = actualCueOrder.SequenceEqual(trial.cueSequence);
-
-                // Compares the prefab's measured z-axis length against the configured cue-sum length.
-                float measuredLengthUnity = Utility.GetPrefabLength(prefab);
-                float expectedLengthUnity = expectedSegmentLengthsUnity[trialIndex];
-                trialResult["segment_length_unity"] = measuredLengthUnity;
-                trialResult["expected_segment_length_unity"] = expectedLengthUnity;
-                trialResult["segment_length_match"] =
-                    Mathf.Abs(measuredLengthUnity - expectedLengthUnity) < LengthComparisonEpsilon;
-
-                // Compares the StimulusTriggerZone position and size against the trial's expected values.
-                StimulusTriggerZone zone = prefab.GetComponentInChildren<StimulusTriggerZone>();
-                trialResult["has_zone"] = zone != null;
-
-                if (zone != null)
-                {
-                    float actualZ = zone.transform.localPosition.z;
-                    BoxCollider zoneCollider = zone.GetComponent<BoxCollider>();
-                    float actualSize = zoneCollider != null ? zoneCollider.size.z : 0f;
-
-                    float expectedCenter =
-                        (trial.stimulusTriggerZoneStartCm + trial.stimulusTriggerZoneEndCm) / (2f * cmPerUnit);
-                    float expectedSize =
-                        (trial.stimulusTriggerZoneEndCm - trial.stimulusTriggerZoneStartCm) / cmPerUnit;
-
-                    trialResult["zone_z"] = actualZ;
-                    trialResult["expected_zone_z"] = expectedCenter;
-                    trialResult["zone_size"] = actualSize;
-                    trialResult["expected_zone_size"] = expectedSize;
-                    trialResult["zone_z_match"] = Mathf.Abs(actualZ - expectedCenter) < LengthComparisonEpsilon;
-                    trialResult["zone_size_match"] = Mathf.Abs(actualSize - expectedSize) < LengthComparisonEpsilon;
-                }
-
-                trialResults.Add(trialResult);
-            }
-
-            return Ok(
-                new Dictionary<string, object>
-                {
-                    { "template_name", templateName },
-                    { "cue_prefabs", cuePrefabResults },
-                    { "trials", trialResults },
-                }
-            );
-        }
-
         /// <summary>Deletes a Unity asset within an allowed directory and refreshes the AssetDatabase.</summary>
         /// <remarks>
-        /// Scenes under <c>Assets/Scenes/</c> own a per-scene companion asset at
-        /// <c>Assets/VRSettings/Displays/&lt;scene&gt;-savedFullScreenViews.asset</c> that persists the
-        /// camera-to-monitor mapping. The companion is cascade-deleted here so the regenerable scene
-        /// and its per-scene state are wiped atomically; callers see the cascade in the response's
-        /// <c>companion_deleted</c> field when it fires.
+        /// Scoped to regenerable non-scene assets — primarily cue prefabs and cue materials that the
+        /// <see cref="GenerateTask"/> pipeline shares across templates and therefore cannot scrub
+        /// per-task. Scene deletion is handled exclusively by <see cref="DestroyTask"/>, which removes
+        /// the scene plus its <c>savedFullScreenViews</c> companion atomically; scene paths submitted
+        /// here are rejected with a pointer at <c>delete_task</c> so scene cleanup never bypasses the
+        /// companion cascade.
         /// </remarks>
         /// <param name="args">The tool arguments containing asset_path.</param>
         /// <returns>A JSON response confirming deletion or an error message.</returns>
-        private static string DeleteUnityAsset(Dictionary<string, object> args)
+        private static string DeleteAsset(Dictionary<string, object> args)
         {
             string assetPath = GetString(args, "asset_path");
 
             if (string.IsNullOrEmpty(assetPath))
             {
                 return Error("Missing required argument: asset_path");
+            }
+
+            if (
+                assetPath.StartsWith("Assets/Scenes/", StringComparison.Ordinal)
+                && assetPath.EndsWith(".unity", StringComparison.Ordinal)
+            )
+            {
+                string message =
+                    $"Refusing to delete scene '{assetPath}' via delete_asset. Use delete_task to remove a "
+                    + "task's scene together with its task prefab and segment prefabs in one atomic call.";
+                return Error(message);
             }
 
             if (!IsDeleteAllowed(assetPath))
@@ -471,21 +482,16 @@ namespace SL.Tasks
                 return Error($"Failed to delete asset at: {assetPath}");
             }
 
-            string companionDeleted = TryDeleteScenePerSceneCompanions(assetPath);
-
             AssetDatabase.Refresh();
 
-            Dictionary<string, object> response = new Dictionary<string, object>
-            {
-                { "message", $"Deleted asset: {assetPath}" },
-                { "asset_path", assetPath },
-                { "deleted", true },
-            };
-            if (companionDeleted != null)
-            {
-                response["companion_deleted"] = companionDeleted;
-            }
-            return Ok(response);
+            return Ok(
+                new Dictionary<string, object>
+                {
+                    { "message", $"Deleted asset: {assetPath}" },
+                    { "asset_path", assetPath },
+                    { "deleted", true },
+                }
+            );
         }
 
         /// <summary>Deletes per-scene companion assets when a scene under Assets/Scenes/ is removed.</summary>
@@ -517,12 +523,12 @@ namespace SL.Tasks
         /// <summary>
         /// Lists Unity assets of a given type filter (e.g., "Prefab", "Scene", "Material").
         /// </summary>
-        /// <param name="args">The tool arguments containing optional type and path filters.</param>
+        /// <param name="args">The tool arguments containing optional asset_type and search_path filters.</param>
         /// <returns>A JSON response with matching asset paths.</returns>
-        private static string ListUnityAssets(Dictionary<string, object> args)
+        private static string ListAssets(Dictionary<string, object> args)
         {
-            string assetType = GetString(args, "type", defaultValue: "Prefab");
-            string searchPath = GetString(args, "path", defaultValue: "Assets/InfiniteCorridorTask");
+            string assetType = GetString(args, "asset_type", defaultValue: "Prefab");
+            string searchPath = GetString(args, "search_path", defaultValue: "Assets/InfiniteCorridorTask");
 
             string[] guids = AssetDatabase.FindAssets($"t:{assetType}", new[] { searchPath });
             List<string> paths = guids.Select(AssetDatabase.GUIDToAssetPath).OrderBy(path => path).ToList();
@@ -530,10 +536,9 @@ namespace SL.Tasks
             return Ok(
                 new Dictionary<string, object>
                 {
-                    { "type", assetType },
+                    { "asset_type", assetType },
                     { "search_path", searchPath },
                     { "assets", paths },
-                    { "count", paths.Count },
                 }
             );
         }
@@ -552,7 +557,6 @@ namespace SL.Tasks
                 {
                     { "scenes", paths },
                     { "active_scene", activeScene },
-                    { "count", paths.Count },
                 }
             );
         }
@@ -592,70 +596,6 @@ namespace SL.Tasks
             );
         }
 
-        /// <summary>
-        /// Creates a new scene by copying ExperimentTemplate.unity, optionally adding a task prefab to it.
-        /// Delegates the file copy, prefab instantiation, and SimulatedLinearTreadmill placement to
-        /// <see cref="CreateTask.CreateSceneFromTemplate"/> so the MCP surface and the Editor menu
-        /// produce identical scenes.
-        /// </summary>
-        /// <param name="args">
-        /// The tool arguments containing scene_name, optional task_prefab_path, and optional unsaved_changes.
-        /// </param>
-        /// <returns>A JSON response with the created scene path or an error message.</returns>
-        private static string CreateScene(Dictionary<string, object> args)
-        {
-            string sceneName = GetString(args, "scene_name");
-            string taskPrefabPath = GetString(args, "task_prefab_path", defaultValue: "");
-            string unsavedChanges = GetString(args, "unsaved_changes", defaultValue: "");
-
-            if (string.IsNullOrEmpty(sceneName))
-            {
-                return Error("Missing required argument: scene_name");
-            }
-
-            string newScenePath = Path.Combine("Assets", "Scenes", $"{sceneName}.unity");
-
-            // Refuses to clobber an existing scene at the requested path. The Editor menu uses Unity's
-            // SaveFilePanel overwrite prompt and passes overwriteExisting=true to the shared helper; the
-            // MCP surface deliberately rejects this case so an automated client never silently destroys a
-            // hand-authored scene.
-            if (File.Exists(newScenePath))
-            {
-                return Error($"Scene already exists at: {newScenePath}");
-            }
-
-            string handlingError = HandleUnsavedChanges(unsavedChanges);
-            if (handlingError != null)
-            {
-                return Error(handlingError);
-            }
-
-            CreateTask.SceneCreationResult sceneResult = CreateTask.CreateSceneFromTemplate(
-                sceneSavePath: newScenePath,
-                taskPrefabPath: taskPrefabPath,
-                overwriteExisting: false
-            );
-
-            if (!sceneResult.Success)
-            {
-                return Error(sceneResult.Message);
-            }
-
-            Dictionary<string, object> response = new Dictionary<string, object>
-            {
-                { "message", sceneResult.Message },
-                { "scene_path", newScenePath },
-                { "simulated_controller_added", sceneResult.SimulatedControllerAdded },
-            };
-
-            if (sceneResult.TaskPrefabNotFound)
-            {
-                response["warning"] = "task_prefab_not_found";
-            }
-
-            return Ok(response);
-        }
-
         /// <summary>Inspects the active scene and returns its root GameObject hierarchy.</summary>
         /// <returns>A JSON response with scene metadata and the recursive root object hierarchies.</returns>
         private static string InspectScene()
@@ -676,7 +616,6 @@ namespace SL.Tasks
                     { "scene_name", activeScene.name },
                     { "is_dirty", activeScene.isDirty },
                     { "root_objects", rootHierarchies },
-                    { "root_count", rootObjects.Length },
                 }
             );
         }
@@ -1359,31 +1298,6 @@ namespace SL.Tasks
                 + "persist the current scene before switching, or unsaved_changes='discard' to abandon the "
                 + "edits. Ask the user which behavior they prefer before retrying.";
             return message;
-        }
-
-        /// <summary>Returns the cue name sequence implied by the cue child GameObjects of a segment prefab.</summary>
-        /// <param name="segmentPrefab">The segment prefab whose cue layout to extract.</param>
-        /// <returns>The list of cue names ordered along the segment's local Z axis.</returns>
-        private static List<string> GetCueOrderFromSegmentPrefab(GameObject segmentPrefab)
-        {
-            List<(string cueName, float localZ)> cueChildren = new List<(string cueName, float localZ)>();
-            for (int childIndex = 0; childIndex < segmentPrefab.transform.childCount; childIndex++)
-            {
-                Transform child = segmentPrefab.transform.GetChild(childIndex);
-                string childName = child.name;
-
-                // The CreateTask pipeline names cue children "Cue<cueName>" (no underscore) while siblings such
-                // as "Floor" or "Walls" use unrelated names; the prefix and length check discriminates cleanly.
-                if (!childName.StartsWith("Cue", StringComparison.Ordinal) || childName.Length <= 3)
-                {
-                    continue;
-                }
-
-                cueChildren.Add((childName.Substring(3), child.localPosition.z));
-            }
-
-            cueChildren.Sort((left, right) => left.localZ.CompareTo(right.localZ));
-            return cueChildren.Select(child => child.cueName).ToList();
         }
 
         /// <summary>Recursively inspects a GameObject and returns its hierarchy as a dictionary.</summary>

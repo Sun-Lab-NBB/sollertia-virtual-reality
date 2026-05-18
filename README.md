@@ -34,7 +34,7 @@ ___
 - Generates infinite-corridor VR tasks from YAML templates via the Editor menu or the `slsa mcp` Unity relay.
 - Supports lick-driven and occupancy-driven stimulus trigger zones with optional guidance modes.
 - Supports probablistic transitions between trial structures within a single task template.
-- Exposes HTTP-based McpBridge that exposes 14 Editor operations to AI agents (prefab generation, scene management, 
+- Exposes HTTP-based McpBridge that exposes 13 Editor operations to AI agents (task lifecycle, scene management,
   asset inspection, Play Mode control, parameter read/write).
 - Maintains bidirectional MQTT 5.0 contract with 
   [sollertia-experiment](https://github.com/Sun-Lab-NBB/sollertia-experiment), centralized in a single `MQTTTopics` 
@@ -49,6 +49,8 @@ ___
 - [Installation](#installation)
 - [Usage](#usage)
   - [Project Structure](#project-structure)
+  - [Task Runtime Structure](#task-runtime-structure)
+  - [Task Asset Hierarchy](#task-asset-hierarchy)
   - [Authoring Task Templates](#authoring-task-templates)
   - [Creating Tasks](#creating-tasks)
   - [Loading and Running Tasks](#loading-and-running-tasks)
@@ -130,6 +132,96 @@ McpBridge's protected-paths list; generated assets live under separate folders a
 | `Assets/Scenes/`                              | `ExperimentTemplate.unity` plus per-task generated scenes                  |
 | `Assets/Plugins/`                             | Inlined `MQTTnet.dll` and `YamlDotNet.dll`                                 |
 
+### Task Runtime Structure
+
+A task represents an **infinite linear corridor sequence** built from a fixed catalog of reusable (prefab) parts. 
+Under this hierarchy, a **prefab** is Unity's serializable template for a hierarchy of GameObjects — a piece of a scene 
+saved as a file so it can be instantiated repeatedly and updated in one place.
+
+Any task hierarchy can be described in terms of four distinc levels, finest to coarsest:
+
+```text
+Task
+  │
+  ├── Corridor          ─┐  A corridor is a fixed sequence of segments stacked along the animal's
+  ├── Corridor           │  motion axis. A task pre-instantiates one corridor for every possible
+  ├── Corridor           │  combination of segments, so corridors enumerate the configuration space
+  └── … (every          ─┘  the task can take.
+       combination)
+
+      one Corridor
+        ├── Segment          ← active: the trial currently driving behavior
+        ├── Segment          ← lookahead: visible only, no behavior
+        └── Segment          ← lookahead: visible only, no behavior
+
+      one Segment (= one trial)
+        ├── Cue
+        ├── Cue              ← the cue sequence declared by this trial, laid out along the corridor
+        └── …
+```
+
+- **Cues** are individual visual panels displayed along the walls of the corridor. They are the smallest unit of the
+  corridor and are shared across every trial — and every task — that declares the same cue identity.
+- **Segments are trials.** Each trial declared by the task produces exactly one segment. A segment owns its cue
+  sequence and the behavioral element associated with that trial (the stimulus trigger zone, the reward or aversive
+  contingency, etc.).
+- **Corridors** are fixed-length windows of segments. The first segment in a corridor is the **active** trial — it
+  drives behavior. The remaining segments are pure visual lookahead, so the animal can see what is coming without yet
+  experiencing it. The number of segments per corridor is a per-task parameter; setting it to one collapses corridor
+  and segment into the same thing.
+- **Tasks** are the full set of corridors plus a transition graph that describes how trials chain during a session.
+  Each trial may declare a probability distribution over the trials that can follow it; trials without an explicit
+  distribution are followed by a uniformly random trial.
+
+**Iterative corridor traversal.** At session start, the task walks its trial-transition graph to build a flat
+sequence of trials that overshoots the configured track length. The runtime then slides a window the size of the
+corridor (in segments) over that sequence. The current window names one corridor in the pre-built catalog; the
+animal is teleported to that corridor's start. Whenever the animal finishes the first segment of the current
+corridor, the window slides one trial forward and the animal jumps to the corridor that matches the new window.
+Adjacent corridors share all but one segment, so the visible cue sequence stays continuous across the teleport and
+the animal experiences a single infinite track.
+
+The corridor count grows exponentially with the number of segments per corridor, so raising the lookahead depth is a
+deliberate choice: it adds visual context at the cost of an exponentially larger task. Most paradigms use one or two
+segments per corridor.
+
+### Task Asset Hierarchy
+
+On disk, a task lives as three artifacts that share the same basename. The template is the authoritative
+description; the task prefab and the task scene are derived from it, and the three files together represent one
+task end to end:
+
+```text
+<name>.yaml      ─┐  the template — an abstract description of the task's cues, trials, and transitions
+                  ▼
+<name>.prefab    ─┐  the task prefab — the runtime hierarchy of corridors, segments, and cues
+                  ▼  introduced in the previous section, built from the template
+<name>.unity     ─┐  the task scene — a runnable scene that instantiates the task prefab and wraps
+                  ▼  it in the auxiliary infrastructure a session needs
+```
+
+- The **template** is the only artifact authored by hand. It is a plain text description of the task — its cues,
+  the trials those cues compose into, and the transition probabilities between trials.
+- The **task prefab** is the runtime hierarchy described in the previous section: every corridor the task can take,
+  with the segments and cues that fill them. It is fully regenerable — the same template always produces the same
+  task prefab.
+- The **task scene** wraps one instance of the task prefab in the auxiliary GameObjects a session needs (the animal
+  avatar, the display rig, the broker client, the controllers that drive avatar motion). Play mode runs against the
+  task scene, not the bare prefab. One hand-authored base scene serves as the template that every task scene is
+  copied from; that base is the only scene that is not a task scene.
+
+The basename convention is enforced end to end: regenerating from a template named `<name>.yaml` always produces a
+`<name>.prefab` and a `<name>.unity`. One name identifies the task across all three layers.
+
+Two more file types complete the picture:
+
+- **Segment prefabs** live alongside the task prefab and are owned by their parent template — their filenames embed
+  both the template name and the trial name, so each task's segments are addressable on their own without colliding
+  with any other task's segments.
+- **Cue prefabs** are the one shared layer. They are keyed by cue identity and cue length, so two tasks that declare
+  the same cue identity reuse the same cue prefab file. The generation pipeline aborts up front if two tasks declare
+  the same cue identity with different visuals, so the shared file can never silently corrupt a sibling task.
+
 ### Authoring Task Templates
 
 Task templates are YAML files under `Assets/InfiniteCorridorTask/Configurations/`. The schema mirrors the Python
@@ -140,7 +232,8 @@ fields.
 A task template defines:
 
 - **cues**: A list of visual cue panels. Each cue has a unique `name`, a `code` (0–255 byte) used for MQTT and
-  downstream data analysis, a `length_cm`, and a `texture` filename resolved against `Assets/InfiniteCorridorTask/Textures/`.
+  downstream data analysis, a `length_cm`, and a `texture` filename resolved against 
+  `Assets/InfiniteCorridorTask/Textures/`.
 - **vr_environment**: The Unity corridor configuration — `corridor_spacing_cm`, `segments_per_corridor`,
   `padding_prefab_name`, `cm_per_unity_unit`, and `cue_offset_cm`.
 - **trial_structures**: A dictionary mapping trial names (e.g., `ABCD`) to their spatial configuration: the cue
@@ -177,14 +270,15 @@ a template, the pipeline:
    same `(cue name, length_cm)` pair with different textures, the generation aborts before any asset is written.
 2. Wipes every segment prefab the template owns (`CleanGeneratedSegments`) so trial-parameter edits take effect.
 3. Builds or reuses cue prefabs keyed by `(name, length_cm)` under `Assets/InfiniteCorridorTask/Cues/`.
-4. Builds every segment prefab from scratch under `Assets/InfiniteCorridorTask/Prefabs/<TemplateName>_<TrialName>.prefab`.
+4. Builds every segment prefab from scratch under 
+   `Assets/InfiniteCorridorTask/Prefabs/<TemplateName>_<TrialName>.prefab`.
 5. Assembles the task prefab at `Assets/InfiniteCorridorTask/Tasks/<TemplateName>.prefab`.
 6. Copies `Assets/Scenes/ExperimentTemplate.unity` to `Assets/Scenes/<TemplateName>.unity`, instantiates the task
    prefab into it, and runs `MainWindow.EnsureControllers` so both the `LinearTreadmill` (hardware) and
    `SimulatedLinearTreadmill` (keyboard testing) controllers are present.
 
-**MCP-driven flow.** The same pipeline is reachable via AI agents over the `slsa mcp` server's Unity relay. The agent
-calls `generate_task_prefab_tool` and then `create_scene_tool`; both tools run through the same `CreateTask.CreateFromTemplate`
+**MCP-driven flow.** The same pipeline is reachable via AI agents over the `slsa mcp` server's Unity relay. A single
+`create_task_tool` call builds both the task prefab and the matching scene from the same `CreateTask.CreateFromTemplate`
 and `CreateTask.CreateSceneFromTemplate` methods used by the Editor menu, so the resulting assets are byte-equivalent.
 
 ### Loading and Running Tasks
@@ -194,10 +288,8 @@ into a new scene manually:
 
 1. Open the scene at `Assets/Scenes/<TemplateName>.unity` via `File → Open Scene` (the file already contains the task
    prefab instance, the Display rig, the Actor, both controllers, and the MQTT client).
-2. Confirm the task root GameObject's `Transform.position` is `(0, 0, 0)`. The `Task` script also enforces this at
-   `Start` with a warning and an automatic correction.
-3. Configure displays and per-scene parameters via the [Task Parameters window](#task-parameters-window).
-4. Enter Play Mode (`Window → Task Parameters` is always available, and the Play button starts execution).
+2. Configure displays and per-scene parameters via the [Task Parameters window](#task-parameters-window).
+3. Enter Play Mode (`Window → Task Parameters` is always available, and the Play button starts execution).
 
 ***Note,*** scene-specific settings such as the camera-to-monitor mapping are scene-bound. Always verify the mapping
 after every reboot, since the operating system may reorder display ports.
@@ -213,7 +305,7 @@ five sections:
 | Actor            | Animal model selection and active controller (LinearTreadmill or SimulatedLinearTreadmill)                                                  |
 | MQTT             | Broker IP and port; the Test Connection button performs a one-shot connect/disconnect probe                                                 |
 | Display          | Brightness, height in VR, and a Blank/Show toggle for the active display                                                                    |
-| Camera Mapping   | Refresh Monitor Positions plus a per-monitor camera dropdown (LeftMonitor, RightMonitor, CenterMonitor) and a Show Full-Screen Views action |
+| Camera Mapping   | Refresh Monitor Positions plus a per-monitor row (one per OS-detected monitor) with a camera dropdown (`Left View`, `Center View`, `Right View` for the default display rig) and a Show Full-Screen Views action |
 | Task             | Require Lick, Require Wait, Track Length, and Track Seed for the active scene's `Task` component                                            |
 
 The `Task` component's public fields are marked `[HideInInspector]`; `TaskEditor` replaces the default Inspector with
@@ -266,33 +358,32 @@ operations to AI agents via JSON request/response. The backing MCP server (`slsa
 [sollertia-shared-assets](https://github.com/Sun-Lab-NBB/sollertia-shared-assets)) relays each agent tool call to this
 bridge over HTTP.
 
-The bridge dispatches **14 tools**:
+The bridge dispatches **13 tools**:
 
-| Tool                               | Description                                                           |
-|------------------------------------|-----------------------------------------------------------------------|
-| `generate_task_prefab`             | Builds cues, segments, and the task prefab from a YAML template       |
-| `inspect_prefab`                   | Returns hierarchy, components, transforms, and collider details       |
-| `validate_prefab_against_template` | Compares cue inventory, segment lengths, cue order, and zone geometry |
-| `delete_unity_asset`               | Deletes a regenerable asset (refuses hand-authored protected paths)   |
-| `list_unity_assets`                | Lists Unity assets by type filter within a search path                |
-| `list_scenes`                      | Enumerates every `.unity` asset and reports the active scene          |
-| `open_scene`                       | Opens a scene with explicit `unsaved_changes` policy                  |
-| `create_scene`                     | Copies `ExperimentTemplate.unity` and optionally adds a task prefab   |
-| `inspect_scene`                    | Returns the active scene's root hierarchy and dirty flag              |
-| `enter_play_mode`                  | Triggers `EditorApplication.EnterPlaymode`                            |
-| `exit_play_mode`                   | Triggers `EditorApplication.ExitPlaymode`                             |
-| `get_play_state`                   | Returns `playing`, `compiling`, or `edit` plus the active scene name  |
-| `read_task_parameters`             | Snapshots Actor, MQTT, Display, Camera Mapping, and Task fields       |
-| `write_task_parameters`            | Applies a subset of Task Parameters fields and returns a new snapshot |
+| Tool                    | Description                                                                       |
+|-------------------------|-----------------------------------------------------------------------------------|
+| `create_task`           | Builds the task prefab and the matching scene from a YAML template in one call    |
+| `delete_task`           | Removes the scene + companion + task prefab + every segment prefab for a template |
+| `inspect_prefab`        | Returns hierarchy, components, transforms, and collider details                   |
+| `delete_asset`          | Deletes a regenerable non-scene asset (refuses hand-authored protected paths)     |
+| `list_assets`           | Lists Unity assets by type filter within a search path                            |
+| `list_scenes`           | Enumerates every `.unity` asset and reports the active scene                      |
+| `open_scene`            | Opens a scene with explicit `unsaved_changes` policy                              |
+| `inspect_scene`         | Returns the active scene's root hierarchy and dirty flag                          |
+| `enter_play_mode`       | Triggers `EditorApplication.EnterPlaymode`                                        |
+| `exit_play_mode`        | Triggers `EditorApplication.ExitPlaymode`                                         |
+| `get_play_state`        | Returns `playing`, `compiling`, or `edit` plus the active scene name              |
+| `read_task_parameters`  | Snapshots Actor, MQTT, Display, Camera Mapping, and Task fields                   |
+| `write_task_parameters` | Applies a subset of Task Parameters fields and returns a new snapshot             |
 
-All responses are JSON objects carrying a `success` boolean plus a payload or error string. Asset deletion is bounded
-by an allow-prefix list (`Assets/InfiniteCorridorTask/Tasks/`, `Prefabs/`, `Cues/`, `Materials/`, and `Assets/Scenes/`)
-and a protected-paths set covering the four hand-authored prefabs (`StimulusTriggerZone.prefab`,
-`OccupancyTriggerZone.prefab`, `ResetZone.prefab`, `Padding.prefab`), the four hand-authored materials
-(`_CueShaderReference.mat`, `Floor.mat`, `Wall.mat`, `TargetMat.mat`), and the scene base template
-(`ExperimentTemplate.unity`). Path traversal sequences and absolute paths are rejected. Deleting a scene under
-`Assets/Scenes/` cascade-deletes the matching `Assets/VRSettings/Displays/<scene>-savedFullScreenViews.asset` so the
-per-scene camera mapping does not outlive the scene.
+All responses are JSON objects carrying a `success` boolean plus a payload or error string. `delete_asset` is bounded
+by an allow-prefix list (`Assets/InfiniteCorridorTask/Tasks/`, `Prefabs/`, `Cues/`, `Materials/`) and rejects scene
+paths under `Assets/Scenes/` — scene cleanup goes through `delete_task` exclusively so the cascade-delete of the
+matching `Assets/VRSettings/Displays/<scene>-savedFullScreenViews.asset` companion can never be bypassed. A
+protected-paths set covers the four hand-authored prefabs (`StimulusTriggerZone.prefab`, `OccupancyTriggerZone.prefab`,
+`ResetZone.prefab`, `Padding.prefab`), the four hand-authored materials (`_CueShaderReference.mat`, `Floor.mat`,
+`Wall.mat`, `TargetMat.mat`), and the scene base template (`ExperimentTemplate.unity`). Path traversal sequences and
+absolute paths are rejected.
 
 ***Note,*** AI agents do not call this bridge directly. They use the `slsa mcp` server's Unity relay tools, which are
 listed in the [sollertia-shared-assets](https://github.com/Sun-Lab-NBB/sollertia-shared-assets) README. The bridge
@@ -316,7 +407,8 @@ Three categories of assets coexist in this project:
 - **Generated** (regenerable): every cue prefab under `Cues/`, every segment prefab under `Prefabs/` matching
   `<TemplateName>_<TrialName>.prefab`, every cue material under `Materials/Cue_*_*cm.mat`, every prefab under `Tasks/`,
   and every scene other than `ExperimentTemplate.unity`. These are produced by `CreateTask` and are safe to delete via
-  `delete_unity_asset` so the next generation pass rebuilds them.
+  `delete_task` (whole-task cleanup) or `delete_asset` (individual cue prefab / material) so the next generation pass
+  rebuilds them.
 - **Shared inputs**: the YAML templates under `Configurations/` and the cue textures under `Textures/`. Templates are
   the source of truth for trial structure; textures are imported from external sources (for example,
   [vr-visual-cues](https://github.com/sprustonlab/vr-visual-cues)) and referenced by the `cues[].texture` field.

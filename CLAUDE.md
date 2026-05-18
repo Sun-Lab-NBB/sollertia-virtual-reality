@@ -64,7 +64,7 @@ The `unity` plugin depends on the `assets` plugin for the backing `slsa mcp` ser
 | Skill                          | Description                                                                |
 |--------------------------------|----------------------------------------------------------------------------|
 | `/unity-mcp-environment-setup` | Diagnose the `localhost:8090` `McpBridge` HTTP relay                       |
-| `/scenes`                      | List, open, and create Unity scenes; enumerate Unity assets                |
+| `/task-scenes`                 | List, open, and create Unity scenes; enumerate Unity assets                |
 | `/task-prefabs`                | Generate, inspect, validate, and delete task prefabs from YAML templates   |
 | `/zone-prefabs`                | Manufacture new hand-authored trigger zone prefabs by copying and editing  |
 | `/task-parameters`             | Read and write the consolidated `Window → Task Parameters` editor surface  |
@@ -107,39 +107,42 @@ and `localhost:8090` when the Unity Editor loads. The backing MCP server is `sls
 its `interfaces/unity_tools.py` module relays each tool call to the bridge over HTTP and surfaces the JSON response back
 to the agent.
 
-The bridge dispatches **14 tools** in `McpBridge.Dispatch` (`McpBridge.cs` switch expression around line 180). Tools
-are grouped here by concern but live side by side in the same dispatcher:
+The bridge dispatches **13 tools** in `McpBridge.Dispatch`. Tools are grouped here by concern but live side by side
+in the same dispatcher:
 
-| Category               | Tool                               | Description                                                          |
-|------------------------|------------------------------------|----------------------------------------------------------------------|
-| Task prefab generation | `generate_task_prefab`             | Build cues, segments, and the task prefab from a YAML template       |
-| Task prefab generation | `validate_prefab_against_template` | Compare cue inventory, segment lengths, cue order, and zone geometry |
-| Asset inspection       | `inspect_prefab`                   | Return hierarchy, components, and BoxCollider details for a prefab   |
-| Asset inspection       | `list_unity_assets`                | List assets by type filter within a search path                      |
-| Asset lifecycle        | `delete_unity_asset`               | Delete a regenerable asset (refuses hand-authored protected paths)   |
-| Scene management       | `list_scenes`                      | Enumerate every `.unity` asset and report the active scene           |
-| Scene management       | `open_scene`                       | Open a scene with explicit `unsaved_changes` policy                  |
-| Scene management       | `create_scene`                     | Copy `ExperimentTemplate.unity` and optionally add a task prefab     |
-| Scene management       | `inspect_scene`                    | Return the active scene's root hierarchy and dirty flag              |
-| Play Mode control      | `enter_play_mode`                  | Trigger `EditorApplication.EnterPlaymode`                            |
-| Play Mode control      | `exit_play_mode`                   | Trigger `EditorApplication.ExitPlaymode`                             |
-| Play Mode control      | `get_play_state`                   | Return `playing`, `compiling`, or `edit` plus the active scene name  |
-| Task Parameters        | `read_task_parameters`             | Snapshot Actor, MQTT, Display, Camera Mapping, and Task fields       |
-| Task Parameters        | `write_task_parameters`            | Apply a subset of Task Parameters fields and return the new snapshot |
+| Category          | Tool                    | Description                                                                       |
+|-------------------|-------------------------|-----------------------------------------------------------------------------------|
+| Task lifecycle    | `create_task`           | Builds the task prefab and the matching scene from a template in one call         |
+| Task lifecycle    | `delete_task`           | Removes the scene + companion + task prefab + every segment prefab for a template |
+| Asset inspection  | `inspect_prefab`        | Returns hierarchy, components, and BoxCollider details for a prefab               |
+| Asset inspection  | `list_assets`           | Lists assets by type filter within a search path                                  |
+| Asset lifecycle   | `delete_asset`          | Deletes a regenerable non-scene asset (refuses scene paths and protected paths)   |
+| Scene management  | `list_scenes`           | Enumerates every `.unity` asset and reports the active scene                      |
+| Scene management  | `open_scene`            | Opens a scene with explicit `unsaved_changes` policy                              |
+| Scene management  | `inspect_scene`         | Returns the active scene's root hierarchy and dirty flag                          |
+| Play Mode control | `enter_play_mode`       | Triggers `EditorApplication.EnterPlaymode`                                        |
+| Play Mode control | `exit_play_mode`        | Triggers `EditorApplication.ExitPlaymode`                                         |
+| Play Mode control | `get_play_state`        | Returns `playing`, `compiling`, or `edit` plus the active scene name              |
+| Task Parameters   | `read_task_parameters`  | Snapshots Actor, MQTT, Display, Camera Mapping, and Task fields                   |
+| Task Parameters   | `write_task_parameters` | Applies a subset of Task Parameters fields and returns the new snapshot           |
 
 Project conventions for bridge tools:
 - The HTTP listener captures requests on a worker thread and the editor thread drains a `ConcurrentQueue` via
   `EditorApplication.update`. Tool handlers run on the editor thread and may call Unity APIs freely.
 - Every response is built through the shared `Ok(payload)` / `Error(message)` helpers, which serialize through
   `MiniJson` and always include a `success` boolean. Match this contract when adding new tools.
-- `delete_unity_asset` is bounded by `DeleteAllowedPrefixes` (regenerable directories) and `DeleteProtectedPaths`
-  (hand-authored anchors) declared at the top of `McpBridge.cs`. Adding a regenerable directory requires extending the
-  allow list; protecting a new hand-authored asset requires extending the protected set. Both lists also reject path
-  traversal and absolute paths. When the deleted asset is a scene under `Assets/Scenes/`, the bridge cascade-deletes
-  the matching per-scene companion at `Assets/VRSettings/Displays/<scene>-savedFullScreenViews.asset` so the camera
-  mapping does not outlive the scene; the response reports the deleted companion under `companion_deleted` when the
-  cascade fires. Add any future per-scene companion to `McpBridge.TryDeleteScenePerSceneCompanions` in the same
-  change that introduces it.
+- `delete_asset` is bounded by `DeleteAllowedPrefixes` (regenerable non-scene directories) and
+  `DeleteProtectedPaths` (hand-authored anchors) declared at the top of `McpBridge.cs`. Adding a regenerable
+  directory requires extending the allow list; protecting a new hand-authored asset requires extending the
+  protected set. The handler rejects scene paths under `Assets/Scenes/` and points callers at `delete_task` so
+  scene cleanup always goes through the companion cascade. Both lists also reject path traversal and absolute
+  paths.
+- `delete_task` removes the scene + per-scene `savedFullScreenViews` companion + task prefab + every segment
+  prefab whose filename begins with the template basename in one atomic call. When the deletion target is the
+  active scene, the handler opens `ExperimentTemplate.unity` first so Unity will accept the delete. Cue prefabs
+  and cue materials are deliberately preserved because they are shared across templates; use `delete_asset` for
+  individual cue cleanup. Add any future per-scene companion to `McpBridge.TryDeleteScenePerSceneCompanions` in
+  the same change that introduces it.
 - `read_task_parameters` and `write_task_parameters` share a single `AcquireSceneComponents` walk per request so reads
   and writes operate on a consistent snapshot of the active scene.
 
@@ -225,7 +228,7 @@ corridors built from prefabricated visual cue segments and driven over MQTT 5.0 
   unreachable, `MQTTClient.Publish` routes messages in-process so keyboard-only test runs still reach local subscribers
   (for example, `LickStimulusSpawner`).
 - **HTTP MCP relay**: `McpBridge` is an `[InitializeOnLoad]` static class that drains an `HttpListener` queue on
-  `EditorApplication.update`, deserializes the JSON request via `MiniJson`, dispatches to one of 14 tool handlers, and
+  `EditorApplication.update`, deserializes the JSON request via `MiniJson`, dispatches to one of 13 tool handlers, and
   returns a JSON response built by `Ok(...)` or `Error(...)`. The relay surface is owned by this repository; the
   Python wrapper lives in `sollertia-shared-assets/src/sollertia_shared_assets/interfaces/unity_tools.py`.
 
@@ -247,9 +250,9 @@ Detailed checklists for the non-trivial extensions:
 
 - **New task template**: Place the YAML under `Assets/InfiniteCorridorTask/Configurations/` using the
   `ProjectAbbreviation_TaskDescription.yaml` naming convention. The header must include `Project`, `Purpose`, `Layout`,
-  and `Related` fields as YAML comments. Run `generate_task_prefab_tool` from `/task-prefabs` to materialize the cue,
-  segment, and task prefabs, then `validate_prefab_against_template_tool` to confirm cue order, segment Z-length, and
-  zone geometry match the template.
+  and `Related` fields as YAML comments. Run `create_task_tool` from `/task-prefabs` to materialize the cue, segment,
+  and task prefabs together with the matching scene, then `inspect_prefab_tool` from the same skill to confirm the
+  generated hierarchy matches the template.
 - **New trigger zone type**: Author the new modifier `MonoBehaviour` under
   `Assets/InfiniteCorridorTask/Scripts/` (implementing `IResettable` if it holds per-lap state). Invoke
   `/zone-prefabs` to copy the closest canonical template (`StimulusTriggerZone.prefab` for lick mode or
@@ -292,9 +295,9 @@ Detailed checklists for the non-trivial extensions:
   `Materials/TargetMat.mat`, and `Scenes/ExperimentTemplate.unity` are hand-authored. Everything under `Cues/`, every
   segment prefab under `Prefabs/`, every `Cue_*_*cm.mat` material under `Materials/`, every prefab under `Tasks/`, and
   every scene other than `ExperimentTemplate.unity` is generated by `CreateTask`. All nine hand-authored assets are
-  protected from `delete_unity_asset` by `McpBridge.DeleteProtectedPaths`; you MUST NOT remove entries from that list
-  to weaken the protections. Any new asset that the CreateTask pipeline or a generated prefab references by hardcoded
-  path or serialized link must be added to the protected set in the same change that introduces the reference.
+  protected from `delete_asset` and `delete_task` by `McpBridge.DeleteProtectedPaths`; you MUST NOT remove entries from 
+  that list to weaken the protections. Any new asset that the CreateTask pipeline or a generated prefab references by 
+  hardcoded path or serialized link must be added to the protected set in the same change that introduces the reference.
 - **Cue identity**: Cue prefabs and materials are keyed by `(cue.name, cue.length_cm)` and shared across templates.
   `CreateTask.ValidateCueDefinitionsAcrossTemplates` runs before any mutation and refuses to generate when two
   templates declare the same `(name, length)` pair with different textures. Resolve the conflict by renaming the cue,
@@ -319,9 +322,11 @@ Detailed checklists for the non-trivial extensions:
 1. Invoke `/task-templates` (assets plugin) for the YAML schema and file-naming convention.
 2. Place the YAML under `Assets/InfiniteCorridorTask/Configurations/` with the `Project / Purpose / Layout / Related`
    header comments.
-3. Invoke `/task-prefabs` and run `generate_task_prefab_tool` to materialize the cue, segment, and task prefabs.
-4. Run `validate_prefab_against_template_tool` from the same skill to confirm cue order, segment Z-length, and zone
-   geometry match the template.
+3. Invoke `/task-prefabs` and run `create_task_tool` to materialize the cue, segment, and task prefabs together with
+   the matching scene. The tool refuses to overwrite an existing scene; pair `delete_task_tool` → `create_task_tool`
+   for a regeneration cycle.
+4. Run `inspect_prefab_tool` from the same skill to spot-check the generated prefab against the template's cue and
+   trial counts.
 
 **Modifying a runtime zone or `Task.cs`:**
 
@@ -334,7 +339,7 @@ Detailed checklists for the non-trivial extensions:
 
 1. Invoke `/task-generator` for the prefab-generation pipeline; read `McpBridge.cs` directly for the relay surface.
 2. Keep the cross-template cue-texture preflight intact; new branches must run after the preflight, not before.
-3. New `delete_unity_asset` paths require additions to `DeleteAllowedPrefixes`; new hand-authored assets require
+3. New `delete_asset` paths require additions to `DeleteAllowedPrefixes`; new hand-authored assets require
    additions to `DeleteProtectedPaths`. Updating one without the other leaves the bridge unsafe.
 4. For new tools, also update
    `sollertia-shared-assets/src/sollertia_shared_assets/interfaces/unity_tools.py`.
@@ -366,6 +371,6 @@ csharpier --check .               # Verify formatting without modifying (CI mode
 ```
 
 The Editor menu `CreateTask → New Task` invokes the full generation pipeline (template selection → prefab build →
-scene copy → save). The MCP path is equivalent: `generate_task_prefab_tool` produces the prefab and `create_scene_tool`
-copies the scene. Both flows share `CreateTask.CreateFromTemplate` and `CreateTask.CreateSceneFromTemplate`, so the
-agentic and manual paths produce byte-equivalent assets.
+scene copy → save). The MCP path is equivalent: a single `create_task_tool(template_name=…)` call produces both the
+task prefab and the matching scene. Both flows share `CreateTask.CreateFromTemplate` and
+`CreateTask.CreateSceneFromTemplate`, so the agentic and manual paths produce byte-equivalent assets.
