@@ -45,12 +45,23 @@ namespace SL.Tasks
         };
 
         /// <summary>The set of hand-authored asset paths that are protected from deletion.</summary>
+        /// <remarks>
+        /// Covers every hand-authored asset that the CreateTask pipeline (or the generated zone
+        /// prefabs themselves) load by hardcoded path or by serialized reference. Removing any
+        /// one of these breaks task generation or leaves a regenerated prefab rendering with a
+        /// missing material, so the bridge refuses to delete them even when they sit under an
+        /// allowed prefix.
+        /// </remarks>
         private static readonly HashSet<string> DeleteProtectedPaths = new HashSet<string>(StringComparer.Ordinal)
         {
             "Assets/InfiniteCorridorTask/Prefabs/StimulusTriggerZone.prefab",
             "Assets/InfiniteCorridorTask/Prefabs/OccupancyTriggerZone.prefab",
             "Assets/InfiniteCorridorTask/Prefabs/ResetZone.prefab",
+            "Assets/InfiniteCorridorTask/Prefabs/Padding.prefab",
             "Assets/InfiniteCorridorTask/Materials/_CueShaderReference.mat",
+            "Assets/InfiniteCorridorTask/Materials/Floor.mat",
+            "Assets/InfiniteCorridorTask/Materials/Wall.mat",
+            "Assets/InfiniteCorridorTask/Materials/TargetMat.mat",
             "Assets/Scenes/ExperimentTemplate.unity",
         };
 

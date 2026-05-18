@@ -11,6 +11,6 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 85a57d530f60a1c4aaa92cb5a977d685, type: 3}
   m_Name: Display
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Gimbl.DisplaySettings
   brightness: 50
   heightInVR: 0.2

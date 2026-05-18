@@ -287,8 +287,10 @@ The bridge dispatches **14 tools**:
 
 All responses are JSON objects carrying a `success` boolean plus a payload or error string. Asset deletion is bounded
 by an allow-prefix list (`Assets/InfiniteCorridorTask/Tasks/`, `Prefabs/`, `Cues/`, `Materials/`, and `Assets/Scenes/`)
-and a protected-paths set covering `StimulusTriggerZone.prefab`, `OccupancyTriggerZone.prefab`, `ResetZone.prefab`,
-`_CueShaderReference.mat`, and `ExperimentTemplate.unity`. Path traversal sequences and absolute paths are rejected.
+and a protected-paths set covering the four hand-authored prefabs (`StimulusTriggerZone.prefab`,
+`OccupancyTriggerZone.prefab`, `ResetZone.prefab`, `Padding.prefab`), the four hand-authored materials
+(`_CueShaderReference.mat`, `Floor.mat`, `Wall.mat`, `TargetMat.mat`), and the scene base template
+(`ExperimentTemplate.unity`). Path traversal sequences and absolute paths are rejected.
 
 ***Note,*** AI agents do not call this bridge directly. They use the `slsa mcp` server's Unity relay tools, which are
 listed in the [sollertia-shared-assets](https://github.com/Sun-Lab-NBB/sollertia-shared-assets) README. The bridge
@@ -305,9 +307,10 @@ These notes apply to project developers and task authors who modify source code,
 Three categories of assets coexist in this project:
 
 - **Hand-authored** (protected): `StimulusTriggerZone.prefab`, `OccupancyTriggerZone.prefab`, `ResetZone.prefab`,
-  `Padding.prefab`, `Materials/_CueShaderReference.mat`, and `Scenes/ExperimentTemplate.unity`. These are the source
-  templates that `CreateTask` references at generation time. They must remain untouched; `McpBridge.DeleteProtectedPaths`
-  refuses to delete them.
+  `Padding.prefab`, `Materials/_CueShaderReference.mat`, `Materials/Floor.mat`, `Materials/Wall.mat`,
+  `Materials/TargetMat.mat`, and `Scenes/ExperimentTemplate.unity`. These are the source templates and shared assets
+  that `CreateTask` references at generation time (and that the trigger zone prefabs reference in turn via
+  `TargetMat.mat`). They must remain untouched; `McpBridge.DeleteProtectedPaths` refuses to delete them.
 - **Generated** (regenerable): every cue prefab under `Cues/`, every segment prefab under `Prefabs/` matching
   `<TemplateName>_<TrialName>.prefab`, every cue material under `Materials/Cue_*_*cm.mat`, every prefab under `Tasks/`,
   and every scene other than `ExperimentTemplate.unity`. These are produced by `CreateTask` and are safe to delete via
