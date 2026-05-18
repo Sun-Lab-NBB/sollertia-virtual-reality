@@ -135,7 +135,11 @@ Project conventions for bridge tools:
 - `delete_unity_asset` is bounded by `DeleteAllowedPrefixes` (regenerable directories) and `DeleteProtectedPaths`
   (hand-authored anchors) declared at the top of `McpBridge.cs`. Adding a regenerable directory requires extending the
   allow list; protecting a new hand-authored asset requires extending the protected set. Both lists also reject path
-  traversal and absolute paths.
+  traversal and absolute paths. When the deleted asset is a scene under `Assets/Scenes/`, the bridge cascade-deletes
+  the matching per-scene companion at `Assets/VRSettings/Displays/<scene>-savedFullScreenViews.asset` so the camera
+  mapping does not outlive the scene; the response reports the deleted companion under `companion_deleted` when the
+  cascade fires. Add any future per-scene companion to `McpBridge.TryDeleteScenePerSceneCompanions` in the same
+  change that introduces it.
 - `read_task_parameters` and `write_task_parameters` share a single `AcquireSceneComponents` walk per request so reads
   and writes operate on a consistent snapshot of the active scene.
 

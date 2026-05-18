@@ -19,10 +19,11 @@ namespace Gimbl
     /// Manages camera-to-monitor assignments and full-screen view creation.
     /// </summary>
     /// <remarks>
-    /// The constructor unconditionally calls <see cref="LoadCameras"/>, which guarantees
-    /// <see cref="_savedFullScreenViews"/> is non-null (loaded or newly created) before any other method
-    /// runs. <see cref="SaveCameras"/> relies on this invariant; do not call it on an instance that has
-    /// bypassed the constructor.
+    /// The constructor unconditionally calls <see cref="LoadCameras"/>, which leaves
+    /// <see cref="_savedFullScreenViews"/> non-null whenever the active scene has been saved to disk.
+    /// An untitled active scene leaves the field null (no persistence path exists yet), and
+    /// <see cref="SaveCameras"/> no-ops in that state instead of writing an orphan asset with a hyphen-
+    /// prefixed filename.
     /// </remarks>
     public class FullScreenViewManager
     {
@@ -134,8 +135,17 @@ namespace Gimbl
         }
 
         /// <summary>Saves camera assignments to the scene's asset file.</summary>
+        /// <remarks>
+        /// No-ops when <see cref="_savedFullScreenViews"/> is null — the only path that leaves it null is
+        /// <see cref="LoadCameras"/> skipping the asset create on an untitled active scene, in which case
+        /// there is no destination path to write to.
+        /// </remarks>
         public void SaveCameras()
         {
+            if (_savedFullScreenViews == null)
+            {
+                return;
+            }
             _savedFullScreenViews.cameraNames.Clear();
             for (int monitorIndex = 0; monitorIndex < monitors.Count; monitorIndex++)
             {
@@ -149,13 +159,24 @@ namespace Gimbl
         }
 
         /// <summary>Loads camera assignments from the scene's asset file.</summary>
+        /// <remarks>
+        /// Skips both the load and the create-if-missing paths when the active scene has no name
+        /// (untitled / unsaved). Saving a companion asset keyed by the empty string would produce an
+        /// orphan <c>-savedFullScreenViews.asset</c> with no matching scene to consume it.
+        /// </remarks>
         public void LoadCameras()
         {
+            string activeSceneName = EditorSceneManager.GetActiveScene().name;
+            if (string.IsNullOrEmpty(activeSceneName))
+            {
+                _savedFullScreenViews = null;
+                return;
+            }
             string savedViewsPath = Path.Combine(
                 "Assets",
                 "VRSettings",
                 "Displays",
-                $"{EditorSceneManager.GetActiveScene().name}-savedFullScreenViews.asset"
+                $"{activeSceneName}-savedFullScreenViews.asset"
             );
             _savedFullScreenViews = (FullScreenViewsSaved)
                 AssetDatabase.LoadAssetAtPath(savedViewsPath, typeof(FullScreenViewsSaved));

@@ -433,6 +433,13 @@ namespace SL.Tasks
         }
 
         /// <summary>Deletes a Unity asset within an allowed directory and refreshes the AssetDatabase.</summary>
+        /// <remarks>
+        /// Scenes under <c>Assets/Scenes/</c> own a per-scene companion asset at
+        /// <c>Assets/VRSettings/Displays/&lt;scene&gt;-savedFullScreenViews.asset</c> that persists the
+        /// camera-to-monitor mapping. The companion is cascade-deleted here so the regenerable scene
+        /// and its per-scene state are wiped atomically; callers see the cascade in the response's
+        /// <c>companion_deleted</c> field when it fires.
+        /// </remarks>
         /// <param name="args">The tool arguments containing asset_path.</param>
         /// <returns>A JSON response confirming deletion or an error message.</returns>
         private static string DeleteUnityAsset(Dictionary<string, object> args)
@@ -464,16 +471,47 @@ namespace SL.Tasks
                 return Error($"Failed to delete asset at: {assetPath}");
             }
 
+            string companionDeleted = TryDeleteScenePerSceneCompanions(assetPath);
+
             AssetDatabase.Refresh();
 
-            return Ok(
-                new Dictionary<string, object>
-                {
-                    { "message", $"Deleted asset: {assetPath}" },
-                    { "asset_path", assetPath },
-                    { "deleted", true },
-                }
-            );
+            Dictionary<string, object> response = new Dictionary<string, object>
+            {
+                { "message", $"Deleted asset: {assetPath}" },
+                { "asset_path", assetPath },
+                { "deleted", true },
+            };
+            if (companionDeleted != null)
+            {
+                response["companion_deleted"] = companionDeleted;
+            }
+            return Ok(response);
+        }
+
+        /// <summary>Deletes per-scene companion assets when a scene under Assets/Scenes/ is removed.</summary>
+        /// <remarks>
+        /// Bypasses the standard <see cref="IsDeleteAllowed"/> prefix check because the companion path is
+        /// derived from the just-validated scene path, never user-supplied. Currently covers the saved
+        /// full-screen-views asset; extend this method when new per-scene companion assets are introduced.
+        /// </remarks>
+        /// <param name="scenePath">The project-relative path of the scene that was just deleted.</param>
+        /// <returns>The companion path that was deleted, or null when no companion existed.</returns>
+        private static string TryDeleteScenePerSceneCompanions(string scenePath)
+        {
+            if (
+                !scenePath.StartsWith("Assets/Scenes/", StringComparison.Ordinal)
+                || !scenePath.EndsWith(".unity", StringComparison.Ordinal)
+            )
+            {
+                return null;
+            }
+            string sceneName = Path.GetFileNameWithoutExtension(scenePath);
+            string companionPath = $"Assets/VRSettings/Displays/{sceneName}-savedFullScreenViews.asset";
+            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(companionPath) == null)
+            {
+                return null;
+            }
+            return AssetDatabase.DeleteAsset(companionPath) ? companionPath : null;
         }
 
         /// <summary>

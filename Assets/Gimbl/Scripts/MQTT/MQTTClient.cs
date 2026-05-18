@@ -27,12 +27,22 @@ namespace Gimbl
     public class MQTTClient : MonoBehaviour
     {
         /// <summary>The IP address of the MQTT broker.</summary>
+        /// <remarks>
+        /// The initializer matches the loopback fallback applied by <see cref="Awake"/> and by
+        /// <see cref="Gimbl.MainWindow.EnsureMqttDefaults"/> so a freshly-instantiated client (via
+        /// <c>AddComponent</c> at editor time, before either hook has run) reports the same value
+        /// the eventual fallback would assign.
+        /// </remarks>
         [HideInInspector]
-        public string ipAddress;
+        public string ipAddress = "127.0.0.1";
 
         /// <summary>The port number of the MQTT broker.</summary>
+        /// <remarks>
+        /// The initializer matches the standard MQTT port fallback applied by <see cref="Awake"/>
+        /// and by <see cref="Gimbl.MainWindow.EnsureMqttDefaults"/>.
+        /// </remarks>
         [HideInInspector]
-        public int port;
+        public int port = 1883;
 
         /// <summary>The underlying MQTTnet client instance.</summary>
         public IMqttClient client;

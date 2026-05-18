@@ -66,8 +66,14 @@ namespace Gimbl
             DisplayObject display = displayGameObject.AddComponent<DisplayObject>();
             displayGameObject.tag = "VRDisplay";
 
-            DisplaySettings displaySettings = ScriptableObject.CreateInstance<DisplaySettings>();
-            AssetDatabase.CreateAsset(displaySettings, $"Assets/VRSettings/Displays/{displayName}.asset");
+            // Reuses any pre-existing settings asset so user customizations (brightness, heightInVR) survive scene rebuilds.
+            string settingsAssetPath = $"Assets/VRSettings/Displays/{displayName}.asset";
+            DisplaySettings displaySettings = AssetDatabase.LoadAssetAtPath<DisplaySettings>(settingsAssetPath);
+            if (displaySettings == null)
+            {
+                displaySettings = ScriptableObject.CreateInstance<DisplaySettings>();
+                AssetDatabase.CreateAsset(displaySettings, settingsAssetPath);
+            }
             display.settings = displaySettings;
 
             foreach (MeshRenderer mesh in displayGameObject.GetComponentsInChildren<MeshRenderer>())

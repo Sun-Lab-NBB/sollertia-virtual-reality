@@ -559,17 +559,7 @@ namespace Gimbl
             RemoveDefaultMainCamera();
             EnsureActorAndDisplay();
             EnsureControllers();
-
-            _client.ipAddress = EditorPrefs.GetString("SollertiaVR_MQTT_IP");
-            if (string.IsNullOrEmpty(_client.ipAddress))
-            {
-                _client.ipAddress = "127.0.0.1";
-            }
-            _client.port = EditorPrefs.GetInt("SollertiaVR_MQTT_Port");
-            if (_client.port == 0)
-            {
-                _client.port = 1883;
-            }
+            EnsureMqttDefaults();
         }
 
         /// <summary>Removes every default Unity "Main Camera" GameObject from the active scene.</summary>
@@ -691,6 +681,72 @@ namespace Gimbl
             {
                 EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             }
+        }
+
+        /// <summary>
+        /// Applies the project-wide MQTT broker defaults (IP and port) to the active scene's
+        /// <see cref="MQTTClient"/> component, reading from <c>EditorPrefs</c> with the standard
+        /// loopback fallback. Idempotent.
+        /// </summary>
+        /// <remarks>
+        /// Extracted from <see cref="InitializeScene"/> so external callers — notably
+        /// <see cref="SL.Tasks.CreateTask.CreateSceneFromTemplate"/> — can synchronously apply the
+        /// same defaults when constructing a scene, rather than waiting for the editor window's
+        /// next <c>delayCall</c>. The MQTT broker is a project-wide setting (per the GUI design),
+        /// so this overwrite is intentional on every scene-open pass.
+        /// </remarks>
+        public static void EnsureMqttDefaults()
+        {
+            GameObject mqttClientObject = GameObject.Find("MQTT Client");
+            if (mqttClientObject == null)
+            {
+                return;
+            }
+            MQTTClient client = mqttClientObject.GetComponent<MQTTClient>();
+            if (client == null)
+            {
+                return;
+            }
+
+            client.ipAddress = EditorPrefs.GetString("SollertiaVR_MQTT_IP");
+            if (string.IsNullOrEmpty(client.ipAddress))
+            {
+                client.ipAddress = "127.0.0.1";
+            }
+            client.port = EditorPrefs.GetInt("SollertiaVR_MQTT_Port");
+            if (client.port == 0)
+            {
+                client.port = 1883;
+            }
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        }
+
+        /// <summary>
+        /// Synchronizes the active scene's <see cref="DisplayObject.currentBrightness"/> with its
+        /// referenced <see cref="DisplaySettings.brightness"/> asset value, so a fresh scene's
+        /// runtime override matches the persisted asset default rather than the C# field
+        /// initializer.
+        /// </summary>
+        /// <remarks>
+        /// Called from <see cref="SL.Tasks.CreateTask.CreateSceneFromTemplate"/> after the scene is
+        /// instantiated, so newly-created scenes start at the asset's configured brightness.
+        /// Deliberately not called from <see cref="InitializeScene"/>: per-scene customizations to
+        /// <c>currentBrightness</c> (via the Blank / Show toggle or a direct API write) must
+        /// survive subsequent scene-open passes.
+        /// </remarks>
+        public static void SyncDisplayBrightnessToSettings()
+        {
+            DisplayObject display = FindAnyObjectByType<DisplayObject>();
+            if (display == null || display.settings == null)
+            {
+                return;
+            }
+            if (Mathf.Approximately(display.currentBrightness, display.settings.brightness))
+            {
+                return;
+            }
+            display.currentBrightness = display.settings.brightness;
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         }
 
         /// <summary>

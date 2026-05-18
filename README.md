@@ -290,7 +290,9 @@ by an allow-prefix list (`Assets/InfiniteCorridorTask/Tasks/`, `Prefabs/`, `Cues
 and a protected-paths set covering the four hand-authored prefabs (`StimulusTriggerZone.prefab`,
 `OccupancyTriggerZone.prefab`, `ResetZone.prefab`, `Padding.prefab`), the four hand-authored materials
 (`_CueShaderReference.mat`, `Floor.mat`, `Wall.mat`, `TargetMat.mat`), and the scene base template
-(`ExperimentTemplate.unity`). Path traversal sequences and absolute paths are rejected.
+(`ExperimentTemplate.unity`). Path traversal sequences and absolute paths are rejected. Deleting a scene under
+`Assets/Scenes/` cascade-deletes the matching `Assets/VRSettings/Displays/<scene>-savedFullScreenViews.asset` so the
+per-scene camera mapping does not outlive the scene.
 
 ***Note,*** AI agents do not call this bridge directly. They use the `slsa mcp` server's Unity relay tools, which are
 listed in the [sollertia-shared-assets](https://github.com/Sun-Lab-NBB/sollertia-shared-assets) README. The bridge

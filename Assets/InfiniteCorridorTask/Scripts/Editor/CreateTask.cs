@@ -640,6 +640,9 @@ namespace SL.Tasks
                 .FindObjectsOfTypeAll<SimulatedLinearTreadmill>()
                 .Any(existing => existing.gameObject.scene == activeScene);
             MainWindow.EnsureControllers();
+            // Applies defaults synchronously so the new scene is fully defaulted before this method returns.
+            MainWindow.EnsureMqttDefaults();
+            MainWindow.SyncDisplayBrightnessToSettings();
             result.SimulatedControllerAdded = !simulatedExistedBeforeEnsure;
 
             EditorSceneManager.SaveScene(activeScene);

@@ -13,7 +13,7 @@ namespace Gimbl
     {
         /// <summary>The brightness level for this display (0-100).</summary>
         [Tooltip("Default brightness (0-100) the display renders at while not blanked.")]
-        public float brightness = 100f;
+        public float brightness = 50f;
 
         /// <summary>The height of the display view in VR space.</summary>
         [Tooltip(
