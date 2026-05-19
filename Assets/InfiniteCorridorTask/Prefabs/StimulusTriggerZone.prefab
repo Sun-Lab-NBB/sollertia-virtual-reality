@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: 3594731197899825454}
   - component: {fileID: 7770990128262147702}
   m_Layer: 0
-  m_Name: RewardLocation_gr
+  m_Name: StimulusTriggerZone
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
