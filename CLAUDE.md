@@ -85,14 +85,14 @@ The `unity` plugin depends on the `assets` plugin for the backing `slsa mcp` ser
 
 ### Shared development skills (ataraxis marketplace, `automation` plugin)
 
-| Skill               | Description                                                                |
-|---------------------|----------------------------------------------------------------------------|
-| `/explore-codebase` | Perform in-depth codebase exploration at session start                     |
-| `/csharp-style`     | Apply Sun Lab C# coding conventions (REQUIRED for C# changes)              |
-| `/readme-style`     | Apply Sun Lab README conventions (REQUIRED for README changes)             |
-| `/commit`           | Draft Sun Lab style-compliant git commit messages                          |
-| `/skill-design`     | Generate, update, and verify skill files and this CLAUDE.md                |
-| `/project-layout`   | Apply Sun Lab project directory structure conventions (C# Unity archetype) |
+| Skill               | Description                                                                           |
+|---------------------|---------------------------------------------------------------------------------------|
+| `/explore-codebase` | Perform in-depth codebase exploration at session start                                |
+| `/csharp-style`     | Apply Sollertia platform C# coding conventions (REQUIRED for C# changes)              |
+| `/readme-style`     | Apply Sollertia platform README conventions (REQUIRED for README changes)             |
+| `/commit`           | Draft Sollertia platform style-compliant git commit messages                          |
+| `/skill-design`     | Generate, update, and verify skill files and this CLAUDE.md                           |
+| `/project-layout`   | Apply Sollertia platform project directory structure conventions (C# Unity archetype) |
 
 You MUST invoke `/library-extension` (assets plugin) when adding a new `TriggerType` member or otherwise extending the
 shared-assets template vocabulary, because the Python registry parity check on the `slsa mcp` side fails at import time
