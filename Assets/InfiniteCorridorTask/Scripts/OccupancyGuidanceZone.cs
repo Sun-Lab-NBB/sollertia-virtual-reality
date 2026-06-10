@@ -60,9 +60,9 @@ namespace SL.Tasks
         {
             inZone = true;
 
-            // Only triggers in guidance mode (!requireWait), if not already triggered this lap,
-            // and if the boundary is still armed (occupancy requirement not yet met).
-            if (!_task.requireWait && !_hasTriggered && !_parentOccupancyZone.boundaryDisarmed)
+            // Only triggers in guidance mode (!requireWait), if not already triggered this lap, and if the
+            // occupancy requirement is not yet met (so the brake can guide the animal to complete it).
+            if (!_task.requireWait && !_hasTriggered && !_parentOccupancyZone.occupancyMet)
             {
                 TriggerBrakeActivation();
             }

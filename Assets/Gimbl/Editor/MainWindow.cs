@@ -178,7 +178,7 @@ namespace Gimbl
         /// <remarks>
         /// Reads the cached <see cref="Task"/> reference (lazily refreshed on scene change). Disables the
         /// controls in Play Mode since the live guidance toggles are driven by MQTT during runtime. Hides
-        /// <c>Require Lick</c> and <c>Require Wait</c> when the active scene lacks a corresponding
+        /// <c>Require Interaction</c> and <c>Require Wait</c> when the active scene lacks a corresponding
         /// <see cref="GuidanceZone"/> or <see cref="OccupancyZone"/> to keep the section focused on the
         /// toggles actually consumed by the current task.
         /// </remarks>
@@ -210,21 +210,21 @@ namespace Gimbl
                         GUI.enabled = false;
                     }
 
-                    bool hasLickZone = GetCachedGuidanceZone() != null;
+                    bool hasInteractionZone = GetCachedGuidanceZone() != null;
                     bool hasOccupancyZone = GetCachedOccupancyZone() != null;
 
                     EditorGUI.BeginChangeCheck();
-                    bool newRequireLick = task.requireLick;
-                    if (hasLickZone)
+                    bool newRequireInteraction = task.requireInteraction;
+                    if (hasInteractionZone)
                     {
-                        newRequireLick = EditorGUILayout.Toggle(
+                        newRequireInteraction = EditorGUILayout.Toggle(
                             new GUIContent(
-                                "Require Lick: ",
-                                "When on, the animal must lick inside the stimulus zone to trigger the reward. "
-                                    + "When off, reaching the guidance zone automatically triggers the reward. "
-                                    + "Addressable via MQTT at runtime."
+                                "Require Interaction: ",
+                                "When on, the animal must engage an interaction sensor inside the stimulus zone "
+                                    + "to trigger the reward. When off, reaching the guidance zone automatically "
+                                    + "triggers the reward. Addressable via MQTT at runtime."
                             ),
-                            task.requireLick,
+                            task.requireInteraction,
                             LayoutSettings.EditFieldOption
                         );
                     }
@@ -264,7 +264,7 @@ namespace Gimbl
                     if (EditorGUI.EndChangeCheck())
                     {
                         Undo.RecordObject(task, "Edit Task Settings");
-                        task.requireLick = newRequireLick;
+                        task.requireInteraction = newRequireInteraction;
                         task.requireWait = newRequireWait;
                         task.trackLength = newTrackLength;
                         task.trackSeed = newTrackSeed;

@@ -694,7 +694,7 @@ namespace SL.Tasks
         /// <remarks>
         /// Each section is optional and individual fields within a section are also optional. Validation
         /// rejects values outside the enumeration reported by <see cref="ReadTaskParameters"/>, and rejects
-        /// require_lick / require_wait writes when the corresponding zone is absent from the scene so the
+        /// require_interaction / require_wait writes when the corresponding zone is absent from the scene so the
         /// agent contract matches the GUI's conditional rendering. Mutations flow through the same code
         /// paths the Parameters window uses, including <see cref="EditorUtility.SetDirty"/> on touched
         /// assets and a final <see cref="EditorSceneManager.MarkSceneDirty"/> when any write succeeded.
@@ -774,7 +774,7 @@ namespace SL.Tasks
             public Camera[] DisplayCameras;
 
             /// <summary>True when the scene contains at least one <see cref="GuidanceZone"/>.</summary>
-            public bool HasLickZone;
+            public bool HasInteractionZone;
 
             /// <summary>True when the scene contains at least one <see cref="OccupancyZone"/>.</summary>
             public bool HasOccupancyZone;
@@ -795,7 +795,7 @@ namespace SL.Tasks
                 Client = UnityEngine.Object.FindAnyObjectByType<MQTTClient>(),
                 Controllers = UnityEngine.Object.FindObjectsByType<ControllerOutput>(FindObjectsSortMode.None),
                 DisplayCameras = GetDisplayCameras(),
-                HasLickZone = UnityEngine.Object.FindAnyObjectByType<GuidanceZone>() != null,
+                HasInteractionZone = UnityEngine.Object.FindAnyObjectByType<GuidanceZone>() != null,
                 HasOccupancyZone = UnityEngine.Object.FindAnyObjectByType<OccupancyZone>() != null,
                 FullScreenManager = AcquireFullScreenManager(),
             };
@@ -905,7 +905,7 @@ namespace SL.Tasks
                     ? null
                     : new Dictionary<string, object>
                     {
-                        { "require_lick", components.Task.requireLick },
+                        { "require_interaction", components.Task.requireInteraction },
                         { "require_wait", components.Task.requireWait },
                         { "track_length", components.Task.trackLength },
                         { "track_seed", components.Task.trackSeed },
@@ -958,7 +958,7 @@ namespace SL.Tasks
                             "task",
                             new Dictionary<string, object>
                             {
-                                { "require_lick", components.HasLickZone },
+                                { "require_interaction", components.HasInteractionZone },
                                 { "require_wait", components.HasOccupancyZone },
                             }
                         },
@@ -1158,9 +1158,9 @@ namespace SL.Tasks
             {
                 return null;
             }
-            if (taskArgs.ContainsKey("require_lick") && !components.HasLickZone)
+            if (taskArgs.ContainsKey("require_interaction") && !components.HasInteractionZone)
             {
-                return "Cannot set require_lick: the active scene has no GuidanceZone, so the control is "
+                return "Cannot set require_interaction: the active scene has no GuidanceZone, so the control is "
                     + "hidden in the Parameters window and the flag has no runtime effect.";
             }
             if (taskArgs.ContainsKey("require_wait") && !components.HasOccupancyZone)
@@ -1170,9 +1170,9 @@ namespace SL.Tasks
             }
 
             Undo.RecordObject(components.Task, "Write Task Parameters");
-            if (taskArgs.TryGetValue("require_lick", out object requireLickObject))
+            if (taskArgs.TryGetValue("require_interaction", out object requireInteractionObject))
             {
-                components.Task.requireLick = Convert.ToBoolean(requireLickObject);
+                components.Task.requireInteraction = Convert.ToBoolean(requireInteractionObject);
                 dirty = true;
             }
             if (taskArgs.TryGetValue("require_wait", out object requireWaitObject))

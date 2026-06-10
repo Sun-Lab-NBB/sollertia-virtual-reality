@@ -50,24 +50,26 @@ namespace Gimbl
         /// </remarks>
         public const string Motion = "Motion";
 
-        /// <summary>Lick-port event indicating the animal licked the spout.</summary>
+        /// <summary>Sensor-interaction event indicating the animal engaged an interaction sensor.</summary>
         /// <remarks>
-        /// Direction: bidirectional. Hardware lickports publish from sollertia-experiment;
-        /// <see cref="SimulatedLinearTreadmill"/> publishes synthetic licks on the Jump action
+        /// Direction: bidirectional. The acquisition runtime resolves a concrete interaction sensor
+        /// (lick port, button, lever, pressure plate) and publishes from sollertia-experiment;
+        /// <see cref="SimulatedLinearTreadmill"/> publishes synthetic interactions on the Jump action
         /// (spacebar) for keyboard-only test runs.
         /// Payload: empty trigger (no body).
         /// Callers (subscribe): <see cref="SL.UI.LickStimulusSpawner"/>,
         /// <see cref="SL.Tasks.StimulusTriggerZone"/>.
         /// Callers (publish): <see cref="SimulatedLinearTreadmill"/>.
         /// </remarks>
-        public const string Lick = "Lick";
+        public const string Interaction = "Interaction";
 
         /// <summary>Stimulus delivery event published when a stimulus trigger zone fires.</summary>
         /// <remarks>
         /// Direction: bidirectional. Unity publishes when a trigger zone fires; sollertia-experiment
-        /// subscribes to log the event and command the stimulus hardware. The UI spawner also
-        /// subscribes locally to render an on-screen indicator.
-        /// Payload: empty trigger (no body).
+        /// subscribes to identify the firing zone by trial name and command the stimulus hardware. The
+        /// UI spawner also subscribes locally to render an on-screen indicator.
+        /// Payload: <see cref="SL.Tasks.StimulusTriggerZone.StimulusMessage"/> wrapping
+        /// <c>string trialName</c>, the identifier of the trial whose zone fired.
         /// Callers (publish): <see cref="SL.Tasks.StimulusTriggerZone"/> via <c>TriggerStimulus</c>.
         /// Callers (subscribe): <see cref="SL.UI.LickStimulusSpawner"/>.
         /// </remarks>
@@ -119,13 +121,13 @@ namespace Gimbl
         /// </remarks>
         public const string SceneName = "SceneName";
 
-        /// <summary>Lick-requirement toggle command. <c>value=true</c> enables, <c>value=false</c> disables.</summary>
+        /// <summary>Interaction-requirement toggle. <c>value=true</c> enables, <c>value=false</c> disables.</summary>
         /// <remarks>
         /// Direction: Unity listens; sollertia-experiment publishes.
         /// Payload: <see cref="SL.Tasks.Task.BoolMessage"/> wrapping <c>bool value</c>.
-        /// Callers (subscribe): <see cref="SL.Tasks.Task"/> via <c>OnRequireLick</c>.
+        /// Callers (subscribe): <see cref="SL.Tasks.Task"/> via <c>OnRequireInteraction</c>.
         /// </remarks>
-        public const string RequireLick = "RequireLick";
+        public const string RequireInteraction = "RequireInteraction";
 
         /// <summary>Wait-requirement toggle command. <c>value=true</c> enables, <c>value=false</c> disables.</summary>
         /// <remarks>

@@ -35,10 +35,10 @@ namespace SL.Tasks
         public ActorObject actor;
 
         /// <summary>
-        /// Determines whether the animal must lick to trigger the stimulus (lick guidance mode toggle).
+        /// Determines whether the animal must interact with a sensor to trigger the stimulus (guidance toggle).
         /// </summary>
         [HideInInspector]
-        public bool requireLick = false;
+        public bool requireInteraction = false;
 
         /// <summary>
         /// Determines whether the animal must wait in the occupancy zone (occupancy guidance mode toggle).
@@ -88,8 +88,8 @@ namespace SL.Tasks
         /// <summary>The MQTT channel for sending the scene name data.</summary>
         private MQTTChannel<SceneNameMessage> _sceneNameChannel;
 
-        /// <summary>The MQTT channel that toggles the lick requirement; payload value of true enables it.</summary>
-        private MQTTChannel<BoolMessage> _requireLickChannel;
+        /// <summary>The MQTT channel that toggles the interaction requirement; payload true enables it.</summary>
+        private MQTTChannel<BoolMessage> _requireInteractionChannel;
 
         /// <summary>The MQTT channel that toggles the wait requirement; payload value of true enables it.</summary>
         private MQTTChannel<BoolMessage> _requireWaitChannel;
@@ -274,10 +274,10 @@ namespace SL.Tasks
             _sceneNameTrigger.receivedEvent.AddListener(OnSceneNameTrigger);
             _sceneNameChannel = new MQTTChannel<SceneNameMessage>(MQTTTopics.SceneName, isListener: false);
 
-            // Sets up the MQTT channel for lick guidance mode control. The payload's bool value sets the
-            // lick-requirement flag directly: true enables (lick required), false disables (guidance mode).
-            _requireLickChannel = new MQTTChannel<BoolMessage>(MQTTTopics.RequireLick, isListener: true);
-            _requireLickChannel.receivedEvent.AddListener(OnRequireLick);
+            // Sets up the MQTT channel for interaction guidance mode control. The payload's bool value sets
+            // the requirement flag directly: true enables (interaction required), false disables (guidance).
+            _requireInteractionChannel = new MQTTChannel<BoolMessage>(MQTTTopics.RequireInteraction, isListener: true);
+            _requireInteractionChannel.receivedEvent.AddListener(OnRequireInteraction);
 
             // Sets up the MQTT channel for occupancy guidance mode control. The payload's bool value sets
             // the wait-requirement flag directly: true enables (wait required), false disables (guidance).
@@ -341,7 +341,7 @@ namespace SL.Tasks
         {
             _cueSequenceTrigger?.receivedEvent.RemoveListener(OnCueSequenceTrigger);
             _sceneNameTrigger?.receivedEvent.RemoveListener(OnSceneNameTrigger);
-            _requireLickChannel?.receivedEvent.RemoveListener(OnRequireLick);
+            _requireInteractionChannel?.receivedEvent.RemoveListener(OnRequireInteraction);
             _requireWaitChannel?.receivedEvent.RemoveListener(OnRequireWait);
         }
 
@@ -358,11 +358,11 @@ namespace SL.Tasks
             _sceneNameChannel.Send(new SceneNameMessage() { name = _sceneName });
         }
 
-        /// <summary>MQTT callback that applies the lick-requirement toggle from the message payload.</summary>
+        /// <summary>MQTT callback that applies the interaction-requirement toggle from the message payload.</summary>
         /// <param name="message">The boolean payload; true enables the requirement, false disables it.</param>
-        private void OnRequireLick(BoolMessage message)
+        private void OnRequireInteraction(BoolMessage message)
         {
-            requireLick = message.value;
+            requireInteraction = message.value;
         }
 
         /// <summary>MQTT callback that applies the wait-requirement toggle from the message payload.</summary>

@@ -1,16 +1,16 @@
 /// <summary>
 /// Provides the StimulusTriggerZone class that manages stimulus delivery based on animal behavior.
 ///
-/// Supports two trigger modes determined by the presence of child zones. The trigger mode specifies
-/// how a stimulus is triggered, not what stimulus is delivered. Any stimulus type can be paired
-/// with either trigger mode.
+/// The trigger mechanism is selected by the triggerMode field (set by CreateTask from the trial's
+/// trigger_type), not by what stimulus is delivered: any stimulus type can be paired with any mode, and
+/// the experiment driver resolves the outcome from the trial name this zone publishes when it fires.
 ///
-/// In lick mode (with GuidanceZone child), when guidance is disabled the animal must lick in the zone
-/// to trigger stimulus. When guidance is enabled, the stimulus is delivered when the animal reaches
-/// the GuidanceZone.
-///
-/// In occupancy mode (with OccupancyZone child), the animal must occupy the zone for the required
-/// duration to disarm the boundary. Boundary collision triggers stimulus only when the boundary is armed.
+/// Interaction mode (GuidanceZone child) fires on a sensor interaction in the zone, or on reaching the
+/// guidance zone. Collision mode fires unconditionally when the animal crosses the boundary wall. The
+/// three occupancy modes (OccupancyZone child) gate on whether the animal occupied the zone for the
+/// required duration: OccupancyDisarm fires on a still-armed boundary collision (occupancy not met),
+/// OccupancyArm fires on a newly-armed boundary collision (occupancy met), and OccupancyTrigger fires
+/// immediately when occupancy is met.
 /// </summary>
 using Gimbl;
 using UnityEngine;
@@ -19,10 +19,15 @@ namespace SL.Tasks
 {
     /// <summary>
     /// Manages stimulus delivery based on animal behavior within the trigger zone.
-    /// The trigger mode is determined by the presence of child GuidanceZone or OccupancyZone components.
+    /// The trigger mechanism is selected by the triggerMode field set by CreateTask at generation.
     /// </summary>
     public class StimulusTriggerZone : MonoBehaviour, IResettable
     {
+        /// <summary>
+        /// The trigger mechanism this zone uses. Set at task creation time from the trial's trigger_type.
+        /// </summary>
+        public TriggerMode triggerMode = TriggerMode.Interaction;
+
         /// <summary>
         /// Determines whether the stimulus boundary should be visible when this zone is active.
         /// Set at task creation time from the task template's showStimulusCollisionBoundary per trial type.
@@ -34,34 +39,36 @@ namespace SL.Tasks
         /// </summary>
         public bool isActive = true;
 
+        /// <summary>
+        /// The stimulus identifier published on the Stimulus topic when this zone fires. Equals the
+        /// owning trial's name and is set at task creation time. The experiment driver joins on it to
+        /// resolve the stimulus outcome.
+        /// </summary>
+        public string trialName = "";
+
         /// <summary>Determines whether the animal is currently inside this trigger zone.</summary>
         private bool _inZone = false;
 
-        /// <summary>Determines whether a lick was detected while the animal was in the zone.</summary>
-        private bool _lickDetectedInZone = false;
+        /// <summary>Determines whether an interaction was detected while the animal was in the zone.</summary>
+        private bool _interactionDetectedInZone = false;
 
-        /// <summary>The child GuidanceZone that determines lick mode behavior, if present.</summary>
+        /// <summary>The child GuidanceZone that supplies the guided fire path in interaction mode, if present.</summary>
         private GuidanceZone _guidanceZone;
 
-        /// <summary>The child OccupancyZone that determines occupancy mode behavior, if present.</summary>
+        /// <summary>The child OccupancyZone that supplies the occupancy state in the occupancy modes, if present.</summary>
         private OccupancyZone _occupancyZone;
 
         /// <summary>The reference to the Task for checking guidance mode state.</summary>
         private Task _task;
 
-        /// <summary>The MQTT channel for sending stimulus trigger messages.</summary>
-        private MQTTChannel _stimulusTrigger;
+        /// <summary>The MQTT channel for publishing stimulus trigger messages carrying the trial name.</summary>
+        private MQTTChannel<StimulusMessage> _stimulusTrigger;
 
-        /// <summary>The MQTT channel for receiving lick detection messages.</summary>
-        private MQTTChannel _lickTrigger;
+        /// <summary>The MQTT channel for receiving interaction-sensor messages.</summary>
+        private MQTTChannel _interactionTrigger;
 
         /// <summary>The cached MeshRenderer used to render the boundary indicator, if attached.</summary>
         private MeshRenderer _boundaryRenderer;
-
-        /// <summary>
-        /// Determines whether this zone operates in occupancy mode based on presence of OccupancyZone child.
-        /// </summary>
-        private bool IsOccupancyMode => _occupancyZone != null;
 
         /// <summary>Initializes the zone by finding child zones and setting up MQTT channels.</summary>
         private void Start()
@@ -74,7 +81,7 @@ namespace SL.Tasks
                 return;
             }
 
-            // Finds child zones that determine behavior mode.
+            // Finds child zones that supply the guidance and occupancy state for the active mode.
             _guidanceZone = GetComponentInChildren<GuidanceZone>();
             _occupancyZone = GetComponentInChildren<OccupancyZone>();
 
@@ -82,24 +89,32 @@ namespace SL.Tasks
             TryGetComponent(out _boundaryRenderer);
 
             // Sets up MQTT channels.
-            _stimulusTrigger = new MQTTChannel(MQTTTopics.Stimulus);
-            _lickTrigger = new MQTTChannel(MQTTTopics.Lick, isListener: true);
-            _lickTrigger.receivedEvent.AddListener(OnLickDetected);
+            _stimulusTrigger = new MQTTChannel<StimulusMessage>(MQTTTopics.Stimulus, isListener: false);
+            _interactionTrigger = new MQTTChannel(MQTTTopics.Interaction, isListener: true);
+            _interactionTrigger.receivedEvent.AddListener(OnInteractionDetected);
         }
 
-        /// <summary>Updates the zone state each frame, handling stimulus trigger logic based on mode.</summary>
+        /// <summary>Updates the zone state each frame, dispatching to the handler for the active trigger mode.</summary>
         private void Update()
         {
             if (!isActive)
                 return;
 
-            if (IsOccupancyMode)
+            switch (triggerMode)
             {
-                UpdateOccupancyMode();
-            }
-            else
-            {
-                UpdateLickMode();
+                case TriggerMode.Interaction:
+                    UpdateInteractionMode();
+                    break;
+                case TriggerMode.Collision:
+                    UpdateCollisionMode();
+                    break;
+                case TriggerMode.OccupancyDisarm:
+                case TriggerMode.OccupancyArm:
+                case TriggerMode.OccupancyTrigger:
+                    UpdateOccupancyMode();
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -120,7 +135,7 @@ namespace SL.Tasks
         /// <summary>Removes MQTT event listeners when the component is destroyed.</summary>
         private void OnDestroy()
         {
-            _lickTrigger?.receivedEvent.RemoveListener(OnLickDetected);
+            _interactionTrigger?.receivedEvent.RemoveListener(OnInteractionDetected);
         }
 
         /// <summary>Resets the zone state for a new lap.</summary>
@@ -128,7 +143,7 @@ namespace SL.Tasks
         public void ResetState()
         {
             isActive = true;
-            _lickDetectedInZone = false;
+            _interactionDetectedInZone = false;
             _inZone = false;
             UpdateBoundaryVisibility(showBoundary);
         }
@@ -144,23 +159,24 @@ namespace SL.Tasks
         }
 
         /// <summary>
-        /// Handles lick mode behavior. When guidance is disabled, the animal must lick in the zone.
-        /// When guidance is enabled with a GuidanceZone, the animal can lick in the zone or reach the
-        /// guidance zone. When guidance is enabled without a GuidanceZone, stimulus triggers on zone entry.
+        /// Handles interaction mode behavior. When guidance is disabled, the animal must engage an
+        /// interaction sensor in the zone. When guidance is enabled with a GuidanceZone, the animal can
+        /// interact in the zone or reach the guidance zone. When guidance is enabled without a
+        /// GuidanceZone, the stimulus triggers on zone entry.
         /// </summary>
-        private void UpdateLickMode()
+        private void UpdateInteractionMode()
         {
-            if (_task.requireLick)
+            if (_task.requireInteraction)
             {
-                if (_inZone && _lickDetectedInZone)
+                if (_inZone && _interactionDetectedInZone)
                 {
                     TriggerStimulus();
                 }
             }
             else if (_guidanceZone != null)
             {
-                // Animal can receive stimulus by licking anywhere in the trigger zone.
-                if (_inZone && _lickDetectedInZone)
+                // Animal can receive stimulus by interacting anywhere in the trigger zone.
+                if (_inZone && _interactionDetectedInZone)
                 {
                     TriggerStimulus();
                 }
@@ -181,40 +197,84 @@ namespace SL.Tasks
         }
 
         /// <summary>
-        /// Handles occupancy mode behavior. The animal must occupy the OccupancyZone for the required
-        /// duration to disarm the boundary. Boundary collision only triggers stimulus when the boundary
-        /// is armed. In guidance mode, occupancy failure triggers movement blocking via MQTT.
+        /// Handles collision mode behavior. The animal fires the stimulus unconditionally by crossing the
+        /// invisible boundary wall (the root trigger collider), with no sensor or occupancy requirement.
         /// </summary>
-        private void UpdateOccupancyMode()
+        private void UpdateCollisionMode()
         {
-            // Boundary collision triggers stimulus only when boundary is armed (occupancy requirement not met).
-            if (_inZone && _occupancyZone != null && !_occupancyZone.boundaryDisarmed)
+            if (_inZone)
             {
                 TriggerStimulus();
             }
         }
 
-        /// <summary>Triggers the stimulus, hides the boundary, and sends the MQTT message.</summary>
+        /// <summary>
+        /// Handles the occupancy modes. The child OccupancyZone tracks whether the animal occupied the zone
+        /// for the required duration (occupancyMet). OccupancyDisarm fires on a boundary collision while
+        /// occupancy is not met, OccupancyArm fires on a boundary collision once occupancy is met, and
+        /// OccupancyTrigger fires immediately when occupancy is met, with no boundary collision.
+        /// </summary>
+        private void UpdateOccupancyMode()
+        {
+            if (_occupancyZone == null)
+            {
+                return;
+            }
+
+            bool occupancyMet = _occupancyZone.occupancyMet;
+            switch (triggerMode)
+            {
+                case TriggerMode.OccupancyDisarm:
+                    if (_inZone && !occupancyMet)
+                    {
+                        TriggerStimulus();
+                    }
+                    break;
+                case TriggerMode.OccupancyArm:
+                    if (_inZone && occupancyMet)
+                    {
+                        TriggerStimulus();
+                    }
+                    break;
+                case TriggerMode.OccupancyTrigger:
+                    if (occupancyMet)
+                    {
+                        TriggerStimulus();
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        /// <summary>Triggers the stimulus, hides the boundary, and publishes the trial name over MQTT.</summary>
         private void TriggerStimulus()
         {
-            Debug.Log("StimulusTriggerZone: Stimulus triggered.");
+            Debug.Log($"StimulusTriggerZone: Stimulus triggered for trial '{trialName}'.");
             UpdateBoundaryVisibility(false);
-            _stimulusTrigger.Send();
+            _stimulusTrigger.Send(new StimulusMessage { trialName = trialName });
             isActive = false;
-            _lickDetectedInZone = false;
+            _interactionDetectedInZone = false;
         }
 
         /// <summary>
-        /// Records that a lick occurred while in the zone.
-        /// Only relevant in lick mode when the zone is active.
+        /// Records that an interaction occurred while in the zone.
+        /// Only relevant in interaction mode when the zone is active.
         /// </summary>
-        private void OnLickDetected()
+        private void OnInteractionDetected()
         {
-            Debug.Log("StimulusTriggerZone: Lick detected.");
-            if (isActive && _inZone && !IsOccupancyMode)
+            Debug.Log("StimulusTriggerZone: Interaction detected.");
+            if (isActive && _inZone && triggerMode == TriggerMode.Interaction)
             {
-                _lickDetectedInZone = true;
+                _interactionDetectedInZone = true;
             }
+        }
+
+        /// <summary>Wraps the firing trial's name for MQTT transmission on the Stimulus topic.</summary>
+        public class StimulusMessage
+        {
+            /// <summary>The identifier of the trial whose stimulus trigger zone fired.</summary>
+            public string trialName;
         }
     }
 }

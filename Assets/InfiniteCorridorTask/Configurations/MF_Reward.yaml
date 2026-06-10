@@ -55,4 +55,4 @@ trial_structures:
     stimulus_trigger_zone_end_cm: 392.5
     stimulus_location_cm: 388.5
     show_stimulus_collision_boundary: false
-    trigger_type: "lick"
+    trigger_type: "interaction"

@@ -32,7 +32,8 @@ ___
 ## Features
 
 - Generates infinite-corridor VR tasks from YAML templates via the Editor menu or the `slsa mcp` Unity relay.
-- Supports lick-driven and occupancy-driven stimulus trigger zones with optional guidance modes.
+- Supports five stimulus trigger modes (interaction, collision, occupancy-disarm, occupancy-arm, occupancy-trigger)
+  with optional guidance modes.
 - Supports probablistic transitions between trial structures within a single task template.
 - Exposes HTTP-based McpBridge that exposes 13 Editor operations to AI agents (task lifecycle, scene management,
   asset inspection, Play Mode control, parameter read/write).
@@ -238,8 +239,23 @@ A task template defines:
   `padding_prefab_name`, `cm_per_unity_unit`, and `cue_offset_cm`.
 - **trial_structures**: A dictionary mapping trial names (e.g., `ABCD`) to their spatial configuration: the cue
   sequence, the stimulus trigger zone start and end positions, the stimulus location, an optional collision-boundary
-  visibility flag, a trigger type (`"lick"` or `"occupancy"`), and an optional probability distribution over
-  successor trials.
+  visibility flag, a trigger type (one of `"interaction"`, `"collision"`, `"occupancy_disarm"`, `"occupancy_arm"`, or
+  `"occupancy_trigger"`), and an optional probability distribution over successor trials.
+
+The five trigger modes share the same `Stimulus` event but differ in how that event is fired:
+
+- **interaction**: an animal interaction (e.g., a lick) detected while inside the trigger zone fires the stimulus.
+- **collision**: crossing an invisible boundary wall — a thin collider at `stimulus_location` — fires the stimulus
+  unconditionally, with no sensor and no occupancy requirement. The `showStimulusCollisionBoundary` flag toggles the
+  boundary's visibility.
+- **occupancy_disarm**: colliding with the boundary while the occupancy requirement is **not** met fires the stimulus.
+- **occupancy_arm**: the inverse of `occupancy_disarm` — occupying the zone for the required duration arms the
+  boundary, and colliding with the now-armed boundary fires the stimulus.
+- **occupancy_trigger**: occupying the zone for the required duration fires the stimulus immediately, with no boundary
+  collision.
+
+All three occupancy modes keep the occupancy-guidance brake: the `OccupancyGuidanceZone` publishes `Delay` to guide
+the animal toward completing the occupancy requirement when running in guidance mode.
 
 Template filenames follow the `ProjectAbbreviation_TaskDescription.yaml` convention (for example, `SSO_Merging.yaml`).
 The template name is derived from the filename and is reused verbatim as the Unity scene name, the task prefab name,
@@ -306,20 +322,20 @@ five sections:
 | MQTT             | Broker IP and port; the Test Connection button performs a one-shot connect/disconnect probe                                                 |
 | Display          | Brightness, height in VR, and a Blank/Show toggle for the active display                                                                    |
 | Camera Mapping   | Refresh Monitor Positions plus a per-monitor row (one per OS-detected monitor) with a camera dropdown (`Left View`, `Center View`, `Right View` for the default display rig) and a Show Full-Screen Views action |
-| Task             | Require Lick, Require Wait, Track Length, and Track Seed for the active scene's `Task` component                                            |
+| Task             | Require Interaction, Require Wait, Track Length, and Track Seed for the active scene's `Task` component                                     |
 
 The `Task` component's public fields are marked `[HideInInspector]`; `TaskEditor` replaces the default Inspector with
 a HelpBox pointing at this window. Configure every task field through Task Parameters, not the Inspector. The
-`Require Lick` and `Require Wait` controls are hidden when the active scene lacks the corresponding `GuidanceZone` or
-`OccupancyZone`.
+`Require Interaction` and `Require Wait` controls are hidden when the active scene lacks the corresponding
+`GuidanceZone` or `OccupancyZone`.
 
 ***Warning!*** Verify monitor assignments after every system reboot. The operating system can reassign display ports,
 and the camera-to-monitor mapping is scene-bound — a mismatch causes the wrong camera to render to each physical
 monitor.
 
 For manual testing without hardware, select **Simulated Linear** as the Actor's controller. The
-`SimulatedLinearTreadmill` reads keyboard input via the Unity Input System and publishes a synthetic `Lick` message
-on every press of the Jump action (spacebar).
+`SimulatedLinearTreadmill` reads keyboard input via the Unity Input System and publishes a synthetic `Interaction`
+message on every press of the Jump action (spacebar).
 
 ### MQTT Contract
 
@@ -332,19 +348,19 @@ in `Assets/Gimbl/Scripts/MQTT/MQTTTopics.cs`.
 | `SessionStart`       | Publish             | Empty trigger                                 |
 | `SessionStop`        | Publish             | Empty trigger                                 |
 | `Motion`             | Subscribe           | `{movement: float}`                           |
-| `Lick`               | Publish + Subscribe | Empty trigger                                 |
-| `Stimulus`           | Publish + Subscribe | Empty trigger                                 |
+| `Interaction`        | Publish + Subscribe | Empty trigger                                 |
+| `Stimulus`           | Publish + Subscribe | `{trialName: string}`                         |
 | `Delay`              | Publish             | `{delayMilliseconds: uint}`                   |
 | `CueSequenceTrigger` | Subscribe           | Empty trigger                                 |
 | `CueSequence`        | Publish             | `{cueSequence: byte[]}`                       |
 | `SceneNameTrigger`   | Subscribe           | Empty trigger                                 |
 | `SceneName`          | Publish             | `{name: string}`                              |
-| `RequireLick`        | Subscribe           | `{value: bool}`                               |
+| `RequireInteraction` | Subscribe           | `{value: bool}`                               |
 | `RequireWait`        | Subscribe           | `{value: bool}`                               |
 
 When the broker is unreachable, `MQTTClient.Publish` routes messages in-process so keyboard-only test runs still reach
 local subscribers (for example, the on-screen `LickStimulusSpawner` indicator). Production runs require a real MQTT 5.0
-broker because sollertia-experiment is the counterparty for every non-`Lick` and non-`Stimulus` topic.
+broker because sollertia-experiment is the counterparty for every non-`Interaction` and non-`Stimulus` topic.
 
 ***Note,*** the `/mqtt-contract` skill in the sollertia marketplace's **unity** plugin is the canonical reference for
 topic ownership and payload shape. Any topic addition or rename must be coordinated with sollertia-experiment in the
@@ -439,12 +455,18 @@ The project exposes six concentrated extension points. Each has a matching skill
 | New treadmill controller | `ControllerObject` subclass + `ControllerTypes` enum entry                                      | `/gimbl-framework` |
 
 **Adding a new trigger zone type** is the most cross-cutting extension. The `/zone-prefabs` skill documents the
-copy-and-edit workflow for the prefab itself: start from `StimulusTriggerZone.prefab` (lick mode) or
-`OccupancyTriggerZone.prefab` (occupancy mode) under `Prefabs/`, swap the modifier script GUIDs, rename regions,
-and override field defaults. The new prefab path must then be added to `McpBridge.DeleteProtectedPaths`, a new branch
-must be added in `CreateTask.BuildSegmentPrefabs` with a matching `Place...Zone` helper, and 
-`ConfigLoader.ValidateTemplate` must accept the new `trigger_type` literal. The Python side requires a matching 
-`TriggerType` registry update via the `/library-extension` skill in the **assets** plugin.
+copy-and-edit workflow for the prefab itself: start from `StimulusTriggerZone.prefab` (interaction and collision modes)
+or `OccupancyTriggerZone.prefab` (the three occupancy modes) under `Prefabs/`, swap the modifier script GUIDs, rename
+regions, and override field defaults. The new prefab path must then be added to `McpBridge.DeleteProtectedPaths`, a new
+branch must be added in `CreateTask.BuildSegmentPrefabs` with a matching `Place...Zone` helper, and 
+`ConfigLoader.ValidateTemplate` must accept the new `trigger_type` literal. `CreateTask` sets the `TriggerMode` enum
+field on `StimulusTriggerZone` from the `trigger_type`, and the zone dispatches on that enum. The Python side requires
+a matching `TriggerType` registry update via the `/library-extension` skill in the **assets** plugin. Adding a
+`TriggerType` member does **not** require a `from_task_template` branch in every acquisition system: the platform
+`TriggerType` enum carries all members, but each system maps only the subset it supports and may leave a mode
+unmapped. A config that uses an unmapped mode raises a clear "not mapped to a runtime trial class" error. The
+Mesoscope-VR system, for example, maps `interaction` (`WaterRewardTrial`) and `occupancy_disarm` (`GasPuffTrial`), and
+does not map `collision`, `occupancy_arm`, or `occupancy_trigger`.
 
 **Adding a new MQTT topic** requires the constant in `MQTTTopics.cs` (with `Direction`, `Payload`, and `Callers`
 remarks), a runtime script that publishes or subscribes, an in-lockstep update in sollertia-experiment, and a refresh
