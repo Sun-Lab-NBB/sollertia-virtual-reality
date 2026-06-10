@@ -460,14 +460,13 @@ or `OccupancyTriggerZone.prefab` (the three occupancy modes) under `Prefabs/`, s
 regions, and override field defaults. The new prefab path must then be added to `McpBridge.DeleteProtectedPaths`, a new
 branch must be added in `CreateTask.BuildSegmentPrefabs` with a matching `Place...Zone` helper, and 
 `ConfigLoader.ValidateTemplate` must accept the new `trigger_type` literal. `CreateTask` sets the `TriggerMode` enum
-field on `StimulusTriggerZone` from the `trigger_type`, and the zone dispatches on that enum rather than inferring the
-mode from which child zone is present. The Python side requires a matching `TriggerType` registry update via the
-`/library-extension` skill in the **assets** plugin. Adding a `TriggerType` member does **not** require a
-`from_task_template` branch in every acquisition system: the platform `TriggerType` enum carries all members, but each
-system maps only the subset it supports and may leave a mode unmapped. A config that uses an unmapped mode raises a
-clear "not mapped to a runtime trial class" error. The five current modes (`interaction`, `collision`,
-`occupancy_disarm`, `occupancy_arm`, `occupancy_trigger`) illustrate this: Mesoscope-VR maps only `interaction`
-(`WaterRewardTrial`) and `occupancy_disarm` (`GasPuffTrial`); the other three are intentionally unmapped.
+field on `StimulusTriggerZone` from the `trigger_type`, and the zone dispatches on that enum. The Python side requires
+a matching `TriggerType` registry update via the `/library-extension` skill in the **assets** plugin. Adding a
+`TriggerType` member does **not** require a `from_task_template` branch in every acquisition system: the platform
+`TriggerType` enum carries all members, but each system maps only the subset it supports and may leave a mode
+unmapped. A config that uses an unmapped mode raises a clear "not mapped to a runtime trial class" error. The
+Mesoscope-VR system, for example, maps `interaction` (`WaterRewardTrial`) and `occupancy_disarm` (`GasPuffTrial`), and
+does not map `collision`, `occupancy_arm`, or `occupancy_trigger`.
 
 **Adding a new MQTT topic** requires the constant in `MQTTTopics.cs` (with `Direction`, `Payload`, and `Callers`
 remarks), a runtime script that publishes or subscribes, an in-lockstep update in sollertia-experiment, and a refresh

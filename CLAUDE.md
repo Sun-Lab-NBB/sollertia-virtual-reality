@@ -99,9 +99,10 @@ shared-assets template vocabulary, because the Python registry parity check on t
 if any downstream entry is missing. The platform `TriggerType` enum carries all five members (`INTERACTION`,
 `COLLISION`, `OCCUPANCY_DISARM`, `OCCUPANCY_ARM`, and `OCCUPANCY_TRIGGER`), and each acquisition system maps only the
 subset it supports: a new `TriggerType` member does NOT require a `from_task_template` branch — a system may leave it
-unsupported/unmapped. Mesoscope-VR's `from_task_template` supports ONLY `INTERACTION` (→ `WaterRewardTrial`) and
-`OCCUPANCY_DISARM` (→ `GasPuffTrial`); the three new modes are intentionally unmapped, so a Mesoscope-VR config that
-uses one raises a clear "not mapped to a runtime trial class" error. The Unity counterpart of such a change is captured
+unsupported/unmapped. The Mesoscope-VR system's `from_task_template` maps `INTERACTION` (→ `WaterRewardTrial`) and
+`OCCUPANCY_DISARM` (→ `GasPuffTrial`), and does not map `collision`, `occupancy_arm`, or `occupancy_trigger`, so a
+Mesoscope-VR config that uses one of those raises a clear "not mapped to a runtime trial class" error. The Unity
+counterpart of such a change is captured
 in the extension contracts table below.
 
 ## MCP server
@@ -219,15 +220,15 @@ corridors built from prefabricated visual cue segments and driven over MQTT 5.0 
   the segment is traversed.
 - **Zone composition**: `StimulusTriggerZone` carries a `TriggerMode` enum field (`Interaction`, `Collision`,
   `OccupancyDisarm`, `OccupancyArm`, `OccupancyTrigger`) set by `CreateTask` from the trial's `trigger_type`, and
-  dispatches on this enum rather than inferring the mode from which child zone is present. It publishes
+  dispatches on this enum. It publishes
   `StimulusMessage { trialName }` on the `Stimulus` topic when it fires (its `trialName` field is set by `CreateTask` at
-  generation, so the stimulus id equals the trial name); every mode publishes the same `Stimulus{trialName}` event, so
-  the new modes add no MQTT topics. `collision` crosses an invisible boundary wall (a thin collider at
+  generation, so the stimulus id equals the trial name); every mode publishes the same `Stimulus{trialName}` event and
+  adds no MQTT topics. `collision` crosses an invisible boundary wall (a thin collider at
   `stimulus_location`) and fires unconditionally — no sensor, no occupancy — keeping the
   `showStimulusCollisionBoundary` visibility toggle. `occupancy_disarm` fires on a boundary collision while occupancy is
   NOT met; `occupancy_arm` is its inverse, where occupying the zone ARMS the boundary and colliding with the now-armed
   boundary (occupancy MET) fires; `occupancy_trigger` fires immediately once the required occupancy duration elapses, no
-  boundary collision. `OccupancyZone` exposes a generic `occupancyMet` signal (renamed from `boundaryDisarmed`); the
+  boundary collision. `OccupancyZone` exposes a generic `occupancyMet` signal; the
   parent `StimulusTriggerZone` applies the per-mode firing rule. All three occupancy modes keep the occupancy-guidance
   brake: `OccupancyGuidanceZone` lives under `OccupancyZone` and publishes `Delay` (carrying the remaining occupancy
   duration in milliseconds) when the animal enters in guidance mode. `ResetZone` discovers every `IResettable` in the
