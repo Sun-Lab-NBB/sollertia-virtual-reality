@@ -19,28 +19,28 @@ namespace Gimbl
         /// <summary>The Unity Input System action map for keyboard simulation.</summary>
         private SimulatedInput _input;
 
-        /// <summary>The MQTT channel for sending simulated lick trigger events.</summary>
-        private MQTTChannel _lickTrigger;
+        /// <summary>The MQTT channel for sending simulated interaction-sensor trigger events.</summary>
+        private MQTTChannel _interactionTrigger;
 
         /// <summary>Initializes the Input System for keyboard simulation on start.</summary>
         private void Start()
         {
             _input = new SimulatedInput();
             _input.Enable();
-            _lickTrigger = new MQTTChannel(MQTTTopics.Lick);
+            _interactionTrigger = new MQTTChannel(MQTTTopics.Interaction);
         }
 
         /// <summary>Processes simulated input and movement each frame.</summary>
         /// <remarks>
-        /// The lick trigger fires on every press of the Jump action (spacebar), routed through
-        /// <see cref="_lickTrigger"/> to the <see cref="MQTTTopics.Lick"/> channel.
+        /// The interaction trigger fires on every press of the Jump action (spacebar), routed through
+        /// <see cref="_interactionTrigger"/> to the <see cref="MQTTTopics.Interaction"/> channel.
         /// </remarks>
         public override void Update()
         {
             GetSimulatedInput();
             if (actor != null && _input.Player.Jump.WasPressedThisFrame())
             {
-                _lickTrigger?.Send();
+                _interactionTrigger?.Send();
             }
             ProcessMovement();
         }

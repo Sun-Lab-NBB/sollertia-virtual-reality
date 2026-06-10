@@ -52,7 +52,7 @@ trial_structures:
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
     show_stimulus_collision_boundary: false
-    trigger_type: "lick"
+    trigger_type: "interaction"
     transitions:
       ABC: 0.5
       AGFE: 0.5
@@ -63,7 +63,7 @@ trial_structures:
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
     show_stimulus_collision_boundary: false
-    trigger_type: "lick"
+    trigger_type: "interaction"
     transitions:
       ABC: 0.5
       AGFE: 0.5

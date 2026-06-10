@@ -35,11 +35,17 @@ namespace SL.Config
         public bool showStimulusCollisionBoundary = false;
 
         /// <summary>
-        /// The trigger mode for the stimulus zone. "lick" uses the StimulusTriggerZone prefab with
-        /// a GuidanceZone child. "occupancy" uses the OccupancyTriggerZone prefab with OccupancyZone
+        /// The trigger mode for the stimulus zone. "interaction" uses the StimulusTriggerZone prefab with
+        /// a GuidanceZone child. "occupancy_disarm" uses the OccupancyTriggerZone prefab with OccupancyZone
         /// and OccupancyGuidanceZone children.
         /// </summary>
         public string triggerType;
+
+        /// <summary>
+        /// The duration in milliseconds the animal must occupy the zone for occupancy trigger modes. Applied
+        /// to the OccupancyZone at task creation time and ignored for non-occupancy trigger modes.
+        /// </summary>
+        public float occupancyDurationMs = 1000f;
 
         /// <summary>
         /// The optional probability distribution over the trial names that may follow this trial during corridor

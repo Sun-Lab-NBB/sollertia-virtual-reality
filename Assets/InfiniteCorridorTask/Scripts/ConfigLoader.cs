@@ -165,15 +165,41 @@ namespace SL.Config
                 }
 
                 if (
-                    !string.Equals(trial.triggerType, "lick", StringComparison.Ordinal)
-                    && !string.Equals(trial.triggerType, "occupancy", StringComparison.Ordinal)
+                    !string.Equals(trial.triggerType, "interaction", StringComparison.Ordinal)
+                    && !string.Equals(trial.triggerType, "occupancy_disarm", StringComparison.Ordinal)
                 )
                 {
                     throw new InvalidDataException(
                         $"Trial '{trialName}' has invalid trigger_type '{trial.triggerType}'. "
-                            + "Must be 'lick' or 'occupancy'."
+                            + "Must be 'interaction' or 'occupancy_disarm'."
                     );
                 }
+
+                if (trial.occupancyDurationMs <= 0f)
+                {
+                    string message =
+                        $"Trial '{trialName}' has invalid occupancy_duration_ms {trial.occupancyDurationMs}. "
+                        + "Must be positive.";
+                    throw new InvalidDataException(message);
+                }
+            }
+
+            // Validates that no two trials share an identical cue sequence. Identical cue sequences are
+            // indistinguishable to the experiment's cue-stream decomposer, which would silently merge them.
+            Dictionary<string, string> seenSequences = new Dictionary<string, string>();
+            foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
+            {
+                string trialName = trialEntry.Key;
+                string signature = string.Join(" ", trialEntry.Value.cueSequence);
+                if (seenSequences.TryGetValue(signature, out string existingTrialName))
+                {
+                    string message =
+                        $"Trials '{existingTrialName}' and '{trialName}' share an identical cue sequence. "
+                        + "Each trial must have a unique cue sequence so the experiment can identify it; use "
+                        + "distinct cue codes (textures may be shared) to multiplex visually identical cues.";
+                    throw new InvalidDataException(message);
+                }
+                seenSequences[signature] = trialName;
             }
 
             // Validates transitions reference defined trial names and sum to 1.0 when provided.

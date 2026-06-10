@@ -2,12 +2,13 @@
 /// Provides the StimulusTriggerZone class that manages stimulus delivery based on animal behavior.
 ///
 /// Supports two trigger modes determined by the presence of child zones. The trigger mode specifies
-/// how a stimulus is triggered, not what stimulus is delivered. Any stimulus type can be paired
-/// with either trigger mode.
+/// how a stimulus is triggered, not what stimulus is delivered. Any stimulus type can be paired with
+/// either trigger mode; the experiment driver resolves the outcome from the trial name this zone
+/// publishes when it fires.
 ///
-/// In lick mode (with GuidanceZone child), when guidance is disabled the animal must lick in the zone
-/// to trigger stimulus. When guidance is enabled, the stimulus is delivered when the animal reaches
-/// the GuidanceZone.
+/// In interaction mode (with GuidanceZone child), when guidance is disabled the animal must engage an
+/// interaction sensor inside the zone to trigger the stimulus. When guidance is enabled, the stimulus
+/// is delivered when the animal reaches the GuidanceZone.
 ///
 /// In occupancy mode (with OccupancyZone child), the animal must occupy the zone for the required
 /// duration to disarm the boundary. Boundary collision triggers stimulus only when the boundary is armed.
@@ -34,13 +35,20 @@ namespace SL.Tasks
         /// </summary>
         public bool isActive = true;
 
+        /// <summary>
+        /// The stimulus identifier published on the Stimulus topic when this zone fires. Equals the
+        /// owning trial's name and is set at task creation time. The experiment driver joins on it to
+        /// resolve the stimulus outcome.
+        /// </summary>
+        public string trialName = "";
+
         /// <summary>Determines whether the animal is currently inside this trigger zone.</summary>
         private bool _inZone = false;
 
-        /// <summary>Determines whether a lick was detected while the animal was in the zone.</summary>
-        private bool _lickDetectedInZone = false;
+        /// <summary>Determines whether an interaction was detected while the animal was in the zone.</summary>
+        private bool _interactionDetectedInZone = false;
 
-        /// <summary>The child GuidanceZone that determines lick mode behavior, if present.</summary>
+        /// <summary>The child GuidanceZone that determines interaction mode behavior, if present.</summary>
         private GuidanceZone _guidanceZone;
 
         /// <summary>The child OccupancyZone that determines occupancy mode behavior, if present.</summary>
@@ -49,11 +57,11 @@ namespace SL.Tasks
         /// <summary>The reference to the Task for checking guidance mode state.</summary>
         private Task _task;
 
-        /// <summary>The MQTT channel for sending stimulus trigger messages.</summary>
-        private MQTTChannel _stimulusTrigger;
+        /// <summary>The MQTT channel for publishing stimulus trigger messages carrying the trial name.</summary>
+        private MQTTChannel<StimulusMessage> _stimulusTrigger;
 
-        /// <summary>The MQTT channel for receiving lick detection messages.</summary>
-        private MQTTChannel _lickTrigger;
+        /// <summary>The MQTT channel for receiving interaction-sensor messages.</summary>
+        private MQTTChannel _interactionTrigger;
 
         /// <summary>The cached MeshRenderer used to render the boundary indicator, if attached.</summary>
         private MeshRenderer _boundaryRenderer;
@@ -82,9 +90,9 @@ namespace SL.Tasks
             TryGetComponent(out _boundaryRenderer);
 
             // Sets up MQTT channels.
-            _stimulusTrigger = new MQTTChannel(MQTTTopics.Stimulus);
-            _lickTrigger = new MQTTChannel(MQTTTopics.Lick, isListener: true);
-            _lickTrigger.receivedEvent.AddListener(OnLickDetected);
+            _stimulusTrigger = new MQTTChannel<StimulusMessage>(MQTTTopics.Stimulus, isListener: false);
+            _interactionTrigger = new MQTTChannel(MQTTTopics.Interaction, isListener: true);
+            _interactionTrigger.receivedEvent.AddListener(OnInteractionDetected);
         }
 
         /// <summary>Updates the zone state each frame, handling stimulus trigger logic based on mode.</summary>
@@ -99,7 +107,7 @@ namespace SL.Tasks
             }
             else
             {
-                UpdateLickMode();
+                UpdateInteractionMode();
             }
         }
 
@@ -120,7 +128,7 @@ namespace SL.Tasks
         /// <summary>Removes MQTT event listeners when the component is destroyed.</summary>
         private void OnDestroy()
         {
-            _lickTrigger?.receivedEvent.RemoveListener(OnLickDetected);
+            _interactionTrigger?.receivedEvent.RemoveListener(OnInteractionDetected);
         }
 
         /// <summary>Resets the zone state for a new lap.</summary>
@@ -128,7 +136,7 @@ namespace SL.Tasks
         public void ResetState()
         {
             isActive = true;
-            _lickDetectedInZone = false;
+            _interactionDetectedInZone = false;
             _inZone = false;
             UpdateBoundaryVisibility(showBoundary);
         }
@@ -144,23 +152,24 @@ namespace SL.Tasks
         }
 
         /// <summary>
-        /// Handles lick mode behavior. When guidance is disabled, the animal must lick in the zone.
-        /// When guidance is enabled with a GuidanceZone, the animal can lick in the zone or reach the
-        /// guidance zone. When guidance is enabled without a GuidanceZone, stimulus triggers on zone entry.
+        /// Handles interaction mode behavior. When guidance is disabled, the animal must engage an
+        /// interaction sensor in the zone. When guidance is enabled with a GuidanceZone, the animal can
+        /// interact in the zone or reach the guidance zone. When guidance is enabled without a
+        /// GuidanceZone, the stimulus triggers on zone entry.
         /// </summary>
-        private void UpdateLickMode()
+        private void UpdateInteractionMode()
         {
-            if (_task.requireLick)
+            if (_task.requireInteraction)
             {
-                if (_inZone && _lickDetectedInZone)
+                if (_inZone && _interactionDetectedInZone)
                 {
                     TriggerStimulus();
                 }
             }
             else if (_guidanceZone != null)
             {
-                // Animal can receive stimulus by licking anywhere in the trigger zone.
-                if (_inZone && _lickDetectedInZone)
+                // Animal can receive stimulus by interacting anywhere in the trigger zone.
+                if (_inZone && _interactionDetectedInZone)
                 {
                     TriggerStimulus();
                 }
@@ -194,27 +203,34 @@ namespace SL.Tasks
             }
         }
 
-        /// <summary>Triggers the stimulus, hides the boundary, and sends the MQTT message.</summary>
+        /// <summary>Triggers the stimulus, hides the boundary, and publishes the trial name over MQTT.</summary>
         private void TriggerStimulus()
         {
-            Debug.Log("StimulusTriggerZone: Stimulus triggered.");
+            Debug.Log($"StimulusTriggerZone: Stimulus triggered for trial '{trialName}'.");
             UpdateBoundaryVisibility(false);
-            _stimulusTrigger.Send();
+            _stimulusTrigger.Send(new StimulusMessage { trialName = trialName });
             isActive = false;
-            _lickDetectedInZone = false;
+            _interactionDetectedInZone = false;
         }
 
         /// <summary>
-        /// Records that a lick occurred while in the zone.
-        /// Only relevant in lick mode when the zone is active.
+        /// Records that an interaction occurred while in the zone.
+        /// Only relevant in interaction mode when the zone is active.
         /// </summary>
-        private void OnLickDetected()
+        private void OnInteractionDetected()
         {
-            Debug.Log("StimulusTriggerZone: Lick detected.");
+            Debug.Log("StimulusTriggerZone: Interaction detected.");
             if (isActive && _inZone && !IsOccupancyMode)
             {
-                _lickDetectedInZone = true;
+                _interactionDetectedInZone = true;
             }
+        }
+
+        /// <summary>Wraps the firing trial's name for MQTT transmission on the Stimulus topic.</summary>
+        public class StimulusMessage
+        {
+            /// <summary>The identifier of the trial whose stimulus trigger zone fired.</summary>
+            public string trialName;
         }
     }
 }

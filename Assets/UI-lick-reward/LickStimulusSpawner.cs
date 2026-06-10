@@ -35,7 +35,7 @@ namespace SL.UI
         /// <summary>Sets up MQTT channels and registers event listeners.</summary>
         private void Start()
         {
-            _lick = new MQTTChannel(MQTTTopics.Lick, isListener: true);
+            _lick = new MQTTChannel(MQTTTopics.Interaction, isListener: true);
             _lick.receivedEvent.AddListener(OnLick);
             _stimulus = new MQTTChannel(MQTTTopics.Stimulus, isListener: true);
             _stimulus.receivedEvent.AddListener(OnStimulus);
