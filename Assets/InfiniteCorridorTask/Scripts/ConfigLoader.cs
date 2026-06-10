@@ -166,12 +166,15 @@ namespace SL.Config
 
                 if (
                     !string.Equals(trial.triggerType, "interaction", StringComparison.Ordinal)
+                    && !string.Equals(trial.triggerType, "collision", StringComparison.Ordinal)
                     && !string.Equals(trial.triggerType, "occupancy_disarm", StringComparison.Ordinal)
+                    && !string.Equals(trial.triggerType, "occupancy_arm", StringComparison.Ordinal)
+                    && !string.Equals(trial.triggerType, "occupancy_trigger", StringComparison.Ordinal)
                 )
                 {
                     throw new InvalidDataException(
-                        $"Trial '{trialName}' has invalid trigger_type '{trial.triggerType}'. "
-                            + "Must be 'interaction' or 'occupancy_disarm'."
+                        $"Trial '{trialName}' has invalid trigger_type '{trial.triggerType}'. Must be one of "
+                            + "'interaction', 'collision', 'occupancy_disarm', 'occupancy_arm', 'occupancy_trigger'."
                     );
                 }
 

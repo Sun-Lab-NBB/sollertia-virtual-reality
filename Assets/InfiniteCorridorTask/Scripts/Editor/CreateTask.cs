@@ -939,14 +939,32 @@ namespace SL.Tasks
                     );
                 }
                 else if (
-                    string.Equals(trial.triggerType, "occupancy_disarm", StringComparison.Ordinal)
-                    && occupancyZonePrefab != null
+                    string.Equals(trial.triggerType, "collision", StringComparison.Ordinal)
+                    && stimulusZonePrefab != null
+                )
+                {
+                    PlaceCollisionZone(
+                        parent: segmentGameObject,
+                        zonePrefab: stimulusZonePrefab,
+                        trialName: trialName,
+                        stimulusLocationUnity: stimulusLocationUnity,
+                        showBoundary: trial.showStimulusCollisionBoundary
+                    );
+                }
+                else if (
+                    occupancyZonePrefab != null
+                    && (
+                        string.Equals(trial.triggerType, "occupancy_disarm", StringComparison.Ordinal)
+                        || string.Equals(trial.triggerType, "occupancy_arm", StringComparison.Ordinal)
+                        || string.Equals(trial.triggerType, "occupancy_trigger", StringComparison.Ordinal)
+                    )
                 )
                 {
                     PlaceOccupancyZone(
                         parent: segmentGameObject,
                         zonePrefab: occupancyZonePrefab,
                         trialName: trialName,
+                        triggerMode: ResolveOccupancyTriggerMode(trial.triggerType),
                         zoneCenterUnity: zoneCenterUnity,
                         zoneSizeUnity: zoneSizeUnity,
                         stimulusLocationUnity: stimulusLocationUnity,
@@ -1015,10 +1033,64 @@ namespace SL.Tasks
                 }
             }
 
-            // Sets boundary visibility and the stimulus identifier
+            // Sets the trigger mode, boundary visibility, and the stimulus identifier.
             StimulusTriggerZone stimulusZone = zone.GetComponent<StimulusTriggerZone>();
             if (stimulusZone != null)
             {
+                stimulusZone.triggerMode = TriggerMode.Interaction;
+                stimulusZone.showBoundary = showBoundary;
+                stimulusZone.trialName = trialName;
+            }
+        }
+
+        /// <summary>Maps an occupancy trigger_type literal to its matching occupancy TriggerMode.</summary>
+        /// <param name="triggerType">The trial's trigger_type string (an occupancy literal).</param>
+        /// <returns>The matching occupancy TriggerMode; defaults to OccupancyDisarm.</returns>
+        private static TriggerMode ResolveOccupancyTriggerMode(string triggerType) =>
+            triggerType switch
+            {
+                "occupancy_arm" => TriggerMode.OccupancyArm,
+                "occupancy_trigger" => TriggerMode.OccupancyTrigger,
+                _ => TriggerMode.OccupancyDisarm,
+            };
+
+        /// <summary>
+        /// Instantiates and configures a StimulusTriggerZone in collision mode within a segment. Reuses the
+        /// interaction prefab, strips its GuidanceRegion child, and positions the root collider as a thin
+        /// invisible wall at the stimulus location that fires the stimulus unconditionally on crossing.
+        /// </summary>
+        /// <param name="parent">The parent segment GameObject.</param>
+        /// <param name="zonePrefab">The StimulusTriggerZone prefab to instantiate.</param>
+        /// <param name="trialName">The owning trial's name; published as the stimulus identifier when fired.</param>
+        /// <param name="stimulusLocationUnity">The wall (stimulus) location in Unity units.</param>
+        /// <param name="showBoundary">Determines whether the wall is visible.</param>
+        private static void PlaceCollisionZone(
+            GameObject parent,
+            GameObject zonePrefab,
+            string trialName,
+            float stimulusLocationUnity,
+            bool showBoundary
+        )
+        {
+            GameObject zone = PrefabUtility.InstantiatePrefab(zonePrefab) as GameObject;
+            zone.transform.SetParent(parent.transform);
+            zone.transform.localPosition = new Vector3(0, ZoneVerticalOffset, stimulusLocationUnity);
+
+            // Collision uses a thin invisible wall at the stimulus location as its root trigger collider.
+            ConfigureRootZoneCollider(zone, GuidanceColliderDepth);
+
+            // Collision has no sensor or guidance, so removes the interaction prefab's GuidanceRegion child.
+            GuidanceZone guidanceZone = zone.GetComponentInChildren<GuidanceZone>();
+            if (guidanceZone != null)
+            {
+                UnityEngine.Object.DestroyImmediate(guidanceZone.gameObject);
+            }
+
+            // Sets the trigger mode, boundary visibility, and the stimulus identifier.
+            StimulusTriggerZone stimulusZone = zone.GetComponent<StimulusTriggerZone>();
+            if (stimulusZone != null)
+            {
+                stimulusZone.triggerMode = TriggerMode.Collision;
                 stimulusZone.showBoundary = showBoundary;
                 stimulusZone.trialName = trialName;
             }
@@ -1032,6 +1104,7 @@ namespace SL.Tasks
         /// <param name="parent">The parent segment GameObject.</param>
         /// <param name="zonePrefab">The OccupancyTriggerZone prefab to instantiate.</param>
         /// <param name="trialName">The owning trial's name; published as the stimulus identifier when fired.</param>
+        /// <param name="triggerMode">The occupancy trigger mode (disarm, arm, or trigger) applied to the zone.</param>
         /// <param name="zoneCenterUnity">The center position of the occupancy zone in Unity units.</param>
         /// <param name="zoneSizeUnity">The size of the occupancy zone in Unity units.</param>
         /// <param name="stimulusLocationUnity">The stimulus location in Unity units.</param>
@@ -1041,6 +1114,7 @@ namespace SL.Tasks
             GameObject parent,
             GameObject zonePrefab,
             string trialName,
+            TriggerMode triggerMode,
             float zoneCenterUnity,
             float zoneSizeUnity,
             float stimulusLocationUnity,
@@ -1089,10 +1163,11 @@ namespace SL.Tasks
                 }
             }
 
-            // Sets boundary visibility and the stimulus identifier
+            // Sets the trigger mode, boundary visibility, and the stimulus identifier.
             StimulusTriggerZone stimulusZone = zone.GetComponent<StimulusTriggerZone>();
             if (stimulusZone != null)
             {
+                stimulusZone.triggerMode = triggerMode;
                 stimulusZone.showBoundary = showBoundary;
                 stimulusZone.trialName = trialName;
             }
