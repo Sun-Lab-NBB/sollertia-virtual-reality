@@ -96,8 +96,13 @@ The `unity` plugin depends on the `assets` plugin for the backing `slsa mcp` ser
 
 You MUST invoke `/library-extension` (assets plugin) when adding a new `TriggerType` member or otherwise extending the
 shared-assets template vocabulary, because the Python registry parity check on the `slsa mcp` side fails at import time
-if any downstream entry is missing. The Unity counterpart of such a change is captured in the extension contracts table
-below.
+if any downstream entry is missing. The platform `TriggerType` enum carries all five members (`INTERACTION`,
+`COLLISION`, `OCCUPANCY_DISARM`, `OCCUPANCY_ARM`, and `OCCUPANCY_TRIGGER`), and each acquisition system maps only the
+subset it supports: a new `TriggerType` member does NOT require a `from_task_template` branch — a system may leave it
+unsupported/unmapped. Mesoscope-VR's `from_task_template` supports ONLY `INTERACTION` (→ `WaterRewardTrial`) and
+`OCCUPANCY_DISARM` (→ `GasPuffTrial`); the three new modes are intentionally unmapped, so a Mesoscope-VR config that
+uses one raises a clear "not mapped to a runtime trial class" error. The Unity counterpart of such a change is captured
+in the extension contracts table below.
 
 ## MCP server
 
@@ -200,25 +205,41 @@ corridors built from prefabricated visual cue segments and driven over MQTT 5.0 
 - **Schema mirror**: `TaskTemplate`, `Cue`, `TrialStructure`, and `VREnvironment` under
   `Assets/InfiniteCorridorTask/Scripts/` mirror the Python `YamlConfig` classes in `sollertia-shared-assets`.
   `ConfigLoader.LoadTemplate` deserializes via `YamlDotNet` using `UnderscoredNamingConvention` and validates cue
-  codes, the trial-name pattern `^[A-Za-z0-9_]+$`, the `trigger_type` literal set (`interaction` and
-  `occupancy_disarm`), per-trial `cue_sequence` uniqueness within the template, transition-target existence, and the
-  per-trial transition-probability sum.
+  codes, the trial-name pattern `^[A-Za-z0-9_]+$`, the `trigger_type` literal set (`interaction`, `collision`,
+  `occupancy_disarm`, `occupancy_arm`, and `occupancy_trigger`), per-trial `cue_sequence` uniqueness within the
+  template, a positive `occupancy_duration_ms`, transition-target existence, and the per-trial transition-probability
+  sum. The per-mode geometric zone validation (`collision` checks only `stimulus_location`; `occupancy_trigger` only
+  the trigger zone; the others the zone, boundary, and their ordering) lives in the shared-assets Python `TaskTemplate`,
+  not in `ConfigLoader`.
 - **Task runtime**: `Task` (`Assets/InfiniteCorridorTask/Scripts/Task.cs`) is a `MonoBehaviour` attached to the
   generated task prefab. `Start` loads the YAML, builds a `_corridorMap` keyed by a base-`trialCount` integer encoding
   of the current segment combination, pre-generates the random maze sequence with an optional seed, and opens MQTT
   channels for cue sequence requests, scene name requests, and interaction / wait toggles. `Update` checks the actor's
   local Z position against the current corridor's first-segment length and teleports the actor to the next corridor when
   the segment is traversed.
-- **Zone composition**: `StimulusTriggerZone` switches between interaction and occupancy_disarm modes based on the
-  presence of a `GuidanceZone` or `OccupancyZone` child, and publishes `StimulusMessage { trialName }` on the `Stimulus`
-  topic when it fires (its `trialName` field is set by `CreateTask` at generation, so the stimulus id equals the trial
-  name). `OccupancyGuidanceZone` lives under `OccupancyZone` and publishes `Delay` (carrying the remaining occupancy
+- **Zone composition**: `StimulusTriggerZone` carries a `TriggerMode` enum field (`Interaction`, `Collision`,
+  `OccupancyDisarm`, `OccupancyArm`, `OccupancyTrigger`) set by `CreateTask` from the trial's `trigger_type`, and
+  dispatches on this enum rather than inferring the mode from which child zone is present. It publishes
+  `StimulusMessage { trialName }` on the `Stimulus` topic when it fires (its `trialName` field is set by `CreateTask` at
+  generation, so the stimulus id equals the trial name); every mode publishes the same `Stimulus{trialName}` event, so
+  the new modes add no MQTT topics. `collision` crosses an invisible boundary wall (a thin collider at
+  `stimulus_location`) and fires unconditionally — no sensor, no occupancy — keeping the
+  `showStimulusCollisionBoundary` visibility toggle. `occupancy_disarm` fires on a boundary collision while occupancy is
+  NOT met; `occupancy_arm` is its inverse, where occupying the zone ARMS the boundary and colliding with the now-armed
+  boundary (occupancy MET) fires; `occupancy_trigger` fires immediately once the required occupancy duration elapses, no
+  boundary collision. `OccupancyZone` exposes a generic `occupancyMet` signal (renamed from `boundaryDisarmed`); the
+  parent `StimulusTriggerZone` applies the per-mode firing rule. All three occupancy modes keep the occupancy-guidance
+  brake: `OccupancyGuidanceZone` lives under `OccupancyZone` and publishes `Delay` (carrying the remaining occupancy
   duration in milliseconds) when the animal enters in guidance mode. `ResetZone` discovers every `IResettable` in the
   scene at `Start` and resets state on each lap.
 - **CreateTask pipeline**: `CreateTask.CreateFromTemplate` runs a cross-template cue-texture preflight, regenerates
   every segment prefab the template owns, reuses or rebuilds cue prefabs keyed by `(name, lengthCm)`, instantiates the
   full corridor combination tree, places trigger and reset zones according to each trial's `trigger_type`, and saves a
-  task prefab at `Assets/InfiniteCorridorTask/Tasks/{templateName}.prefab`. The Editor menu wraps this with a scene
+  task prefab at `Assets/InfiniteCorridorTask/Tasks/{templateName}.prefab`. The dispatch covers all five
+  `trigger_type` literals without adding any new prefab files: `PlaceCollisionZone` reuses `StimulusTriggerZone.prefab`
+  (stripping its `GuidanceRegion` child and setting the root collider as a thin wall at `stimulus_location`), while
+  `occupancy_arm` and `occupancy_trigger` reuse `OccupancyTriggerZone.prefab` (CreateTask only sets the occupancy
+  sub-mode), so existing tasks rebuild identically. The Editor menu wraps this with a scene
   copy from `ExperimentTemplate.unity` and a `MainWindow.EnsureControllers` call that auto-adds both the hardware and
   the simulated linear treadmill controllers.
 - **Task Parameters window**: `MainWindow` (`Assets/Gimbl/Editor/MainWindow.cs`) is a single consolidated editor window
@@ -258,8 +279,9 @@ Detailed checklists for the non-trivial extensions:
   generated hierarchy matches the template.
 - **New trigger zone type**: Author the new modifier `MonoBehaviour` under
   `Assets/InfiniteCorridorTask/Scripts/` (implementing `IResettable` if it holds per-lap state). Invoke
-  `/zone-prefabs` to copy the closest canonical template (`StimulusTriggerZone.prefab` for interaction mode or
-  `OccupancyTriggerZone.prefab` for occupancy_disarm mode), swap the modifier script GUIDs, rename regions, and override
+  `/zone-prefabs` to copy the closest canonical template (`StimulusTriggerZone.prefab` for interaction or collision
+  modes or `OccupancyTriggerZone.prefab` for the occupancy_disarm, occupancy_arm, or occupancy_trigger modes), swap the
+  modifier script GUIDs, rename regions, and override
   field defaults; the skill owns the YAML-edit workflow and the `inspect_prefab_tool` validation step. Then wire the
   new prefab into the runtime: add a literal branch to `ConfigLoader.ValidateTemplate`; extend
   `McpBridge.DeleteProtectedPaths` to protect the new prefab; add a `Place...Zone` helper in `CreateTask.cs` and
