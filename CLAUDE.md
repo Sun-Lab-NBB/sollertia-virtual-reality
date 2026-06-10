@@ -155,10 +155,10 @@ This project is one corner of the Sollertia data-acquisition triangle. Changes t
 bridge surface ripple through the other two libraries:
 
 - **sollertia-experiment** (acquisition runtime). The MQTT counterparty for every topic in `MQTTTopics`. Owns the
-  publish side of `CueSequenceTrigger`, `SceneNameTrigger`, `RequireLick`, `RequireWait`, `Motion`, and the hardware
-  side of `Lick`. Subscribes to `SessionStart`, `SessionStop`, `Stimulus`, `Delay`, `CueSequence`, and `SceneName`.
-  Topic renames here require an in-lockstep update on the experiment side; the `/mqtt-contract` skill is the canonical
-  index for both ends.
+  publish side of `CueSequenceTrigger`, `SceneNameTrigger`, `RequireInteraction`, `RequireWait`, `Motion`, and the
+  hardware side of `Interaction`. Subscribes to `SessionStart`, `SessionStop`, `Stimulus`, `Delay`, `CueSequence`, and
+  `SceneName`. Topic renames here require an in-lockstep update on the experiment side; the `/mqtt-contract` skill is
+  the canonical index for both ends.
 - **sollertia-shared-assets** (configuration schema and MCP relay). Owns the Python `TaskTemplate`, `Cue`,
   `TrialStructure`, and `VREnvironment` `YamlConfig` classes; the C# classes under
   `Assets/InfiniteCorridorTask/Scripts/` mirror that schema. `interfaces/unity_tools.py` is the HTTP client for
@@ -200,18 +200,21 @@ corridors built from prefabricated visual cue segments and driven over MQTT 5.0 
 - **Schema mirror**: `TaskTemplate`, `Cue`, `TrialStructure`, and `VREnvironment` under
   `Assets/InfiniteCorridorTask/Scripts/` mirror the Python `YamlConfig` classes in `sollertia-shared-assets`.
   `ConfigLoader.LoadTemplate` deserializes via `YamlDotNet` using `UnderscoredNamingConvention` and validates cue
-  codes, the trial-name pattern `^[A-Za-z0-9_]+$`, the `trigger_type` literal set, transition-target existence, and the
+  codes, the trial-name pattern `^[A-Za-z0-9_]+$`, the `trigger_type` literal set (`interaction` and
+  `occupancy_disarm`), per-trial `cue_sequence` uniqueness within the template, transition-target existence, and the
   per-trial transition-probability sum.
 - **Task runtime**: `Task` (`Assets/InfiniteCorridorTask/Scripts/Task.cs`) is a `MonoBehaviour` attached to the
   generated task prefab. `Start` loads the YAML, builds a `_corridorMap` keyed by a base-`trialCount` integer encoding
   of the current segment combination, pre-generates the random maze sequence with an optional seed, and opens MQTT
-  channels for cue sequence requests, scene name requests, and lick / wait toggles. `Update` checks the actor's local
-  Z position against the current corridor's first-segment length and teleports the actor to the next corridor when
+  channels for cue sequence requests, scene name requests, and interaction / wait toggles. `Update` checks the actor's
+  local Z position against the current corridor's first-segment length and teleports the actor to the next corridor when
   the segment is traversed.
-- **Zone composition**: `StimulusTriggerZone` switches between lick and occupancy modes based on the presence of a
-  `GuidanceZone` or `OccupancyZone` child. `OccupancyGuidanceZone` lives under `OccupancyZone` and publishes `Delay`
-  (carrying the remaining occupancy duration in milliseconds) when the animal enters in guidance mode. `ResetZone`
-  discovers every `IResettable` in the scene at `Start` and resets state on each lap.
+- **Zone composition**: `StimulusTriggerZone` switches between interaction and occupancy_disarm modes based on the
+  presence of a `GuidanceZone` or `OccupancyZone` child, and publishes `StimulusMessage { trialName }` on the `Stimulus`
+  topic when it fires (its `trialName` field is set by `CreateTask` at generation, so the stimulus id equals the trial
+  name). `OccupancyGuidanceZone` lives under `OccupancyZone` and publishes `Delay` (carrying the remaining occupancy
+  duration in milliseconds) when the animal enters in guidance mode. `ResetZone` discovers every `IResettable` in the
+  scene at `Start` and resets state on each lap.
 - **CreateTask pipeline**: `CreateTask.CreateFromTemplate` runs a cross-template cue-texture preflight, regenerates
   every segment prefab the template owns, reuses or rebuilds cue prefabs keyed by `(name, lengthCm)`, instantiates the
   full corridor combination tree, places trigger and reset zones according to each trial's `trigger_type`, and saves a
@@ -255,8 +258,8 @@ Detailed checklists for the non-trivial extensions:
   generated hierarchy matches the template.
 - **New trigger zone type**: Author the new modifier `MonoBehaviour` under
   `Assets/InfiniteCorridorTask/Scripts/` (implementing `IResettable` if it holds per-lap state). Invoke
-  `/zone-prefabs` to copy the closest canonical template (`StimulusTriggerZone.prefab` for lick mode or
-  `OccupancyTriggerZone.prefab` for occupancy mode), swap the modifier script GUIDs, rename regions, and override
+  `/zone-prefabs` to copy the closest canonical template (`StimulusTriggerZone.prefab` for interaction mode or
+  `OccupancyTriggerZone.prefab` for occupancy_disarm mode), swap the modifier script GUIDs, rename regions, and override
   field defaults; the skill owns the YAML-edit workflow and the `inspect_prefab_tool` validation step. Then wire the
   new prefab into the runtime: add a literal branch to `ConfigLoader.ValidateTemplate`; extend
   `McpBridge.DeleteProtectedPaths` to protect the new prefab; add a `Place...Zone` helper in `CreateTask.cs` and
@@ -285,7 +288,7 @@ Detailed checklists for the non-trivial extensions:
 - 120 character line limit enforced by CSharpier (`.csharpierrc.yaml`); naming, brace style, and spacing enforced by
   `.editorconfig`.
 - Allman brace style; `_camelCase` private fields; PascalCase public properties and methods; camelCase Inspector
-  fields (for example, `public bool requireLick;`); XML documentation on every public and private member.
+  fields (for example, `public bool requireInteraction;`); XML documentation on every public and private member.
 - See `/csharp-style` for the complete conventions and verification checklist.
 
 ### Project-specific conventions
@@ -360,8 +363,8 @@ Detailed checklists for the non-trivial extensions:
 2. Always read the current snapshot before writing — the response includes `options` (the allow-list for each enum
    field) and `visibility` (whether each conditionally-rendered control is currently rendered). Writes that violate
    either are rejected by the bridge with a descriptive error.
-3. Editor-time writes to `task.require_lick` / `task.require_wait` are zone-gated; for mid-run toggles, publish on
-   the `RequireLick` / `RequireWait` MQTT topics instead (see `/mqtt-contract`).
+3. Editor-time writes to `task.require_interaction` / `task.require_wait` are zone-gated; for mid-run toggles, publish
+   on the `RequireInteraction` / `RequireWait` MQTT topics instead (see `/mqtt-contract`).
 
 **Running CSharpier and the Editor generation flow:**
 

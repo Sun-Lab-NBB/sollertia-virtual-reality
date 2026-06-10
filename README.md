@@ -32,7 +32,7 @@ ___
 ## Features
 
 - Generates infinite-corridor VR tasks from YAML templates via the Editor menu or the `slsa mcp` Unity relay.
-- Supports lick-driven and occupancy-driven stimulus trigger zones with optional guidance modes.
+- Supports interaction-driven and occupancy-disarm stimulus trigger zones with optional guidance modes.
 - Supports probablistic transitions between trial structures within a single task template.
 - Exposes HTTP-based McpBridge that exposes 13 Editor operations to AI agents (task lifecycle, scene management,
   asset inspection, Play Mode control, parameter read/write).
@@ -238,8 +238,8 @@ A task template defines:
   `padding_prefab_name`, `cm_per_unity_unit`, and `cue_offset_cm`.
 - **trial_structures**: A dictionary mapping trial names (e.g., `ABCD`) to their spatial configuration: the cue
   sequence, the stimulus trigger zone start and end positions, the stimulus location, an optional collision-boundary
-  visibility flag, a trigger type (`"lick"` or `"occupancy"`), and an optional probability distribution over
-  successor trials.
+  visibility flag, a trigger type (`"interaction"` or `"occupancy_disarm"`), and an optional probability distribution
+  over successor trials.
 
 Template filenames follow the `ProjectAbbreviation_TaskDescription.yaml` convention (for example, `SSO_Merging.yaml`).
 The template name is derived from the filename and is reused verbatim as the Unity scene name, the task prefab name,
@@ -306,20 +306,20 @@ five sections:
 | MQTT             | Broker IP and port; the Test Connection button performs a one-shot connect/disconnect probe                                                 |
 | Display          | Brightness, height in VR, and a Blank/Show toggle for the active display                                                                    |
 | Camera Mapping   | Refresh Monitor Positions plus a per-monitor row (one per OS-detected monitor) with a camera dropdown (`Left View`, `Center View`, `Right View` for the default display rig) and a Show Full-Screen Views action |
-| Task             | Require Lick, Require Wait, Track Length, and Track Seed for the active scene's `Task` component                                            |
+| Task             | Require Interaction, Require Wait, Track Length, and Track Seed for the active scene's `Task` component                                     |
 
 The `Task` component's public fields are marked `[HideInInspector]`; `TaskEditor` replaces the default Inspector with
 a HelpBox pointing at this window. Configure every task field through Task Parameters, not the Inspector. The
-`Require Lick` and `Require Wait` controls are hidden when the active scene lacks the corresponding `GuidanceZone` or
-`OccupancyZone`.
+`Require Interaction` and `Require Wait` controls are hidden when the active scene lacks the corresponding
+`GuidanceZone` or `OccupancyZone`.
 
 ***Warning!*** Verify monitor assignments after every system reboot. The operating system can reassign display ports,
 and the camera-to-monitor mapping is scene-bound — a mismatch causes the wrong camera to render to each physical
 monitor.
 
 For manual testing without hardware, select **Simulated Linear** as the Actor's controller. The
-`SimulatedLinearTreadmill` reads keyboard input via the Unity Input System and publishes a synthetic `Lick` message
-on every press of the Jump action (spacebar).
+`SimulatedLinearTreadmill` reads keyboard input via the Unity Input System and publishes a synthetic `Interaction`
+message on every press of the Jump action (spacebar).
 
 ### MQTT Contract
 
@@ -332,19 +332,19 @@ in `Assets/Gimbl/Scripts/MQTT/MQTTTopics.cs`.
 | `SessionStart`       | Publish             | Empty trigger                                 |
 | `SessionStop`        | Publish             | Empty trigger                                 |
 | `Motion`             | Subscribe           | `{movement: float}`                           |
-| `Lick`               | Publish + Subscribe | Empty trigger                                 |
-| `Stimulus`           | Publish + Subscribe | Empty trigger                                 |
+| `Interaction`        | Publish + Subscribe | Empty trigger                                 |
+| `Stimulus`           | Publish + Subscribe | `{trialName: string}`                         |
 | `Delay`              | Publish             | `{delayMilliseconds: uint}`                   |
 | `CueSequenceTrigger` | Subscribe           | Empty trigger                                 |
 | `CueSequence`        | Publish             | `{cueSequence: byte[]}`                       |
 | `SceneNameTrigger`   | Subscribe           | Empty trigger                                 |
 | `SceneName`          | Publish             | `{name: string}`                              |
-| `RequireLick`        | Subscribe           | `{value: bool}`                               |
+| `RequireInteraction` | Subscribe           | `{value: bool}`                               |
 | `RequireWait`        | Subscribe           | `{value: bool}`                               |
 
 When the broker is unreachable, `MQTTClient.Publish` routes messages in-process so keyboard-only test runs still reach
 local subscribers (for example, the on-screen `LickStimulusSpawner` indicator). Production runs require a real MQTT 5.0
-broker because sollertia-experiment is the counterparty for every non-`Lick` and non-`Stimulus` topic.
+broker because sollertia-experiment is the counterparty for every non-`Interaction` and non-`Stimulus` topic.
 
 ***Note,*** the `/mqtt-contract` skill in the sollertia marketplace's **unity** plugin is the canonical reference for
 topic ownership and payload shape. Any topic addition or rename must be coordinated with sollertia-experiment in the
@@ -439,8 +439,8 @@ The project exposes six concentrated extension points. Each has a matching skill
 | New treadmill controller | `ControllerObject` subclass + `ControllerTypes` enum entry                                      | `/gimbl-framework` |
 
 **Adding a new trigger zone type** is the most cross-cutting extension. The `/zone-prefabs` skill documents the
-copy-and-edit workflow for the prefab itself: start from `StimulusTriggerZone.prefab` (lick mode) or
-`OccupancyTriggerZone.prefab` (occupancy mode) under `Prefabs/`, swap the modifier script GUIDs, rename regions,
+copy-and-edit workflow for the prefab itself: start from `StimulusTriggerZone.prefab` (interaction mode) or
+`OccupancyTriggerZone.prefab` (occupancy-disarm mode) under `Prefabs/`, swap the modifier script GUIDs, rename regions,
 and override field defaults. The new prefab path must then be added to `McpBridge.DeleteProtectedPaths`, a new branch
 must be added in `CreateTask.BuildSegmentPrefabs` with a matching `Place...Zone` helper, and 
 `ConfigLoader.ValidateTemplate` must accept the new `trigger_type` literal. The Python side requires a matching 
