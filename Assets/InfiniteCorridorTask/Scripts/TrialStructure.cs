@@ -24,7 +24,8 @@ namespace SL.Config
         public float stimulusTriggerZoneEndCm;
 
         /// <summary>
-        /// The location of the invisible boundary with which the animal must collide to elicit the stimulus.
+        /// The position of the stimulus boundary. The collision, occupancy_disarm, and occupancy_arm modes
+        /// fire on collision with it; interaction and occupancy_trigger modes do not use boundary collision.
         /// </summary>
         public float stimulusLocationCm;
 
@@ -35,9 +36,10 @@ namespace SL.Config
         public bool showStimulusCollisionBoundary = false;
 
         /// <summary>
-        /// The trigger mode for the stimulus zone. "interaction" uses the StimulusTriggerZone prefab with
-        /// a GuidanceZone child. "occupancy_disarm" uses the OccupancyTriggerZone prefab with OccupancyZone
-        /// and OccupancyGuidanceZone children.
+        /// The trigger mode for the stimulus zone. "interaction" and "collision" use the StimulusTriggerZone
+        /// prefab; "collision" strips the GuidanceZone child and fires on a thin boundary wall. "occupancy_disarm",
+        /// "occupancy_arm", and "occupancy_trigger" use the OccupancyTriggerZone prefab with OccupancyZone and
+        /// OccupancyGuidanceZone children.
         /// </summary>
         public string triggerType;
 

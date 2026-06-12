@@ -1,7 +1,7 @@
 /// <summary>
 /// Provides the CreateTask class that generates Task prefabs and matching test scenes from YAML configuration
-/// files via the Unity Editor menu. Mirrors the agentic generate_task_prefab + create_scene pipeline in a
-/// single Editor entry point so a YAML edit produces a runnable scene without leaving the Editor.
+/// files via the Unity Editor menu. Mirrors the agentic create_task pipeline in a single Editor entry point
+/// so a YAML edit produces a runnable scene without leaving the Editor.
 /// </summary>
 using System;
 using System.Collections.Generic;
@@ -80,7 +80,10 @@ namespace SL.Tasks
         /// <summary>The vertical center for cue walls, segment walls, and the reset-zone marker.</summary>
         private const float WallVerticalCenter = 0.5f;
 
-        /// <summary>The Z-axis depth of guidance-zone box colliders inside interaction and occupancy zones.</summary>
+        /// <summary>
+        /// The Z-axis depth of guidance-zone box colliders in interaction and occupancy zones, and of the
+        /// thin boundary wall collider in collision zones.
+        /// </summary>
         private const float GuidanceColliderDepth = 0.4f;
 
         /// <summary>

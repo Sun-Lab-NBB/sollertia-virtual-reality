@@ -22,7 +22,7 @@ namespace SL.Tasks
             return Parse(json);
         }
 
-        /// <summary>Serializes a dictionary to a JSON string.</summary>
+        /// <summary>Serializes a dictionary, list, string, number, boolean, or null value to a JSON string.</summary>
         /// <param name="obj">The object to serialize.</param>
         /// <returns>A JSON string representation.</returns>
         public static string Serialize(object obj)

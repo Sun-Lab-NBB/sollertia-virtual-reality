@@ -48,7 +48,9 @@ namespace Gimbl
         }
 
 #if UNITY_EDITOR
-        /// <summary>Instantiates a new display from a Resources model prefab and creates its settings asset.</summary>
+        /// <summary>
+        /// Instantiates a new display from a Resources model prefab and reuses or creates its settings asset.
+        /// </summary>
         /// <param name="displayName">The name to assign to the new display GameObject and its settings asset.</param>
         /// <param name="modelName">The prefab name under <c>Resources/Displays/</c> to instantiate.</param>
         /// <returns>The created <see cref="DisplayObject"/>, or null when the model prefab cannot be found.</returns>

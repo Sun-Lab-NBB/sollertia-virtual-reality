@@ -22,7 +22,10 @@ namespace Gimbl
 
         /// <summary>Adds a new tag to the project if it does not already exist.</summary>
         /// <param name="tagName">The name of the tag to add.</param>
-        /// <returns>True if the tag was added, false if it already exists or limit reached.</returns>
+        /// <returns>True if the tag was added, false if it already exists.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// The project already holds the maximum number of tags.
+        /// </exception>
         public static bool AddTag(string tagName)
         {
             SerializedObject tagManager = new SerializedObject(
@@ -49,7 +52,10 @@ namespace Gimbl
 
         /// <summary>Adds a new layer to the project if it does not already exist.</summary>
         /// <param name="layerName">The name of the layer to add.</param>
-        /// <returns>True if the layer was added, false if it already exists or no slots available.</returns>
+        /// <returns>True if the layer was added, false if it already exists.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// All allowed layer slots are already filled.
+        /// </exception>
         public static bool AddLayer(string layerName)
         {
             SerializedObject tagManager = new SerializedObject(

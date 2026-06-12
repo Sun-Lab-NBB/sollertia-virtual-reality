@@ -85,7 +85,7 @@ namespace Gimbl
 #endif
 
             // Falls back to localhost defaults so a fresh project always attempts a connection. The
-            // Gimbl Settings window applies the same fallback when its UI is opened; mirroring it here
+            // Task Parameters window applies the same fallback when its UI is opened; mirroring it here
             // ensures users who have not yet visited that window still get a working broker setup when
             // mosquitto (or another local broker) is running on standard ports.
             if (string.IsNullOrEmpty(ipAddress))

@@ -36,10 +36,10 @@ namespace SL.Tasks
 
         /// <summary>
         /// The set of project-relative directory prefixes under which non-scene assets may be deleted via
-        /// <c>delete_unity_asset</c>.
+        /// <c>delete_asset</c>.
         /// </summary>
         /// <remarks>
-        /// Scenes are intentionally absent — they are deleted exclusively through <see cref="DeleteScene"/>,
+        /// Scenes are intentionally absent — they are deleted exclusively through <see cref="DestroyTask"/>,
         /// which also cascade-deletes the per-scene <c>savedFullScreenViews</c> companion. Adding a scenes
         /// entry here would let scene paths bypass that cascade.
         /// </remarks>
@@ -225,7 +225,7 @@ namespace SL.Tasks
         /// and the scene at <c>Assets/Scenes/&lt;template&gt;.unity</c>; both paths are auto-resolved from the
         /// template basename to eliminate the agentic surface's need to manage them separately. Refuses to
         /// clobber an existing scene at the resolved path so an automated client never silently destroys a
-        /// hand-edited scene — use <c>delete_scene</c> first to regenerate. The prefab itself is always
+        /// hand-edited scene — use <c>delete_task</c> first to regenerate. The prefab itself is always
         /// regenerated because the template is authoritative.
         /// </remarks>
         /// <param name="args">The tool arguments containing template_name.</param>
@@ -260,11 +260,11 @@ namespace SL.Tasks
             string sceneSavePath = Path.Combine("Assets", "Scenes", $"{templateName}.unity");
 
             // Refuses to clobber an existing scene before generating the prefab so a regeneration cycle
-            // is an explicit two-step action: delete_scene first, then create_task. Checking up front
+            // is an explicit two-step action: delete_task first, then create_task. Checking up front
             // avoids leaving a regenerated prefab behind without the matching scene on overwrite refusal.
             if (File.Exists(sceneSavePath))
             {
-                string message = $"Scene already exists at: {sceneSavePath}. Call delete_scene first to regenerate.";
+                string message = $"Scene already exists at: {sceneSavePath}. Call delete_task first to regenerate.";
                 return Error(message);
             }
 
@@ -325,7 +325,7 @@ namespace SL.Tasks
         /// Mirrors <c>create_task</c> so the two tools cover the full lifecycle of a task's generated
         /// artifacts. Cue prefabs and cue materials are intentionally **not** removed because they are
         /// shared across every template that declares a matching <c>(name, length_cm)</c> identity;
-        /// deleting them would corrupt sibling tasks. Use <c>delete_unity_asset</c> for individual cue
+        /// deleting them would corrupt sibling tasks. Use <c>delete_asset</c> for individual cue
         /// cleanup. The template YAML is also preserved as the source of truth.
         /// </remarks>
         /// <param name="args">The tool arguments containing template_name.</param>
@@ -347,7 +347,7 @@ namespace SL.Tasks
             string companionDeleted = null;
 
             // Deletes the scene first so Unity can release the active-scene lock before any prefab the
-            // scene instantiates is removed. The active-scene swap mirrors DeleteScene.
+            // scene instantiates is removed. The active-scene swap below is part of this same delete flow.
             if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(scenePath) != null)
             {
                 Scene activeScene = SceneManager.GetActiveScene();

@@ -126,7 +126,10 @@ namespace Gimbl
             EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
         }
 
-        /// <summary>Reloads camera assignments when the active scene changes.</summary>
+        /// <summary>
+        /// Invalidates the scene-component cache on every active-scene change, and reloads camera assignments
+        /// unless the change is the deferred swap from exiting Play Mode.
+        /// </summary>
         /// <param name="oldScene">The previous active scene.</param>
         /// <param name="newScene">The new active scene.</param>
         private void OnActiveSceneChanged(Scene oldScene, Scene newScene)

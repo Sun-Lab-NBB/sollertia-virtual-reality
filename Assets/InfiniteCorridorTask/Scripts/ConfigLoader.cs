@@ -129,7 +129,7 @@ namespace SL.Config
                 }
             }
 
-            // Validates trial structures reference valid cues, valid trigger types, and well-formed transitions.
+            // Validates each trial's name, cue references, trigger type, and occupancy duration.
             foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
                 string trialName = trialEntry.Key;
