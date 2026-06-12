@@ -64,7 +64,7 @@ The `unity` plugin depends on the `assets` plugin for the backing `slsa mcp` ser
 | Skill                          | Description                                                                |
 |--------------------------------|----------------------------------------------------------------------------|
 | `/unity-mcp-environment-setup` | Diagnose the `localhost:8090` `McpBridge` HTTP relay                       |
-| `/task-scenes`                 | List, open, and create Unity scenes; enumerate Unity assets                |
+| `/task-scenes`                 | List, open, and inspect Unity scenes; enumerate Unity assets               |
 | `/task-prefabs`                | Generate, inspect, validate, and delete task prefabs from YAML templates   |
 | `/zone-prefabs`                | Manufacture new hand-authored trigger zone prefabs by copying and editing  |
 | `/task-parameters`             | Read and write the consolidated `Window → Task Parameters` editor surface  |
@@ -83,6 +83,9 @@ The `unity` plugin depends on the `assets` plugin for the backing `slsa mcp` ser
 | `/library-extension`            | Orchestrate cross-cutting changes to extend the shared-assets vocabulary |
 | `/assets-mcp-environment-setup` | Diagnose and resolve `slsa mcp` server connectivity issues               |
 
+The `assets` plugin ships further session, project, and data-management skills; only those relevant to
+sollertia-unity-tasks appear above.
+
 ### Shared development skills (ataraxis marketplace, `automation` plugin)
 
 | Skill               | Description                                                                           |
@@ -99,8 +102,9 @@ shared-assets template vocabulary, because the Python registry parity check on t
 if any downstream entry is missing. The platform `TriggerType` enum carries all five members (`INTERACTION`,
 `COLLISION`, `OCCUPANCY_DISARM`, `OCCUPANCY_ARM`, and `OCCUPANCY_TRIGGER`), and each acquisition system maps only the
 subset it supports: a new `TriggerType` member does NOT require a `from_task_template` branch — a system may leave it
-unsupported/unmapped. The Mesoscope-VR system's `from_task_template` maps `INTERACTION` (→ `WaterRewardTrial`) and
-`OCCUPANCY_DISARM` (→ `GasPuffTrial`), and does not map `collision`, `occupancy_arm`, or `occupancy_trigger`, so a
+unsupported/unmapped. The Mesoscope-VR system's `from_task_template` maps `INTERACTION`
+(→ `MesoscopeWaterRewardTrial`) and `OCCUPANCY_DISARM` (→ `MesoscopeGasPuffTrial`), and does not map `collision`,
+`occupancy_arm`, or `occupancy_trigger`, so a
 Mesoscope-VR config that uses one of those raises a clear "not mapped to a runtime trial class" error. The Unity
 counterpart of such a change is captured
 in the extension contracts table below.
@@ -165,8 +169,8 @@ bridge surface ripple through the other two libraries:
   hardware side of `Interaction`. Subscribes to `SessionStart`, `SessionStop`, `Stimulus`, `Delay`, `CueSequence`, and
   `SceneName`. Topic renames here require an in-lockstep update on the experiment side; the `/mqtt-contract` skill is
   the canonical index for both ends.
-- **sollertia-shared-assets** (configuration schema and MCP relay). Owns the Python `TaskTemplate`, `Cue`,
-  `TrialStructure`, and `VREnvironment` `YamlConfig` classes; the C# classes under
+- **sollertia-shared-assets** (configuration schema and MCP relay). Owns the Python `TaskTemplate` (a `YamlConfig`)
+  plus the `Cue`, `TrialStructure`, and `VREnvironment` schema dataclasses it composes; the C# classes under
   `Assets/InfiniteCorridorTask/Scripts/` mirror that schema. `interfaces/unity_tools.py` is the HTTP client for
   `McpBridge`. Adding a new bridge tool requires a matching `@mcp.tool()` wrapper in `unity_tools.py`. Schema changes
   (a new YAML field) must land in both repositories before the templates that use them parse successfully.

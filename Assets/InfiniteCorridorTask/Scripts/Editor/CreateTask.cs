@@ -1,7 +1,7 @@
 /// <summary>
 /// Provides the CreateTask class that generates Task prefabs and matching test scenes from YAML configuration
-/// files via the Unity Editor menu. Mirrors the agentic generate_task_prefab + create_scene pipeline in a
-/// single Editor entry point so a YAML edit produces a runnable scene without leaving the Editor.
+/// files via the Unity Editor menu. Mirrors the agentic create_task pipeline in a single Editor entry point
+/// so a YAML edit produces a runnable scene without leaving the Editor.
 /// </summary>
 using System;
 using System.Collections.Generic;
@@ -80,7 +80,10 @@ namespace SL.Tasks
         /// <summary>The vertical center for cue walls, segment walls, and the reset-zone marker.</summary>
         private const float WallVerticalCenter = 0.5f;
 
-        /// <summary>The Z-axis depth of guidance-zone box colliders inside interaction and occupancy zones.</summary>
+        /// <summary>
+        /// The Z-axis depth of guidance-zone box colliders in interaction and occupancy zones, and of the
+        /// thin boundary wall collider in collision zones.
+        /// </summary>
         private const float GuidanceColliderDepth = 0.4f;
 
         /// <summary>
@@ -397,7 +400,6 @@ namespace SL.Tasks
                 return $"error: {preflightError}";
             }
 
-            // Loads and validates task template
             TaskTemplate template;
             try
             {
@@ -424,7 +426,6 @@ namespace SL.Tasks
                 return "error: Failed to build segment prefabs.";
             }
 
-            // Loads padding prefab
             string paddingPath = Path.Combine(PrefabsFolder, $"{template.vrEnvironment.paddingPrefabName}.prefab");
             GameObject padding = AssetDatabase.LoadAssetAtPath<GameObject>(paddingPath);
 
@@ -452,7 +453,6 @@ namespace SL.Tasks
                 }
             }
 
-            // Measures actual prefab lengths and compares with configuration
             float[] measuredSegmentLengths = new float[segmentPrefabs.Length];
             for (int i = 0; i < segmentPrefabs.Length; i++)
             {
@@ -476,7 +476,6 @@ namespace SL.Tasks
             int depth = template.vrEnvironment.segmentsPerCorridor;
             float paddingZShift = depth * Mathf.Min(segmentLengths) - 1;
 
-            // Creates task GameObject hierarchy
             string taskName = Path.GetFileNameWithoutExtension(savePath);
             GameObject taskGameObject = new GameObject(taskName);
             Task taskScript = taskGameObject.AddComponent<Task>();
@@ -487,10 +486,8 @@ namespace SL.Tasks
             float currentCorridorX = 0;
             float corridorXShift = template.vrEnvironment.CorridorSpacingUnity;
 
-            // Iterates through all possible corridor combinations
             for (int i = 0; i < Mathf.Pow(trialCount, depth); i++)
             {
-                // Generates the combination for the current index
                 for (int j = 0; j < depth; j++)
                 {
                     corridorSegments[j] = i / (int)Mathf.Pow(trialCount, depth - j - 1) % trialCount;
@@ -823,7 +820,6 @@ namespace SL.Tasks
             Mesh quadMesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
             Mesh planeMesh = Resources.GetBuiltinResource<Mesh>("New-Plane.fbx");
 
-            // Loads shared materials
             Material floorMaterial = AssetDatabase.LoadAssetAtPath<Material>(
                 Path.Combine(MaterialsFolder, "Floor.mat")
             );
@@ -835,7 +831,6 @@ namespace SL.Tasks
                 return false;
             }
 
-            // Loads zone template prefabs
             GameObject stimulusZonePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 Path.Combine(PrefabsFolder, "StimulusTriggerZone.prefab")
             );
@@ -853,7 +848,6 @@ namespace SL.Tasks
                 string canonicalSegmentName = CanonicalSegmentName(template, trialName);
                 string segmentPrefabPath = Path.Combine(PrefabsFolder, $"{canonicalSegmentName}.prefab");
 
-                // Calculates total segment length in Unity units
                 float totalLengthUnity = trial.cueSequence.Sum(cueName => cueMap[cueName].LengthUnity(cmPerUnit));
 
                 // Creates segment root with cue offset; the root takes the canonical prefab name so the
@@ -861,7 +855,6 @@ namespace SL.Tasks
                 GameObject segmentGameObject = new GameObject(canonicalSegmentName);
                 segmentGameObject.transform.localPosition = new Vector3(0, 0, -cueOffsetUnity);
 
-                // Places cue instances along the Z axis
                 float cumulativeZ = 0f;
                 foreach (string cueName in trial.cueSequence)
                 {
@@ -887,7 +880,6 @@ namespace SL.Tasks
                     cumulativeZ += cueLengthUnity;
                 }
 
-                // Creates Floor
                 GameObject floor = new GameObject("Floor");
                 floor.transform.SetParent(segmentGameObject.transform);
                 floor.transform.localPosition = new Vector3(0, 0, totalLengthUnity / 2f);
@@ -895,7 +887,6 @@ namespace SL.Tasks
                 floor.AddComponent<MeshFilter>().sharedMesh = planeMesh;
                 floor.AddComponent<MeshRenderer>().sharedMaterial = floorMaterial;
 
-                // Creates Walls group with LeftWall and RightWall
                 GameObject walls = new GameObject("Walls");
                 walls.transform.SetParent(segmentGameObject.transform);
                 walls.transform.localPosition = Vector3.zero;
@@ -916,7 +907,6 @@ namespace SL.Tasks
                 rightWall.AddComponent<MeshFilter>().sharedMesh = quadMesh;
                 rightWall.AddComponent<MeshRenderer>().sharedMaterial = wallMaterial;
 
-                // Places zones from the trial structure
                 float zoneStartUnity = trial.stimulusTriggerZoneStartCm / cmPerUnit;
                 float zoneEndUnity = trial.stimulusTriggerZoneEndCm / cmPerUnit;
                 float zoneCenterUnity = (zoneStartUnity + zoneEndUnity) / 2f;
@@ -1021,7 +1011,6 @@ namespace SL.Tasks
 
             ConfigureRootZoneCollider(zone, zoneSizeUnity);
 
-            // Configures GuidanceRegion at the stimulus location
             GuidanceZone guidanceZone = zone.GetComponentInChildren<GuidanceZone>();
             if (guidanceZone != null)
             {
@@ -1033,7 +1022,6 @@ namespace SL.Tasks
                 }
             }
 
-            // Sets the trigger mode, boundary visibility, and the stimulus identifier.
             StimulusTriggerZone stimulusZone = zone.GetComponent<StimulusTriggerZone>();
             if (stimulusZone != null)
             {
@@ -1086,7 +1074,6 @@ namespace SL.Tasks
                 UnityEngine.Object.DestroyImmediate(guidanceZone.gameObject);
             }
 
-            // Sets the trigger mode, boundary visibility, and the stimulus identifier.
             StimulusTriggerZone stimulusZone = zone.GetComponent<StimulusTriggerZone>();
             if (stimulusZone != null)
             {
@@ -1108,7 +1095,9 @@ namespace SL.Tasks
         /// <param name="zoneCenterUnity">The center position of the occupancy zone in Unity units.</param>
         /// <param name="zoneSizeUnity">The size of the occupancy zone in Unity units.</param>
         /// <param name="stimulusLocationUnity">The stimulus location in Unity units.</param>
-        /// <param name="occupancyDurationMs">The occupancy duration in milliseconds applied to the OccupancyZone.</param>
+        /// <param name="occupancyDurationMs">
+        /// The occupancy duration in milliseconds applied to the OccupancyZone.
+        /// </param>
         /// <param name="showBoundary">Determines whether the zone boundary is visible.</param>
         private static void PlaceOccupancyZone(
             GameObject parent,
@@ -1131,7 +1120,6 @@ namespace SL.Tasks
 
             ConfigureRootZoneCollider(zone, zoneSizeUnity);
 
-            // Configures OccupancyRegion to cover the occupancy zone range
             float occupancyCenterOffset = zoneCenterUnity - rootZ;
 
             OccupancyZone occupancyZone = zone.GetComponentInChildren<OccupancyZone>();
@@ -1147,7 +1135,6 @@ namespace SL.Tasks
                 }
             }
 
-            // Configures OccupancyGuidanceRegion at the downstream end of the occupancy zone
             OccupancyGuidanceZone occupancyGuidanceZone = zone.GetComponentInChildren<OccupancyGuidanceZone>();
             if (occupancyGuidanceZone != null)
             {
@@ -1163,7 +1150,6 @@ namespace SL.Tasks
                 }
             }
 
-            // Sets the trigger mode, boundary visibility, and the stimulus identifier.
             StimulusTriggerZone stimulusZone = zone.GetComponent<StimulusTriggerZone>();
             if (stimulusZone != null)
             {
@@ -1192,9 +1178,11 @@ namespace SL.Tasks
 
         /// <summary>
         /// Reports the outcome of <see cref="CreateSceneFromTemplate"/>. Returned in lieu of a string-prefix
-        /// protocol because the scene path encodes three orthogonal facts that callers route differently:
-        /// success or error, whether the requested task prefab was found, and whether a SimulatedLinearTreadmill
-        /// was added. The MCP bridge surfaces all three back to the relay; the menu flow only logs the message.
+        /// protocol because the result carries facts that callers route differently: success or error, whether
+        /// the requested task prefab was found, and whether a SimulatedLinearTreadmill was added. The MCP bridge
+        /// surfaces success and SimulatedControllerAdded as discrete response fields; the task-prefab-found state
+        /// is conveyed only through the message text and is not exercised on the GenerateTask path, which always
+        /// supplies a freshly generated prefab. The menu flow only logs the message.
         /// </summary>
         public class SceneCreationResult
         {

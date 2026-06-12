@@ -22,7 +22,7 @@ namespace Gimbl
         /// <summary>The MQTT channel for sending simulated interaction-sensor trigger events.</summary>
         private MQTTChannel _interactionTrigger;
 
-        /// <summary>Initializes the Input System for keyboard simulation on start.</summary>
+        /// <summary>Initializes the keyboard input system and opens the Interaction MQTT channel on start.</summary>
         private void Start()
         {
             _input = new SimulatedInput();
@@ -32,8 +32,9 @@ namespace Gimbl
 
         /// <summary>Processes simulated input and movement each frame.</summary>
         /// <remarks>
-        /// The interaction trigger fires on every press of the Jump action (spacebar), routed through
-        /// <see cref="_interactionTrigger"/> to the <see cref="MQTTTopics.Interaction"/> channel.
+        /// The interaction trigger fires on every press of the Jump action (spacebar) while an actor is
+        /// assigned, routed through <see cref="_interactionTrigger"/> to the
+        /// <see cref="MQTTTopics.Interaction"/> channel.
         /// </remarks>
         public override void Update()
         {

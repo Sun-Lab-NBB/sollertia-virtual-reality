@@ -20,7 +20,7 @@ namespace Gimbl
     /// </summary>
     /// <remarks>
     /// The constructor unconditionally calls <see cref="LoadCameras"/>, which leaves
-    /// <see cref="_savedFullScreenViews"/> non-null whenever the active scene has been saved to disk.
+    /// <see cref="_savedFullScreenViews"/> non-null whenever the active scene has a non-empty name.
     /// An untitled active scene leaves the field null (no persistence path exists yet), and
     /// <see cref="SaveCameras"/> no-ops in that state instead of writing an orphan asset with a hyphen-
     /// prefixed filename.
@@ -71,8 +71,9 @@ namespace Gimbl
 
         /// <summary>Renders a per-monitor row pairing the monitor coordinates with a camera dropdown.</summary>
         /// <remarks>
-        /// Enumerates every <see cref="Camera"/> in the active scene each frame so the dropdown reflects
-        /// the current scene state without manual refresh. Selections that would alias another monitor's
+        /// Enumerates every assignable <see cref="Camera"/> in the active scene (excluding the Unity-default
+        /// Main Camera) each frame so the dropdown reflects the current scene state without manual refresh.
+        /// Selections that would alias another monitor's
         /// camera are silently ignored to preserve the existing one-camera-per-monitor invariant.
         /// </remarks>
         public void OnGUICameraObjectFields()
@@ -321,7 +322,7 @@ namespace Gimbl
         }
 
         /// <summary>Returns the full hierarchy path name for a GameObject.</summary>
-        /// <param name="gameObject">The GameObject to get the path for.</param>
+        /// <param name="gameObject">The object whose root-to-leaf hierarchy path is resolved.</param>
         /// <returns>The full hierarchy path from root to the GameObject.</returns>
         private static string PathName(GameObject gameObject)
         {

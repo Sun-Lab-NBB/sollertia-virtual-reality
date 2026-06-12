@@ -9,7 +9,7 @@ namespace SL.Config
     /// <summary>
     /// Defines the spatial configuration of a trial structure for Unity prefabs.
     /// Contains the trial's cue sequence, zone positions, optional transition probabilities, and visibility settings.
-    /// This mirrors the TrialStructure class from sollertia-shared-assets vr_configuration module.
+    /// Mirrors the TrialStructure class from sollertia-shared-assets vr_configuration module.
     /// </summary>
     [Serializable]
     public class TrialStructure
@@ -24,20 +24,22 @@ namespace SL.Config
         public float stimulusTriggerZoneEndCm;
 
         /// <summary>
-        /// The location of the invisible boundary with which the animal must collide to elicit the stimulus.
+        /// The position of the stimulus boundary. The collision, occupancy_disarm, and occupancy_arm modes
+        /// fire on collision with it; interaction and occupancy_trigger modes do not use boundary collision.
         /// </summary>
         public float stimulusLocationCm;
 
         /// <summary>
         /// Determines whether the stimulus collision boundary is visible to the animal during this trial type.
-        /// When True, the boundary marker is displayed in the VR environment at the stimulus location.
+        /// When true, the boundary marker is displayed in the VR environment at the stimulus location.
         /// </summary>
         public bool showStimulusCollisionBoundary = false;
 
         /// <summary>
-        /// The trigger mode for the stimulus zone. "interaction" uses the StimulusTriggerZone prefab with
-        /// a GuidanceZone child. "occupancy_disarm" uses the OccupancyTriggerZone prefab with OccupancyZone
-        /// and OccupancyGuidanceZone children.
+        /// The trigger mode for the stimulus zone. "interaction" and "collision" use the StimulusTriggerZone
+        /// prefab; "collision" strips the GuidanceRegion child (the child carrying the GuidanceZone script) and
+        /// fires on a thin boundary wall. "occupancy_disarm", "occupancy_arm", and "occupancy_trigger" use the
+        /// OccupancyTriggerZone prefab whose OccupancyZone child carries a nested OccupancyGuidanceZone child.
         /// </summary>
         public string triggerType;
 

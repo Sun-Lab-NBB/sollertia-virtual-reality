@@ -2,7 +2,8 @@
 /// Provides the Task class that manages the infinite corridor VR environment for mesoscope experiments.
 ///
 /// Controls the generation and cycling of random maze segments, manages animal position
-/// within the corridor system, and handles MQTT communication for cue sequences and scene information.
+/// within the corridor system, and handles MQTT communication for cue sequences, scene information, and the
+/// interaction/wait requirement toggles.
 /// </summary>
 using System;
 using System.Collections.Generic;
@@ -132,7 +133,9 @@ namespace SL.Tasks
         /// <summary>The current corridor segment indices.</summary>
         private List<int> _currentSegment;
 
-        /// <summary>The cached integer corridor key for <see cref="_currentSegment"/>, refreshed only on advance.</summary>
+        /// <summary>
+        /// The cached integer corridor key for <see cref="_currentSegment"/>, refreshed only on advance.
+        /// </summary>
         private int _currentCorridorKey;
 
         /// <summary>The cached actor position for updates.</summary>
@@ -160,7 +163,6 @@ namespace SL.Tasks
         /// <summary>Initializes the task, loads configuration, and sets up MQTT channels.</summary>
         private void Start()
         {
-            // Warns if Task is not at origin.
             if (transform.position != Vector3.zero)
             {
                 string message =
@@ -187,7 +189,6 @@ namespace SL.Tasks
                 return;
             }
 
-            // Loads and validates task template.
             try
             {
                 _template = ConfigLoader.LoadTemplate(globalConfigPath);
@@ -202,7 +203,6 @@ namespace SL.Tasks
                 return;
             }
 
-            // Extracts configuration values.
             _trialNames = _template.GetTrialNames();
             _trialCount = _trialNames.Length;
             _trialNameToIndex = new Dictionary<string, int>(_trialCount);
@@ -227,7 +227,6 @@ namespace SL.Tasks
 
             for (int i = 0; i < corridorCount; i++)
             {
-                // Generates segment combination for current corridor index.
                 for (int j = 0; j < _depth; j++)
                 {
                     corridorSegments[j] = i / (int)Mathf.Pow(_trialCount, _depth - j - 1) % _trialCount;
@@ -237,15 +236,12 @@ namespace SL.Tasks
                 currentCorridorX += corridorXShift;
             }
 
-            // Generates random maze sequence.
             (_segmentSequenceArray, _cueSequenceArray) = GenerateRandomMaze(trackLength, trackSeed);
 
-            // Initializes current segment tracking.
             _currentSegmentIndex = 0;
             _currentSegment = new List<int>(_segmentSequenceArray.Take(_depth));
             _currentCorridorKey = ComputeCorridorKey(_currentSegment);
 
-            // Positions actor at the first corridor.
             if (actor != null)
             {
                 if (_currentCorridorKey >= 0 && _currentCorridorKey < _corridorMap.Length)
@@ -263,12 +259,10 @@ namespace SL.Tasks
                 }
             }
 
-            // Sets up MQTT channels for cue sequence requests.
             _cueSequenceTrigger = new MQTTChannel(MQTTTopics.CueSequenceTrigger, isListener: true);
             _cueSequenceTrigger.receivedEvent.AddListener(OnCueSequenceTrigger);
             _cueSequenceChannel = new MQTTChannel<SequenceMessage>(MQTTTopics.CueSequence, isListener: false);
 
-            // Sets up MQTT channels for scene name requests.
             _sceneName = SceneManager.GetActiveScene().name;
             _sceneNameTrigger = new MQTTChannel(MQTTTopics.SceneNameTrigger, isListener: true);
             _sceneNameTrigger.receivedEvent.AddListener(OnSceneNameTrigger);
@@ -300,13 +294,10 @@ namespace SL.Tasks
 
             _position = actor.transform.position;
 
-            // Checks if animal has traveled through the current segment.
             if (_position.z > corridorData.firstSegmentLength)
             {
-                // Teleports animal back to start of corridor.
                 _position.z -= corridorData.firstSegmentLength;
 
-                // Advances to next corridor based on future segments.
                 _currentSegmentIndex++;
                 if (_currentSegmentIndex <= _segmentSequenceArray.Length - _depth)
                 {
@@ -320,7 +311,6 @@ namespace SL.Tasks
                     return;
                 }
 
-                // Teleports to new corridor.
                 if (_currentCorridorKey >= 0 && _currentCorridorKey < _corridorMap.Length)
                 {
                     (float xPosition, float firstSegmentLength) newCorridorData = _corridorMap[_currentCorridorKey];
@@ -484,7 +474,7 @@ namespace SL.Tasks
         /// </remarks>
         public class BoolMessage
         {
-            /// <summary>The boolean payload value.</summary>
+            /// <summary>Determines whether the toggled requirement is enabled.</summary>
             public bool value;
         }
     }

@@ -53,7 +53,6 @@ namespace SL.Config
 
             ValidateTemplate(template, filePath);
 
-            // Derives template name from filename (without extension)
             template.templateName = Path.GetFileNameWithoutExtension(filePath);
 
             return template;
@@ -86,7 +85,8 @@ namespace SL.Config
                 throw new InvalidDataException("No trial structures defined in template.");
             }
 
-            // Validates cue codes are unique and within uint8 range
+            // Validates each cue's code range and uniqueness, name uniqueness, positive length, and texture
+            // presence/existence.
             HashSet<int> seenCodes = new HashSet<int>();
             HashSet<string> seenNames = new HashSet<string>();
 
@@ -129,7 +129,8 @@ namespace SL.Config
                 }
             }
 
-            // Validates trial structures reference valid cues, valid trigger types, and well-formed transitions.
+            // Validates each trial's name, non-empty cue sequence, cue references, trigger type, and occupancy
+            // duration.
             foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
                 string trialName = trialEntry.Key;
@@ -140,10 +141,10 @@ namespace SL.Config
                 // filesystem layout. Rejects them at load time before any asset path is computed downstream.
                 if (!TrialNamePattern.IsMatch(trialName))
                 {
-                    throw new InvalidDataException(
+                    string message =
                         $"Trial name '{trialName}' is invalid. Trial names must contain only ASCII letters, "
-                            + "digits, and underscores (used in generated segment prefab filenames)."
-                    );
+                        + "digits, and underscores (used in generated segment prefab filenames).";
+                    throw new InvalidDataException(message);
                 }
 
                 if (trial.cueSequence == null || trial.cueSequence.Count == 0)
@@ -172,10 +173,10 @@ namespace SL.Config
                     && !string.Equals(trial.triggerType, "occupancy_trigger", StringComparison.Ordinal)
                 )
                 {
-                    throw new InvalidDataException(
+                    string message =
                         $"Trial '{trialName}' has invalid trigger_type '{trial.triggerType}'. Must be one of "
-                            + "'interaction', 'collision', 'occupancy_disarm', 'occupancy_arm', 'occupancy_trigger'."
-                    );
+                        + "'interaction', 'collision', 'occupancy_disarm', 'occupancy_arm', 'occupancy_trigger'.";
+                    throw new InvalidDataException(message);
                 }
 
                 if (trial.occupancyDurationMs <= 0f)

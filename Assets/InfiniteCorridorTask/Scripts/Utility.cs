@@ -6,11 +6,14 @@ using UnityEngine;
 namespace SL.Tasks
 {
     /// <summary>
-    /// Static utility class for prefab measurements.
+    /// Provides static utility functions for measuring prefab dimensions.
     /// </summary>
     public static class Utility
     {
-        /// <summary>Calculates the z-axis length of a prefab by combining all child renderer bounds.</summary>
+        /// <summary>
+        /// Calculates the z-axis length of a prefab by combining the bounds of every Renderer on the prefab and
+        /// its children.
+        /// </summary>
         /// <param name="prefab">The prefab GameObject to measure.</param>
         /// <returns>The z-axis size of the combined bounds, or 0 if no renderers found.</returns>
         public static float GetPrefabLength(GameObject prefab)

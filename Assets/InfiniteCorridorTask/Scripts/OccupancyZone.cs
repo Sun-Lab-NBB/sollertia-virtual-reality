@@ -24,18 +24,23 @@ namespace SL.Tasks
         /// </summary>
         public float occupancyDurationMs = 1000f;
 
-        /// <summary>Determines whether the animal is currently inside this zone.</summary>
+        /// <summary>
+        /// Determines whether the animal is inside this zone while it is actively tracking occupancy. Only set true
+        /// when the zone is active and occupancy is not yet met, so it stays false on entries after occupancy is met.
+        /// </summary>
         [HideInInspector]
         public bool inZone = false;
 
         /// <summary>
-        /// Determines whether the animal has met the occupancy requirement (occupied for the required duration).
-        /// Reset to false by ResetZone at lap start. The parent StimulusTriggerZone interprets it per trigger mode.
+        /// Determines whether the animal has met the occupancy requirement (occupied for the required duration). Once
+        /// set, it latches the zone so Update and OnTriggerEnter short-circuit, limiting firing to once per lap until
+        /// ResetZone clears it at lap start. The parent StimulusTriggerZone interprets it per trigger mode.
         /// </summary>
         [HideInInspector]
         public bool occupancyMet = false;
 
-        /// <summary>Determines whether this zone is active (only checks once per lap). Reset by ResetZone.</summary>
+        /// <summary>Enables or disables occupancy tracking for this zone. Reset to true by ResetZone each lap.
+        /// </summary>
         public bool isActive = true;
 
         /// <summary>The high-precision stopwatch for accurate millisecond timing.</summary>
@@ -63,7 +68,7 @@ namespace SL.Tasks
         }
 
         /// <summary>Starts the occupancy timer when the animal enters the zone collider.</summary>
-        /// <param name="other">The collider that entered the trigger zone.</param>
+        /// <param name="other">The object that entered the trigger zone.</param>
         private void OnTriggerEnter(Collider other)
         {
             if (!isActive || occupancyMet)
@@ -75,7 +80,7 @@ namespace SL.Tasks
         }
 
         /// <summary>Stops the timer and checks the result when the animal exits the zone collider.</summary>
-        /// <param name="other">The collider that exited the trigger zone.</param>
+        /// <param name="other">The object that exited the trigger zone.</param>
         private void OnTriggerExit(Collider other)
         {
             if (!isActive)
@@ -90,12 +95,6 @@ namespace SL.Tasks
             }
         }
 
-        /// <summary>Returns the elapsed time in milliseconds since the occupancy timer started.</summary>
-        internal long GetElapsedMilliseconds()
-        {
-            return _occupancyTimer.ElapsedMilliseconds;
-        }
-
         /// <summary>Resets the occupancy zone state for a new lap.</summary>
         /// <remarks>Invoked by ResetZone when the animal enters the reset zone.</remarks>
         public void ResetState()
@@ -104,6 +103,12 @@ namespace SL.Tasks
             occupancyMet = false;
             inZone = false;
             _occupancyTimer.Reset();
+        }
+
+        /// <summary>Returns the elapsed time in milliseconds since the occupancy timer started.</summary>
+        internal long GetElapsedMilliseconds()
+        {
+            return _occupancyTimer.ElapsedMilliseconds;
         }
 
         /// <summary>Marks the occupancy requirement as met once the animal has occupied the zone long enough.</summary>

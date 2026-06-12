@@ -79,13 +79,12 @@ namespace Gimbl
             Instance = this;
 
 #if UNITY_EDITOR
-            // Loads connection settings from EditorPrefs.
             ipAddress = UnityEditor.EditorPrefs.GetString("SollertiaVR_MQTT_IP");
             port = UnityEditor.EditorPrefs.GetInt("SollertiaVR_MQTT_Port");
 #endif
 
             // Falls back to localhost defaults so a fresh project always attempts a connection. The
-            // Gimbl Settings window applies the same fallback when its UI is opened; mirroring it here
+            // Task Parameters window applies the same fallback when its UI is opened; mirroring it here
             // ensures users who have not yet visited that window still get a working broker setup when
             // mosquitto (or another local broker) is running on standard ports.
             if (string.IsNullOrEmpty(ipAddress))
@@ -98,7 +97,7 @@ namespace Gimbl
             }
         }
 
-        /// <summary>Subscribes to session channels and broadcasts session start.</summary>
+        /// <summary>Creates the session start/stop publish channels and broadcasts session start.</summary>
         private void Start()
         {
             _startChannel = new MQTTChannel(MQTTTopics.SessionStart, isListener: false);

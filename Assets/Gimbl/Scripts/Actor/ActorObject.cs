@@ -1,8 +1,8 @@
 /// <summary>
 /// Provides the ActorObject class representing an animal in the VR environment.
 ///
-/// Manages the actor's display, controller, and settings references with validation
-/// to ensure proper linkage between components.
+/// Manages the actor's display and controller references, automatically re-parenting the
+/// display and wiring the bidirectional actor-controller reference when these references change.
 /// </summary>
 using System;
 using System.Collections.Generic;
@@ -38,13 +38,11 @@ namespace Gimbl
             {
                 if (value != _display)
                 {
-                    // Parents new display to this actor.
                     if (value != null)
                     {
                         value.ParentToActor(this);
                     }
 
-                    // Unparents previous display if it existed.
                     if (_display != null)
                     {
                         _display.Unparent();
@@ -93,7 +91,6 @@ namespace Gimbl
         {
             gameObject.transform.SetParent(GameObject.Find("Actors").transform);
 
-            // Adds character controller for collision detection.
             CharacterController characterController = gameObject.AddComponent<CharacterController>();
             characterController.slopeLimit = 45;
             characterController.stepOffset = 0.000001f;
@@ -103,7 +100,6 @@ namespace Gimbl
             characterController.radius = 0.5f;
             characterController.height = 0.1f;
 
-            // Creates render layer for this actor.
             TagsAndLayers.AddLayer(gameObject.name);
 
             SetModel(modelName);
@@ -127,7 +123,6 @@ namespace Gimbl
                 int[] displays = availableDisplays.Except(usedDisplays).ToArray();
                 int nextDisplay = displays.Length > 0 ? displays[0] : 7;
 
-                // Creates the tracking camera.
                 GameObject cameraObject = new GameObject("Actor View");
                 Camera cameraComponent = cameraObject.AddComponent<Camera>();
                 cameraObject.transform.parent = gameObject.transform;
@@ -188,7 +183,6 @@ namespace Gimbl
         /// <summary>Renders the editor GUI for editing actor properties.</summary>
         public void EditMenu()
         {
-            // Model dropdown.
             string[] modelOptions = Resources
                 .LoadAll<GameObject>("Actors/Prefabs")
                 .Select(prefab => prefab.name)
@@ -222,7 +216,6 @@ namespace Gimbl
                 EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             }
 
-            // Controller dropdown.
             ControllerOutput[] controllerOutputs = FindObjectsByType<ControllerOutput>(FindObjectsSortMode.None);
             string[] controllerOptions = new string[controllerOutputs.Length + 1];
             controllerOptions[0] = "None";

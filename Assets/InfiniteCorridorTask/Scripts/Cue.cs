@@ -8,7 +8,7 @@ namespace SL.Config
     /// <summary>
     /// Defines a single visual cue used in the VR environment.
     /// Each cue has a unique name (used in segment definitions) and a unique uint8 code (for MQTT communication).
-    /// Cues are not loaded as individual prefabs - they are baked into segment prefabs.
+    /// Each cue is generated as a shared, length-suffixed prefab under Cues/ and instantiated into segment prefabs.
     /// </summary>
     [Serializable]
     public class Cue

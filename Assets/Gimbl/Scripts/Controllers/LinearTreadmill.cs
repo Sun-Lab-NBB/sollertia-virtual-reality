@@ -28,20 +28,15 @@ namespace Gimbl
         /// intentionally does not chain to it, so the hardware subscription stays inactive for keyboard
         /// runs. The lifecycle contract relies on Unity dispatching <c>Start</c> per most-derived type
         /// only: promoting either <c>Start</c> to <c>protected virtual</c> or wiring a base call from the
-        /// simulated subclass would double-subscribe to <see cref="MQTTTopics.Motion"/>; both are deliberate
-        /// non-options. If a third controller subclass appears, follow the same pattern (hide via its own
+        /// simulated subclass would subscribe the simulated rig to <see cref="MQTTTopics.Motion"/> (a
+        /// hardware-only topic it must never listen on); both are deliberate non-options. If a third
+        /// controller subclass appears, follow the same pattern (hide via its own
         /// <c>Start</c>; do not chain).
         /// </remarks>
         private void Start()
         {
             _dataChannel = new MQTTChannel<TreadmillMessage>(MQTTTopics.Motion);
             _dataChannel.receivedEvent.AddListener(OnMessage);
-        }
-
-        /// <summary>Removes the MQTT listener so the treadmill stops receiving data after destruction.</summary>
-        private void OnDestroy()
-        {
-            _dataChannel?.receivedEvent.RemoveListener(OnMessage);
         }
 
         /// <summary>Processes accumulated movement each frame.</summary>
@@ -69,8 +64,14 @@ namespace Gimbl
             }
         }
 
+        /// <summary>Removes the MQTT listener so the treadmill stops receiving data after destruction.</summary>
+        private void OnDestroy()
+        {
+            _dataChannel?.receivedEvent.RemoveListener(OnMessage);
+        }
+
         /// <summary>Receives movement data from the treadmill via MQTT callback.</summary>
-        /// <param name="message">The message containing the movement value.</param>
+        /// <param name="message">Carries the treadmill movement value to accumulate.</param>
         public void OnMessage(TreadmillMessage message)
         {
             lock (movement)

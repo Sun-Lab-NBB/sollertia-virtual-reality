@@ -22,7 +22,10 @@ namespace Gimbl
         /// <summary>The current brightness level (0-100).</summary>
         public float currentBrightness = 100f;
 
-        /// <summary>Parents this display to an actor and configures camera culling.</summary>
+        /// <summary>
+        /// Parents this display to an actor, offsets it to the configured VR eye height
+        /// (<c>settings.heightInVR</c>, defaulting to 0 when settings is null), and configures camera culling.
+        /// </summary>
         /// <param name="actor">The actor to attach this display to.</param>
         public void ParentToActor(ActorObject actor)
         {
@@ -48,7 +51,9 @@ namespace Gimbl
         }
 
 #if UNITY_EDITOR
-        /// <summary>Instantiates a new display from a Resources model prefab and creates its settings asset.</summary>
+        /// <summary>
+        /// Instantiates a new display from a Resources model prefab and reuses or creates its settings asset.
+        /// </summary>
         /// <param name="displayName">The name to assign to the new display GameObject and its settings asset.</param>
         /// <param name="modelName">The prefab name under <c>Resources/Displays/</c> to instantiate.</param>
         /// <returns>The created <see cref="DisplayObject"/>, or null when the model prefab cannot be found.</returns>
@@ -66,7 +71,8 @@ namespace Gimbl
             DisplayObject display = displayGameObject.AddComponent<DisplayObject>();
             displayGameObject.tag = "VRDisplay";
 
-            // Reuses any pre-existing settings asset so user customizations (brightness, heightInVR) survive scene rebuilds.
+            // Reuses any pre-existing settings asset so user customizations (brightness, heightInVR) survive
+            // scene rebuilds.
             string settingsAssetPath = $"Assets/VRSettings/Displays/{displayName}.asset";
             DisplaySettings displaySettings = AssetDatabase.LoadAssetAtPath<DisplaySettings>(settingsAssetPath);
             if (displaySettings == null)

@@ -9,7 +9,7 @@ using System.Text;
 namespace SL.Tasks
 {
     /// <summary>
-    /// Minimal JSON serializer and deserializer for MCP bridge communication.
+    /// Provides a minimal JSON serializer and deserializer for MCP bridge communication.
     /// Handles dictionaries, lists, strings, numbers, booleans, and null values.
     /// </summary>
     public static class MiniJson
@@ -22,7 +22,10 @@ namespace SL.Tasks
             return Parse(json);
         }
 
-        /// <summary>Serializes a dictionary to a JSON string.</summary>
+        /// <summary>
+        /// Serializes a dictionary, list, string, number, boolean, or null value to a JSON string; any other value is
+        /// serialized as its quoted ToString() representation.
+        /// </summary>
         /// <param name="obj">The object to serialize.</param>
         /// <returns>A JSON string representation.</returns>
         public static string Serialize(object obj)

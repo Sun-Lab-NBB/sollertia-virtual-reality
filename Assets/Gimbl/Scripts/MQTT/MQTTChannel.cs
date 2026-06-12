@@ -1,5 +1,5 @@
 /// <summary>
-/// Provides the MQTTChannel classes for type-safe MQTT messaging.
+/// Provides the MQTTChannel classes for trigger-based and type-safe MQTT messaging.
 ///
 /// Includes the base MQTTChannel for simple trigger messages and the generic
 /// MQTTChannel&lt;TMessage&gt; for JSON-serialized typed messages.
@@ -67,7 +67,7 @@ namespace Gimbl
     /// The typed <see cref="receivedEvent"/> shadows the base <see cref="MQTTChannel.receivedEvent"/> via
     /// the <c>new</c> modifier because <see cref="UnityEngine.Events.UnityEvent"/> and
     /// <see cref="UnityEngine.Events.UnityEvent{T0}"/> are unrelated types with no shared parameterized
-    /// contract: a virtual property cannot express both signatures, so the payload type would be lost
+    /// contract. A virtual property cannot express both signatures, so the payload type would be lost
     /// under a clean override. Callers that need the deserialized payload must reference the channel as
     /// <see cref="MQTTChannel{TMessage}"/>; a base <see cref="MQTTChannel"/> reference exposes only the
     /// parameterless trigger event and will silently miss the typed callback.

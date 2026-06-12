@@ -17,12 +17,15 @@ namespace Gimbl
         /// <summary>The maximum number of tags allowed.</summary>
         private const int MaxTags = 10000;
 
-        /// <summary>The maximum number of layers allowed.</summary>
+        /// <summary>The exclusive upper bound on layer slot indices examined (slots 0..30).</summary>
         private const int MaxLayers = 31;
 
         /// <summary>Adds a new tag to the project if it does not already exist.</summary>
         /// <param name="tagName">The name of the tag to add.</param>
-        /// <returns>True if the tag was added, false if it already exists or limit reached.</returns>
+        /// <returns>True if the tag was added, false if it already exists.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// The project already holds the maximum number of tags.
+        /// </exception>
         public static bool AddTag(string tagName)
         {
             SerializedObject tagManager = new SerializedObject(
@@ -49,7 +52,10 @@ namespace Gimbl
 
         /// <summary>Adds a new layer to the project if it does not already exist.</summary>
         /// <param name="layerName">The name of the layer to add.</param>
-        /// <returns>True if the layer was added, false if it already exists or no slots available.</returns>
+        /// <returns>True if the layer was added, false if it already exists.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// All allowed layer slots are already filled.
+        /// </exception>
         public static bool AddLayer(string layerName)
         {
             SerializedObject tagManager = new SerializedObject(
@@ -77,7 +83,7 @@ namespace Gimbl
         /// <summary>Checks if a value exists in a serialized array property.</summary>
         /// <param name="property">The serialized array property to search.</param>
         /// <param name="start">The starting index for the search.</param>
-        /// <param name="end">The ending index for the search.</param>
+        /// <param name="end">The exclusive upper bound (one past the last index) for the search.</param>
         /// <param name="value">The value to search for.</param>
         /// <returns>True if the value exists in the property range.</returns>
         private static bool PropertyExists(SerializedProperty property, int start, int end, string value)

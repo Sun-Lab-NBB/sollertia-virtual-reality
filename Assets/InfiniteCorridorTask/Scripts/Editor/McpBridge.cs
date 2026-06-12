@@ -31,15 +31,15 @@ namespace SL.Tasks
         /// <summary>The port on which the bridge listens for incoming HTTP requests.</summary>
         private const int Port = 8090;
 
-        /// <summary>The tolerance for comparing measured prefab lengths against configured lengths.</summary>
-        private const float LengthComparisonEpsilon = 0.01f;
+        /// <summary>The shared error-protocol prefix returned by <see cref="CreateTask.CreateFromTemplate"/>.</summary>
+        private const string CreateTaskErrorPrefix = "error: ";
 
         /// <summary>
         /// The set of project-relative directory prefixes under which non-scene assets may be deleted via
-        /// <c>delete_unity_asset</c>.
+        /// <c>delete_asset</c>.
         /// </summary>
         /// <remarks>
-        /// Scenes are intentionally absent — they are deleted exclusively through <see cref="DeleteScene"/>,
+        /// Scenes are intentionally absent — they are deleted exclusively through <see cref="DestroyTask"/>,
         /// which also cascade-deletes the per-scene <c>savedFullScreenViews</c> companion. Adding a scenes
         /// entry here would let scene paths bypass that cascade.
         /// </remarks>
@@ -71,9 +71,6 @@ namespace SL.Tasks
             "Assets/InfiniteCorridorTask/Materials/TargetMat.mat",
             "Assets/Scenes/ExperimentTemplate.unity",
         };
-
-        /// <summary>The shared error-protocol prefix returned by <see cref="CreateTask.CreateFromTemplate"/>.</summary>
-        private const string CreateTaskErrorPrefix = "error: ";
 
         /// <summary>The HTTP listener instance.</summary>
         private static readonly HttpListener _listener = new HttpListener();
@@ -225,7 +222,7 @@ namespace SL.Tasks
         /// and the scene at <c>Assets/Scenes/&lt;template&gt;.unity</c>; both paths are auto-resolved from the
         /// template basename to eliminate the agentic surface's need to manage them separately. Refuses to
         /// clobber an existing scene at the resolved path so an automated client never silently destroys a
-        /// hand-edited scene — use <c>delete_scene</c> first to regenerate. The prefab itself is always
+        /// hand-edited scene — use <c>delete_task</c> first to regenerate. The prefab itself is always
         /// regenerated because the template is authoritative.
         /// </remarks>
         /// <param name="args">The tool arguments containing template_name.</param>
@@ -260,11 +257,11 @@ namespace SL.Tasks
             string sceneSavePath = Path.Combine("Assets", "Scenes", $"{templateName}.unity");
 
             // Refuses to clobber an existing scene before generating the prefab so a regeneration cycle
-            // is an explicit two-step action: delete_scene first, then create_task. Checking up front
+            // is an explicit two-step action: delete_task first, then create_task. Checking up front
             // avoids leaving a regenerated prefab behind without the matching scene on overwrite refusal.
             if (File.Exists(sceneSavePath))
             {
-                string message = $"Scene already exists at: {sceneSavePath}. Call delete_scene first to regenerate.";
+                string message = $"Scene already exists at: {sceneSavePath}. Call delete_task first to regenerate.";
                 return Error(message);
             }
 
@@ -325,7 +322,7 @@ namespace SL.Tasks
         /// Mirrors <c>create_task</c> so the two tools cover the full lifecycle of a task's generated
         /// artifacts. Cue prefabs and cue materials are intentionally **not** removed because they are
         /// shared across every template that declares a matching <c>(name, length_cm)</c> identity;
-        /// deleting them would corrupt sibling tasks. Use <c>delete_unity_asset</c> for individual cue
+        /// deleting them would corrupt sibling tasks. Use <c>delete_asset</c> for individual cue
         /// cleanup. The template YAML is also preserved as the source of truth.
         /// </remarks>
         /// <param name="args">The tool arguments containing template_name.</param>
@@ -347,7 +344,7 @@ namespace SL.Tasks
             string companionDeleted = null;
 
             // Deletes the scene first so Unity can release the active-scene lock before any prefab the
-            // scene instantiates is removed. The active-scene swap mirrors DeleteScene.
+            // scene instantiates is removed. The active-scene swap below is part of this same delete flow.
             if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(scenePath) != null)
             {
                 Scene activeScene = SceneManager.GetActiveScene();
@@ -408,7 +405,7 @@ namespace SL.Tasks
             return Ok(response);
         }
 
-        /// <summary>Reads a prefab and returns its hierarchy, components, and zone configuration.</summary>
+        /// <summary>Reads a prefab and returns its hierarchy, components, and BoxCollider details.</summary>
         /// <param name="args">The tool arguments containing prefab_path.</param>
         /// <returns>A JSON response with the prefab hierarchy or an error message.</returns>
         private static string InspectPrefab(Dictionary<string, object> args)
@@ -552,13 +549,7 @@ namespace SL.Tasks
 
             string activeScene = SceneManager.GetActiveScene().path;
 
-            return Ok(
-                new Dictionary<string, object>
-                {
-                    { "scenes", paths },
-                    { "active_scene", activeScene },
-                }
-            );
+            return Ok(new Dictionary<string, object> { { "scenes", paths }, { "active_scene", activeScene } });
         }
 
         /// <summary>Opens a scene in the Editor after applying the unsaved-changes policy.</summary>
@@ -676,7 +667,9 @@ namespace SL.Tasks
             );
         }
 
-        /// <summary>Returns a single-scan snapshot of every Task Parameters field plus options and visibility.</summary>
+        /// <summary>
+        /// Returns a single-scan snapshot of every Task Parameters field plus options and visibility.
+        /// </summary>
         /// <remarks>
         /// State, options, and visibility are derived from a single scene walk so an agent that reads,
         /// modifies, and writes back values does not race against a separate enumeration pass. Cameras are
@@ -773,17 +766,22 @@ namespace SL.Tasks
             /// <summary>Every assignable display camera (MainCamera excluded) in the active scene.</summary>
             public Camera[] DisplayCameras;
 
-            /// <summary>True when the scene contains at least one <see cref="GuidanceZone"/>.</summary>
+            /// <summary>Determines whether the scene contains at least one <see cref="GuidanceZone"/>.</summary>
             public bool HasInteractionZone;
 
-            /// <summary>True when the scene contains at least one <see cref="OccupancyZone"/>.</summary>
+            /// <summary>Determines whether the scene contains at least one <see cref="OccupancyZone"/>.</summary>
             public bool HasOccupancyZone;
 
-            /// <summary>The shared <see cref="FullScreenViewManager"/> used by camera-mapping reads and writes.</summary>
+            /// <summary>
+            /// The shared <see cref="FullScreenViewManager"/> used by camera-mapping reads and writes.
+            /// </summary>
             public FullScreenViewManager FullScreenManager;
         }
 
-        /// <summary>Performs the single scene walk shared by <see cref="ReadTaskParameters"/> and <see cref="WriteTaskParameters"/>.</summary>
+        /// <summary>
+        /// Performs the single scene walk shared by <see cref="ReadTaskParameters"/> and
+        /// <see cref="WriteTaskParameters"/>.
+        /// </summary>
         /// <returns>A snapshot of every component the Task Parameters endpoints consume.</returns>
         private static SceneComponents AcquireSceneComponents()
         {
@@ -827,7 +825,9 @@ namespace SL.Tasks
                 .ToArray();
         }
 
-        /// <summary>Builds the nested state/options/visibility dictionary that <see cref="ReadTaskParameters"/> returns.</summary>
+        /// <summary>
+        /// Builds the nested state/options/visibility dictionary that <see cref="ReadTaskParameters"/> returns.
+        /// </summary>
         /// <remarks>
         /// Takes a pre-acquired <see cref="SceneComponents"/> rather than re-walking the scene so the
         /// post-write response from <see cref="WriteTaskParameters"/> reuses the same component references
@@ -1018,7 +1018,7 @@ namespace SL.Tasks
             return null;
         }
 
-        /// <summary>Applies any "mqtt" subsection from <paramref name="args"/>. Logic preserved verbatim from the pre-refactor inline block.</summary>
+        /// <summary>Applies any "mqtt" subsection from <paramref name="args"/>.</summary>
         /// <returns>An error message when the mqtt section is invalid, otherwise null.</returns>
         private static string TryWriteMqttSection(
             Dictionary<string, object> args,
@@ -1313,7 +1313,6 @@ namespace SL.Tasks
                 { "scale", FormatVector3(gameObject.transform.localScale) },
             };
 
-            // Lists component types
             Component[] components = gameObject.GetComponents<Component>();
             List<string> componentNames = components
                 .Where(component => component != null)
@@ -1321,7 +1320,6 @@ namespace SL.Tasks
                 .ToList();
             result["components"] = componentNames;
 
-            // Includes BoxCollider details if present
             BoxCollider collider = gameObject.GetComponent<BoxCollider>();
             if (collider != null)
             {
@@ -1330,7 +1328,6 @@ namespace SL.Tasks
                 result["collider_is_trigger"] = collider.isTrigger;
             }
 
-            // Recurses into children
             List<Dictionary<string, object>> children = new List<Dictionary<string, object>>();
             for (int i = 0; i < gameObject.transform.childCount; i++)
             {

@@ -34,7 +34,7 @@ ___
 - Generates infinite-corridor VR tasks from YAML templates via the Editor menu or the `slsa mcp` Unity relay.
 - Supports five stimulus trigger modes (interaction, collision, occupancy-disarm, occupancy-arm, occupancy-trigger)
   with optional guidance modes.
-- Supports probablistic transitions between trial structures within a single task template.
+- Supports probabilistic transitions between trial structures within a single task template.
 - Exposes HTTP-based McpBridge that exposes 13 Editor operations to AI agents (task lifecycle, scene management,
   asset inspection, Play Mode control, parameter read/write).
 - Maintains bidirectional MQTT 5.0 contract with 
@@ -177,10 +177,10 @@ Task
 **Iterative corridor traversal.** At session start, the task walks its trial-transition graph to build a flat
 sequence of trials that overshoots the configured track length. The runtime then slides a window the size of the
 corridor (in segments) over that sequence. The current window names one corridor in the pre-built catalog; the
-animal is teleported to that corridor's start. Whenever the animal finishes the first segment of the current
-corridor, the window slides one trial forward and the animal jumps to the corridor that matches the new window.
-Adjacent corridors share all but one segment, so the visible cue sequence stays continuous across the teleport and
-the animal experiences a single infinite track.
+animal is teleported to that corridor's lane (its x-position). Whenever the animal finishes the first segment of
+the current corridor, the window slides one trial forward and the animal jumps to the corridor that matches the
+new window. Adjacent corridors share all but one segment, so the visible cue sequence stays continuous across the 
+teleport and the animal experiences a single infinite track.
 
 The corridor count grows exponentially with the number of segments per corridor, so raising the lookahead depth is a
 deliberate choice: it adds visual context at the cost of an exponentially larger task. Most paradigms use one or two
@@ -318,7 +318,7 @@ five sections:
 
 | Section          | Controls                                                                                                                                    |
 |------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| Actor            | Animal model selection and active controller (LinearTreadmill or SimulatedLinearTreadmill)                                                  |
+| Actor            | Animal model selection and active controller (Linear or Simulated Linear)                                                                   |
 | MQTT             | Broker IP and port; the Test Connection button performs a one-shot connect/disconnect probe                                                 |
 | Display          | Brightness, height in VR, and a Blank/Show toggle for the active display                                                                    |
 | Camera Mapping   | Refresh Monitor Positions plus a per-monitor row (one per OS-detected monitor) with a camera dropdown (`Left View`, `Center View`, `Right View` for the default display rig) and a Show Full-Screen Views action |
@@ -359,8 +359,9 @@ in `Assets/Gimbl/Scripts/MQTT/MQTTTopics.cs`.
 | `RequireWait`        | Subscribe           | `{value: bool}`                               |
 
 When the broker is unreachable, `MQTTClient.Publish` routes messages in-process so keyboard-only test runs still reach
-local subscribers (for example, the on-screen `LickStimulusSpawner` indicator). Production runs require a real MQTT 5.0
-broker because sollertia-experiment is the counterparty for every non-`Interaction` and non-`Stimulus` topic.
+local subscribers (for example, the on-screen `LickStimulusSpawner` indicator). Only `Interaction` and `Stimulus`
+have a local Unity-side subscriber, so they alone can be exercised without a broker; every other topic requires a
+real MQTT 5.0 broker because sollertia-experiment is the counterparty.
 
 ***Note,*** the `/mqtt-contract` skill in the sollertia marketplace's **unity** plugin is the canonical reference for
 topic ownership and payload shape. Any topic addition or rename must be coordinated with sollertia-experiment in the
@@ -465,8 +466,8 @@ a matching `TriggerType` registry update via the `/library-extension` skill in t
 `TriggerType` member does **not** require a `from_task_template` branch in every acquisition system: the platform
 `TriggerType` enum carries all members, but each system maps only the subset it supports and may leave a mode
 unmapped. A config that uses an unmapped mode raises a clear "not mapped to a runtime trial class" error. The
-Mesoscope-VR system, for example, maps `interaction` (`WaterRewardTrial`) and `occupancy_disarm` (`GasPuffTrial`), and
-does not map `collision`, `occupancy_arm`, or `occupancy_trigger`.
+Mesoscope-VR system, for example, maps `interaction` (`MesoscopeWaterRewardTrial`) and `occupancy_disarm`
+(`MesoscopeGasPuffTrial`), and does not map `collision`, `occupancy_arm`, or `occupancy_trigger`.
 
 **Adding a new MQTT topic** requires the constant in `MQTTTopics.cs` (with `Direction`, `Payload`, and `Callers`
 remarks), a runtime script that publishes or subscribes, an in-lockstep update in sollertia-experiment, and a refresh
