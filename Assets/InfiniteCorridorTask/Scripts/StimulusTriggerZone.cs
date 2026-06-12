@@ -5,8 +5,10 @@
 /// trigger_type), not by what stimulus is delivered. Any stimulus type can be paired with any mode, and
 /// the experiment driver resolves the outcome from the trial name this zone publishes when it fires.
 ///
-/// Interaction mode (GuidanceZone child) fires on a sensor interaction in the zone, or on reaching the
-/// guidance zone. Collision mode fires unconditionally when the animal crosses the boundary wall. The
+/// Interaction mode (GuidanceZone child) fires on a sensor interaction in the zone when requireInteraction
+/// is set; when guidance is enabled it additionally fires on reaching the guidance zone (or on bare zone
+/// entry when no GuidanceZone is present). Collision mode fires unconditionally when the animal crosses the
+/// boundary wall. The
 /// three occupancy modes (OccupancyZone child) gate on whether the animal occupied the zone for the
 /// required duration: OccupancyDisarm fires on a still-armed boundary collision (occupancy not met),
 /// OccupancyArm fires on a newly-armed boundary collision (occupancy met), and OccupancyTrigger fires

@@ -17,7 +17,7 @@ namespace Gimbl
         /// <summary>The maximum number of tags allowed.</summary>
         private const int MaxTags = 10000;
 
-        /// <summary>The maximum number of layers allowed.</summary>
+        /// <summary>The exclusive upper bound on layer slot indices examined (slots 0..30).</summary>
         private const int MaxLayers = 31;
 
         /// <summary>Adds a new tag to the project if it does not already exist.</summary>
@@ -83,7 +83,7 @@ namespace Gimbl
         /// <summary>Checks if a value exists in a serialized array property.</summary>
         /// <param name="property">The serialized array property to search.</param>
         /// <param name="start">The starting index for the search.</param>
-        /// <param name="end">The ending index for the search.</param>
+        /// <param name="end">The exclusive upper bound (one past the last index) for the search.</param>
         /// <param name="value">The value to search for.</param>
         /// <returns>True if the value exists in the property range.</returns>
         private static bool PropertyExists(SerializedProperty property, int start, int end, string value)

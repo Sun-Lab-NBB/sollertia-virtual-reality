@@ -24,18 +24,23 @@ namespace SL.Tasks
         /// </summary>
         public float occupancyDurationMs = 1000f;
 
-        /// <summary>Determines whether the animal is currently inside this zone.</summary>
+        /// <summary>
+        /// Determines whether the animal is inside this zone while it is actively tracking occupancy. Only set true
+        /// when the zone is active and occupancy is not yet met, so it stays false on entries after occupancy is met.
+        /// </summary>
         [HideInInspector]
         public bool inZone = false;
 
         /// <summary>
-        /// Determines whether the animal has met the occupancy requirement (occupied for the required duration).
-        /// Reset to false by ResetZone at lap start. The parent StimulusTriggerZone interprets it per trigger mode.
+        /// Determines whether the animal has met the occupancy requirement (occupied for the required duration). Once
+        /// set, it latches the zone so Update and OnTriggerEnter short-circuit, limiting firing to once per lap until
+        /// ResetZone clears it at lap start. The parent StimulusTriggerZone interprets it per trigger mode.
         /// </summary>
         [HideInInspector]
         public bool occupancyMet = false;
 
-        /// <summary>Determines whether this zone is active (only checks once per lap). Reset by ResetZone.</summary>
+        /// <summary>Enables or disables occupancy tracking for this zone. Reset to true by ResetZone each lap.
+        /// </summary>
         public bool isActive = true;
 
         /// <summary>The high-precision stopwatch for accurate millisecond timing.</summary>

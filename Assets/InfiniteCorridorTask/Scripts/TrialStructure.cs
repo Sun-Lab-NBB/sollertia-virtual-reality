@@ -37,9 +37,9 @@ namespace SL.Config
 
         /// <summary>
         /// The trigger mode for the stimulus zone. "interaction" and "collision" use the StimulusTriggerZone
-        /// prefab; "collision" strips the GuidanceZone child and fires on a thin boundary wall. "occupancy_disarm",
-        /// "occupancy_arm", and "occupancy_trigger" use the OccupancyTriggerZone prefab with OccupancyZone and
-        /// OccupancyGuidanceZone children.
+        /// prefab; "collision" strips the GuidanceRegion child (the child carrying the GuidanceZone script) and
+        /// fires on a thin boundary wall. "occupancy_disarm", "occupancy_arm", and "occupancy_trigger" use the
+        /// OccupancyTriggerZone prefab whose OccupancyZone child carries a nested OccupancyGuidanceZone child.
         /// </summary>
         public string triggerType;
 

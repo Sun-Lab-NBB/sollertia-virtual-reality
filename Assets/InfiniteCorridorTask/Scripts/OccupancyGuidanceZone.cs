@@ -23,7 +23,10 @@ namespace SL.Tasks
         /// <summary>The reference to the Task for checking guidance mode state.</summary>
         private Task _task;
 
-        /// <summary>The reference to the parent OccupancyZone to get remaining duration.</summary>
+        /// <summary>
+        /// The reference to the parent OccupancyZone, used to read occupancyMet and compute the remaining
+        /// occupancy duration.
+        /// </summary>
         private OccupancyZone _parentOccupancyZone;
 
         /// <summary>The MQTT channel for sending brake activation delay messages.</summary>
@@ -54,7 +57,9 @@ namespace SL.Tasks
             _triggerDelayChannel = new MQTTChannel<TriggerDelayMessage>(MQTTTopics.Delay, isListener: false);
         }
 
-        /// <summary>Sets the zone state to active when the animal enters the guidance zone collider.</summary>
+        /// <summary>
+        /// Marks the zone as occupied (inZone = true) when the animal enters the guidance zone collider.
+        /// </summary>
         /// <param name="other">The object that entered the trigger zone.</param>
         private void OnTriggerEnter(Collider other)
         {
@@ -68,7 +73,9 @@ namespace SL.Tasks
             }
         }
 
-        /// <summary>Sets the zone state to inactive when the animal exits the guidance zone collider.</summary>
+        /// <summary>
+        /// Marks the zone as no longer occupied (inZone = false) when the animal exits the guidance zone collider.
+        /// </summary>
         /// <param name="other">The object that exited the trigger zone.</param>
         private void OnTriggerExit(Collider other)
         {

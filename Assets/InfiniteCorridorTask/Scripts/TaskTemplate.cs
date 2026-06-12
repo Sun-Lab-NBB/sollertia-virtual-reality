@@ -1,7 +1,7 @@
 /// <summary>
 /// Provides the TaskTemplate class that defines a VR task template for prefab generation and runtime configuration.
 ///
-/// These classes mirror the Python task template classes from sollertia-shared-assets, containing
+/// This class mirrors the Python TaskTemplate class from sollertia-shared-assets, containing
 /// the data needed by Unity for VR corridor system prefab generation and runtime.
 /// </summary>
 using System;

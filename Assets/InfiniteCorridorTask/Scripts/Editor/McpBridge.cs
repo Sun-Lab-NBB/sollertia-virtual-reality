@@ -31,9 +31,6 @@ namespace SL.Tasks
         /// <summary>The port on which the bridge listens for incoming HTTP requests.</summary>
         private const int Port = 8090;
 
-        /// <summary>The tolerance for comparing measured prefab lengths against configured lengths.</summary>
-        private const float LengthComparisonEpsilon = 0.01f;
-
         /// <summary>The shared error-protocol prefix returned by <see cref="CreateTask.CreateFromTemplate"/>.</summary>
         private const string CreateTaskErrorPrefix = "error: ";
 
@@ -408,7 +405,7 @@ namespace SL.Tasks
             return Ok(response);
         }
 
-        /// <summary>Reads a prefab and returns its hierarchy, components, and zone configuration.</summary>
+        /// <summary>Reads a prefab and returns its hierarchy, components, and BoxCollider details.</summary>
         /// <param name="args">The tool arguments containing prefab_path.</param>
         /// <returns>A JSON response with the prefab hierarchy or an error message.</returns>
         private static string InspectPrefab(Dictionary<string, object> args)

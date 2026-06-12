@@ -1178,9 +1178,11 @@ namespace SL.Tasks
 
         /// <summary>
         /// Reports the outcome of <see cref="CreateSceneFromTemplate"/>. Returned in lieu of a string-prefix
-        /// protocol because the scene path encodes three orthogonal facts that callers route differently:
-        /// success or error, whether the requested task prefab was found, and whether a SimulatedLinearTreadmill
-        /// was added. The MCP bridge surfaces all three back to the relay; the menu flow only logs the message.
+        /// protocol because the result carries facts that callers route differently: success or error, whether
+        /// the requested task prefab was found, and whether a SimulatedLinearTreadmill was added. The MCP bridge
+        /// surfaces success and SimulatedControllerAdded as discrete response fields; the task-prefab-found state
+        /// is conveyed only through the message text and is not exercised on the GenerateTask path, which always
+        /// supplies a freshly generated prefab. The menu flow only logs the message.
         /// </summary>
         public class SceneCreationResult
         {

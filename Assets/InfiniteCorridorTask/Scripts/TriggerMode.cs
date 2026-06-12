@@ -14,7 +14,8 @@ namespace SL.Tasks
     public enum TriggerMode
     {
         /// <summary>
-        /// The animal engages an interaction sensor in the zone, or reaches the guidance zone, to fire.
+        /// The animal engages an interaction sensor in the zone to fire. With guidance mode enabled, reaching a
+        /// GuidanceZone child also fires; if guidance is enabled but no GuidanceZone exists, zone entry fires.
         /// </summary>
         Interaction,
 

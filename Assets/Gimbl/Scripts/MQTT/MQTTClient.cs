@@ -97,7 +97,7 @@ namespace Gimbl
             }
         }
 
-        /// <summary>Subscribes to session channels and broadcasts session start.</summary>
+        /// <summary>Creates the session start/stop publish channels and broadcasts session start.</summary>
         private void Start()
         {
             _startChannel = new MQTTChannel(MQTTTopics.SessionStart, isListener: false);

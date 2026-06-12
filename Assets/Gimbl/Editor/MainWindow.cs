@@ -572,10 +572,10 @@ namespace Gimbl
         /// <remarks>
         /// The auto-created Display owns the per-monitor cameras (via PerspectiveProjection) and the Actor
         /// owns the third-person tracking camera, so the Unity-default "Main Camera" left over by the new
-        /// scene template renders nothing useful while still consuming display slot 0. Nothing in the C#
-        /// code references <c>Camera.main</c> or the <c>MainCamera</c> tag, so removing it is safe. The
-        /// <c>Camera.main</c> short-circuit at the top skips the full scene scan when no MainCamera-tagged
-        /// camera is present (the common path after the first scene visit).
+        /// scene template renders nothing useful while still consuming display slot 0. No runtime rendering
+        /// code depends on <c>Camera.main</c> or the <c>MainCamera</c> tag, so removing it is safe. The
+        /// short-circuit at the top skips the full scene scan only when both <c>Camera.main</c> is null and
+        /// no GameObject named "Main Camera" exists (the common path after the first scene visit).
         /// </remarks>
         private static void RemoveDefaultMainCamera()
         {
@@ -650,10 +650,11 @@ namespace Gimbl
         /// <remarks>
         /// Iterates the static <see cref="CachedControllerSpecs"/> table (resolved once via reflection at
         /// type-init) and creates a controller GameObject under the scene's "Controllers" root whenever
-        /// none of that exact type already exists. The created GameObject is named after the enum value
-        /// and gets a settings asset via <see cref="ControllerObject.InitiateController"/>, which reuses
-        /// any existing asset at the matching path. The Actor.Controller assignment is left untouched so
-        /// user-chosen swaps survive auto-create.
+        /// none of that exact type already exists. The created GameObject is named after the controller's
+        /// display name (which equals the enum value only for members without a BuildControllerSpecs
+        /// override), and <see cref="ControllerObject.InitiateController"/> reparents it under the scene's
+        /// "Controllers" root and registers it for undo. The Actor.Controller assignment is left untouched
+        /// so user-chosen swaps survive auto-create.
         /// </remarks>
         public static void EnsureControllers()
         {

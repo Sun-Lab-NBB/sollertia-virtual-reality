@@ -1,6 +1,6 @@
 /// <summary>
-/// Provides the ResetZone class that resets all stimulus, occupancy, and guidance zones when the animal
-/// completes a lap.
+/// Provides the ResetZone class that resets all stimulus, occupancy, and occupancy-guidance zones when the
+/// animal completes a lap.
 /// </summary>
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,7 +13,12 @@ namespace SL.Tasks
     /// </summary>
     public class ResetZone : MonoBehaviour
     {
-        /// <summary>The cached list of every <see cref="IResettable"/> in the scene at startup.</summary>
+        /// <summary>
+        /// The cached array of the three concrete resettable zone types found in the scene at startup
+        /// (<see cref="StimulusTriggerZone"/>, <see cref="OccupancyZone"/>, and
+        /// <see cref="OccupancyGuidanceZone"/>); these are the only <see cref="IResettable"/> implementers
+        /// enumerated in <see cref="Start"/>.
+        /// </summary>
         private IResettable[] _resettables;
 
         /// <summary>Finds all resettable zone instances in the scene at startup.</summary>

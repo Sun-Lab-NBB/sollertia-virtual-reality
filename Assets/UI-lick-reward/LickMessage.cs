@@ -6,7 +6,8 @@ using UnityEngine;
 namespace SL.UI
 {
     /// <summary>
-    /// Displays a temporary UI indicator when a lick event occurs and destroys itself after a configurable delay.
+    /// Component attached to the lick UI indicator prefab; schedules the indicator's destruction after a
+    /// configurable delay.
     /// </summary>
     public class LickMessage : MonoBehaviour
     {

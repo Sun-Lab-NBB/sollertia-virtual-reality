@@ -1,5 +1,5 @@
 /// <summary>
-/// Provides the MQTTChannel classes for type-safe MQTT messaging.
+/// Provides the MQTTChannel classes for trigger-based and type-safe MQTT messaging.
 ///
 /// Includes the base MQTTChannel for simple trigger messages and the generic
 /// MQTTChannel&lt;TMessage&gt; for JSON-serialized typed messages.

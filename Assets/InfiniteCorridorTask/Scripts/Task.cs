@@ -2,7 +2,8 @@
 /// Provides the Task class that manages the infinite corridor VR environment for mesoscope experiments.
 ///
 /// Controls the generation and cycling of random maze segments, manages animal position
-/// within the corridor system, and handles MQTT communication for cue sequences and scene information.
+/// within the corridor system, and handles MQTT communication for cue sequences, scene information, and the
+/// interaction/wait requirement toggles.
 /// </summary>
 using System;
 using System.Collections.Generic;

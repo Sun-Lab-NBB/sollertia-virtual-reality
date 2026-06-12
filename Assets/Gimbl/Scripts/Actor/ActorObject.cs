@@ -1,8 +1,8 @@
 /// <summary>
 /// Provides the ActorObject class representing an animal in the VR environment.
 ///
-/// Manages the actor's display, controller, and settings references with validation
-/// to ensure proper linkage between components.
+/// Manages the actor's display and controller references, automatically re-parenting the
+/// display and wiring the bidirectional actor-controller reference when these references change.
 /// </summary>
 using System;
 using System.Collections.Generic;

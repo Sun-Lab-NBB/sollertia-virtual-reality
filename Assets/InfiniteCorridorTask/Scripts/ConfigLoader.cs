@@ -85,7 +85,8 @@ namespace SL.Config
                 throw new InvalidDataException("No trial structures defined in template.");
             }
 
-            // Validates cue codes are unique and within uint8 range
+            // Validates each cue's code range and uniqueness, name uniqueness, positive length, and texture
+            // presence/existence.
             HashSet<int> seenCodes = new HashSet<int>();
             HashSet<string> seenNames = new HashSet<string>();
 
@@ -128,7 +129,8 @@ namespace SL.Config
                 }
             }
 
-            // Validates each trial's name, cue references, trigger type, and occupancy duration.
+            // Validates each trial's name, non-empty cue sequence, cue references, trigger type, and occupancy
+            // duration.
             foreach (KeyValuePair<string, TrialStructure> trialEntry in template.trialStructures)
             {
                 string trialName = trialEntry.Key;
