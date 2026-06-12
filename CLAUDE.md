@@ -10,6 +10,51 @@ This ensures you:
 - Follow existing patterns and conventions
 - Do not introduce inconsistencies or break the MQTT contract with `sollertia-experiment`
 
+## Autonomy boundaries
+
+This project supports exactly one VR paradigm: the **infinite linear corridor**. The boundary below is about whether
+an author-derived recipe exists, not about whether you are capable. You are NOT forbidden from helping past the
+boundary — you simply have no deterministic recipe there, so you MUST consult the human supervisor and proceed in a
+generative, collaborative mode (co-design, get sign-off, co-implement) rather than executing autonomously.
+
+**Within-corridor work is agent-autonomous.** These extensions have an author-derived recipe in the skills and run
+end-to-end through templates and the `McpBridge` relay without human intervention:
+- A new corridor task variant — author the YAML template and materialize it with `create_task_tool` (see assets
+  plugin `/task-templates` and `/task-prefabs`).
+- Selecting any of the five existing `trigger_type` modes per trial (`interaction`, `collision`, `occupancy_disarm`,
+  `occupancy_arm`, `occupancy_trigger`).
+- Generating the matching corridor scene (bundled into `create_task_tool`), configuring it through
+  `Window → Task Parameters` (see `/scene-setup`, `/task-parameters`), inspecting prefabs, and driving Play Mode.
+
+**New trigger zone types are agent-led but recipe-bound — not pure template work.** Authoring a new trigger mode has an
+author-derived recipe even when the firing behavior is genuinely novel: `/zone-prefabs` Steps 1–7 plus its worked
+examples (a speed-gated interaction reward and a cumulative-occupancy variant), the `/task-generator` pipeline edits,
+and the `/library-extension` Python `TriggerType` registration. The recipe holds as long as the new mode is a zone
+modifier (subclass an existing zone, or a standalone `IResettable` registered in `ResetZone`) on a copied zone prefab
+whose root subclasses `StimulusTriggerZone` and publishes the standard `Stimulus{trialName}` event. This tier authors
+C# and hand-edits prefab YAML (`fileID` / GUID bookkeeping), so it carries friction and MUST be verified with
+`inspect_prefab_tool` — but it is agent-doable, not an escalation.
+
+**Beyond the recipe, you MUST escalate to the human supervisor.** The items below have no author-derived recipe; treat
+them as collaborative, human-supervised, generative work and do NOT attempt them autonomously:
+- A new VR paradigm or topology (T-maze, Y-maze, open field, branching or 2D mazes). The corridor invariants are baked
+  into `Task.cs` (forward-only Z traversal, single-axis teleport, base-`trialCount` corridor encoding) and
+  `CreateTask.cs` (segment concatenation along Z, corridor spacing along X).
+- Any change to `Task.cs` runtime traversal mechanics, the corridor encoding, or `CreateTask` corridor assembly.
+- A new scene topology or Display rig other than the corridor scene `create_task_tool` copies from
+  `ExperimentTemplate.unity`.
+- A trigger behavior that cannot be expressed as a zone modifier publishing the standard `Stimulus{trialName}` event —
+  one that needs a new MQTT topic, new `Task.cs` runtime mechanics, or geometry outside a single corridor segment. (A
+  new trigger *mode* that fits the zone-modifier architecture is recipe-covered — see the tier above.)
+- A new `TaskTemplate` / `VREnvironment` field or class — a coordinated two-repo schema change with the Python
+  originals in `sollertia-shared-assets` (see Downstream library integration).
+
+**New cue textures hand off cleanly to the user.** You cannot author PNG or other binary texture assets. When a
+template needs a texture that is not already under `Assets/InfiniteCorridorTask/Textures/`, you MUST stop and hand the
+requirement to the user — state the intended cue `name`, `code`, `length_cm`, and target filename — then let the user
+supply the asset and loop you back to finish generation. You MUST NOT let generation dead-end in a
+`Failed to load texture` error.
+
 ## Style guide compliance
 
 You MUST invoke the appropriate skill before performing ANY of the following tasks:
