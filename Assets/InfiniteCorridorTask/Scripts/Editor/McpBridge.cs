@@ -552,13 +552,7 @@ namespace SL.Tasks
 
             string activeScene = SceneManager.GetActiveScene().path;
 
-            return Ok(
-                new Dictionary<string, object>
-                {
-                    { "scenes", paths },
-                    { "active_scene", activeScene },
-                }
-            );
+            return Ok(new Dictionary<string, object> { { "scenes", paths }, { "active_scene", activeScene } });
         }
 
         /// <summary>Opens a scene in the Editor after applying the unsaved-changes policy.</summary>
