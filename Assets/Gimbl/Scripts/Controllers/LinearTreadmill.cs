@@ -38,12 +38,6 @@ namespace Gimbl
             _dataChannel.receivedEvent.AddListener(OnMessage);
         }
 
-        /// <summary>Removes the MQTT listener so the treadmill stops receiving data after destruction.</summary>
-        private void OnDestroy()
-        {
-            _dataChannel?.receivedEvent.RemoveListener(OnMessage);
-        }
-
         /// <summary>Processes accumulated movement each frame.</summary>
         public virtual void Update()
         {
@@ -69,8 +63,14 @@ namespace Gimbl
             }
         }
 
+        /// <summary>Removes the MQTT listener so the treadmill stops receiving data after destruction.</summary>
+        private void OnDestroy()
+        {
+            _dataChannel?.receivedEvent.RemoveListener(OnMessage);
+        }
+
         /// <summary>Receives movement data from the treadmill via MQTT callback.</summary>
-        /// <param name="message">The message containing the movement value.</param>
+        /// <param name="message">Carries the treadmill movement value to accumulate.</param>
         public void OnMessage(TreadmillMessage message)
         {
             lock (movement)

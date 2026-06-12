@@ -27,6 +27,9 @@ namespace Gimbl
         private static readonly (string DisplayName, System.Type ControllerType)[] CachedControllerSpecs =
             BuildControllerSpecs();
 
+        /// <summary>The full-screen view manager for camera mapping.</summary>
+        public FullScreenViewManager fullScreenManager;
+
         /// <summary>The scroll position for the window content.</summary>
         private Vector2 _scrollPosition = Vector2.zero;
 
@@ -50,9 +53,6 @@ namespace Gimbl
 
         /// <summary>The cached <see cref="OccupancyZone"/> reference for the active scene.</summary>
         private OccupancyZone _cachedOccupancyZone;
-
-        /// <summary>The full-screen view manager for camera mapping.</summary>
-        public FullScreenViewManager fullScreenManager;
 
         /// <summary>Shows the Task Parameters editor window.</summary>
         /// <remarks>
@@ -469,7 +469,10 @@ namespace Gimbl
             _cachedOccupancyZone = null;
         }
 
-        /// <summary>Returns the cached <see cref="Task"/>, refreshing it from the scene on first access or after invalidation.</summary>
+        /// <summary>
+        /// Returns the cached <see cref="Task"/>, refreshing it from the scene on first access or after
+        /// invalidation.
+        /// </summary>
         private Task GetCachedTask()
         {
             if (_cachedTask == null)
@@ -641,7 +644,9 @@ namespace Gimbl
             }
         }
 
-        /// <summary>Ensures the active scene contains one controller GameObject per supported ControllerTypes.</summary>
+        /// <summary>
+        /// Ensures the active scene contains one controller GameObject per supported ControllerTypes.
+        /// </summary>
         /// <remarks>
         /// Iterates the static <see cref="CachedControllerSpecs"/> table (resolved once via reflection at
         /// type-init) and creates a controller GameObject under the scene's "Controllers" root whenever
@@ -752,11 +757,11 @@ namespace Gimbl
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         }
 
-        /// <summary>
-        /// Resolves the (display-name, runtime-type) pair for every <see cref="ControllerTypes"/> enum
-        /// value once. Logged errors for unresolved subclasses surface here instead of in
+        /// <summary>Caches the resolved (display name, controller type) spec for every ControllerTypes value.</summary>
+        /// <remarks>
+        /// Logged errors for unresolved subclasses surface here instead of in
         /// <see cref="EnsureControllers"/>, keeping the per-scene path allocation-free.
-        /// </summary>
+        /// </remarks>
         private static (string DisplayName, System.Type ControllerType)[] BuildControllerSpecs()
         {
             System.Reflection.Assembly controllerAssembly = typeof(ControllerObject).Assembly;

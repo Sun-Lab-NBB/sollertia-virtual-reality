@@ -6,7 +6,8 @@ using UnityEngine;
 namespace Gimbl
 {
     /// <summary>
-    /// Lightweight component that holds a typed reference to the active <see cref="ControllerObject"/>.
+    /// Holds a typed reference to the active <see cref="ControllerObject"/> so controller-type swaps do not
+    /// invalidate the serialized scene reference.
     /// </summary>
     /// <remarks>
     /// The <see cref="ActorObject.Controller"/> inspector field is typed as <see cref="ControllerOutput"/>
@@ -21,7 +22,7 @@ namespace Gimbl
     public class ControllerOutput : MonoBehaviour
     {
         /// <summary>
-        /// The <see cref="ControllerObject"/> subclass driving this output. Wired by
+        /// The <see cref="ControllerObject"/> subclass driving this output, wired by
         /// <c>MainWindow.EnsureControllers</c> and consumed by the <see cref="ActorObject.Controller"/>
         /// setter to establish the bidirectional actor↔controller reference.
         /// </summary>

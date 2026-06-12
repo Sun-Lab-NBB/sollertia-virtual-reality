@@ -34,6 +34,9 @@ namespace SL.Tasks
         /// <summary>The tolerance for comparing measured prefab lengths against configured lengths.</summary>
         private const float LengthComparisonEpsilon = 0.01f;
 
+        /// <summary>The shared error-protocol prefix returned by <see cref="CreateTask.CreateFromTemplate"/>.</summary>
+        private const string CreateTaskErrorPrefix = "error: ";
+
         /// <summary>
         /// The set of project-relative directory prefixes under which non-scene assets may be deleted via
         /// <c>delete_asset</c>.
@@ -71,9 +74,6 @@ namespace SL.Tasks
             "Assets/InfiniteCorridorTask/Materials/TargetMat.mat",
             "Assets/Scenes/ExperimentTemplate.unity",
         };
-
-        /// <summary>The shared error-protocol prefix returned by <see cref="CreateTask.CreateFromTemplate"/>.</summary>
-        private const string CreateTaskErrorPrefix = "error: ";
 
         /// <summary>The HTTP listener instance.</summary>
         private static readonly HttpListener _listener = new HttpListener();
@@ -670,7 +670,9 @@ namespace SL.Tasks
             );
         }
 
-        /// <summary>Returns a single-scan snapshot of every Task Parameters field plus options and visibility.</summary>
+        /// <summary>
+        /// Returns a single-scan snapshot of every Task Parameters field plus options and visibility.
+        /// </summary>
         /// <remarks>
         /// State, options, and visibility are derived from a single scene walk so an agent that reads,
         /// modifies, and writes back values does not race against a separate enumeration pass. Cameras are
@@ -767,17 +769,22 @@ namespace SL.Tasks
             /// <summary>Every assignable display camera (MainCamera excluded) in the active scene.</summary>
             public Camera[] DisplayCameras;
 
-            /// <summary>True when the scene contains at least one <see cref="GuidanceZone"/>.</summary>
+            /// <summary>Determines whether the scene contains at least one <see cref="GuidanceZone"/>.</summary>
             public bool HasInteractionZone;
 
-            /// <summary>True when the scene contains at least one <see cref="OccupancyZone"/>.</summary>
+            /// <summary>Determines whether the scene contains at least one <see cref="OccupancyZone"/>.</summary>
             public bool HasOccupancyZone;
 
-            /// <summary>The shared <see cref="FullScreenViewManager"/> used by camera-mapping reads and writes.</summary>
+            /// <summary>
+            /// The shared <see cref="FullScreenViewManager"/> used by camera-mapping reads and writes.
+            /// </summary>
             public FullScreenViewManager FullScreenManager;
         }
 
-        /// <summary>Performs the single scene walk shared by <see cref="ReadTaskParameters"/> and <see cref="WriteTaskParameters"/>.</summary>
+        /// <summary>
+        /// Performs the single scene walk shared by <see cref="ReadTaskParameters"/> and
+        /// <see cref="WriteTaskParameters"/>.
+        /// </summary>
         /// <returns>A snapshot of every component the Task Parameters endpoints consume.</returns>
         private static SceneComponents AcquireSceneComponents()
         {
@@ -821,7 +828,9 @@ namespace SL.Tasks
                 .ToArray();
         }
 
-        /// <summary>Builds the nested state/options/visibility dictionary that <see cref="ReadTaskParameters"/> returns.</summary>
+        /// <summary>
+        /// Builds the nested state/options/visibility dictionary that <see cref="ReadTaskParameters"/> returns.
+        /// </summary>
         /// <remarks>
         /// Takes a pre-acquired <see cref="SceneComponents"/> rather than re-walking the scene so the
         /// post-write response from <see cref="WriteTaskParameters"/> reuses the same component references
@@ -1012,7 +1021,7 @@ namespace SL.Tasks
             return null;
         }
 
-        /// <summary>Applies any "mqtt" subsection from <paramref name="args"/>. Logic preserved verbatim from the pre-refactor inline block.</summary>
+        /// <summary>Applies any "mqtt" subsection from <paramref name="args"/>.</summary>
         /// <returns>An error message when the mqtt section is invalid, otherwise null.</returns>
         private static string TryWriteMqttSection(
             Dictionary<string, object> args,
@@ -1307,7 +1316,6 @@ namespace SL.Tasks
                 { "scale", FormatVector3(gameObject.transform.localScale) },
             };
 
-            // Lists component types
             Component[] components = gameObject.GetComponents<Component>();
             List<string> componentNames = components
                 .Where(component => component != null)
@@ -1315,7 +1323,6 @@ namespace SL.Tasks
                 .ToList();
             result["components"] = componentNames;
 
-            // Includes BoxCollider details if present
             BoxCollider collider = gameObject.GetComponent<BoxCollider>();
             if (collider != null)
             {
@@ -1324,7 +1331,6 @@ namespace SL.Tasks
                 result["collider_is_trigger"] = collider.isTrigger;
             }
 
-            // Recurses into children
             List<Dictionary<string, object>> children = new List<Dictionary<string, object>>();
             for (int i = 0; i < gameObject.transform.childCount; i++)
             {

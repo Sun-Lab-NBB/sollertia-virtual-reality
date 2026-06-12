@@ -14,10 +14,6 @@ namespace SL.Tasks
     public class ResetZone : MonoBehaviour
     {
         /// <summary>The cached list of every <see cref="IResettable"/> in the scene at startup.</summary>
-        /// <remarks>
-        /// Discovered via typed <see cref="UnityEngine.Object.FindObjectsByType{T}"/> calls so the scan
-        /// stays scoped to the three known resettable zone types rather than walking every MonoBehaviour.
-        /// </remarks>
         private IResettable[] _resettables;
 
         /// <summary>Finds all resettable zone instances in the scene at startup.</summary>

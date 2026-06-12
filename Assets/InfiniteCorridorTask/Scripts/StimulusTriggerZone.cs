@@ -2,7 +2,7 @@
 /// Provides the StimulusTriggerZone class that manages stimulus delivery based on animal behavior.
 ///
 /// The trigger mechanism is selected by the triggerMode field (set by CreateTask from the trial's
-/// trigger_type), not by what stimulus is delivered: any stimulus type can be paired with any mode, and
+/// trigger_type), not by what stimulus is delivered. Any stimulus type can be paired with any mode, and
 /// the experiment driver resolves the outcome from the trial name this zone publishes when it fires.
 ///
 /// Interaction mode (GuidanceZone child) fires on a sensor interaction in the zone, or on reaching the
@@ -52,10 +52,14 @@ namespace SL.Tasks
         /// <summary>Determines whether an interaction was detected while the animal was in the zone.</summary>
         private bool _interactionDetectedInZone = false;
 
-        /// <summary>The child GuidanceZone that supplies the guided fire path in interaction mode, if present.</summary>
+        /// <summary>
+        /// The child GuidanceZone that supplies the guided fire path in interaction mode, if present.
+        /// </summary>
         private GuidanceZone _guidanceZone;
 
-        /// <summary>The child OccupancyZone that supplies the occupancy state in the occupancy modes, if present.</summary>
+        /// <summary>
+        /// The child OccupancyZone that supplies the occupancy state in the occupancy modes, if present.
+        /// </summary>
         private OccupancyZone _occupancyZone;
 
         /// <summary>The reference to the Task for checking guidance mode state.</summary>
@@ -88,13 +92,14 @@ namespace SL.Tasks
             // Caches the boundary renderer so per-lap and per-trigger toggles avoid TryGetComponent.
             TryGetComponent(out _boundaryRenderer);
 
-            // Sets up MQTT channels.
             _stimulusTrigger = new MQTTChannel<StimulusMessage>(MQTTTopics.Stimulus, isListener: false);
             _interactionTrigger = new MQTTChannel(MQTTTopics.Interaction, isListener: true);
             _interactionTrigger.receivedEvent.AddListener(OnInteractionDetected);
         }
 
-        /// <summary>Updates the zone state each frame, dispatching to the handler for the active trigger mode.</summary>
+        /// <summary>
+        /// Updates the zone state each frame, dispatching to the handler for the active trigger mode.
+        /// </summary>
         private void Update()
         {
             if (!isActive)
@@ -175,12 +180,12 @@ namespace SL.Tasks
             }
             else if (_guidanceZone != null)
             {
-                // Animal can receive stimulus by interacting anywhere in the trigger zone.
+                // Fires when the animal interacts anywhere in the trigger zone.
                 if (_inZone && _interactionDetectedInZone)
                 {
                     TriggerStimulus();
                 }
-                // Or if animal reaches the guidance zone, delivers the stimulus anyway.
+                // Fires when the animal reaches the guidance zone instead.
                 else if (_guidanceZone.inZone)
                 {
                     TriggerStimulus();

@@ -9,7 +9,7 @@ namespace SL.Config
     /// <summary>
     /// Defines the spatial configuration of a trial structure for Unity prefabs.
     /// Contains the trial's cue sequence, zone positions, optional transition probabilities, and visibility settings.
-    /// This mirrors the TrialStructure class from sollertia-shared-assets vr_configuration module.
+    /// Mirrors the TrialStructure class from sollertia-shared-assets vr_configuration module.
     /// </summary>
     [Serializable]
     public class TrialStructure
@@ -31,7 +31,7 @@ namespace SL.Config
 
         /// <summary>
         /// Determines whether the stimulus collision boundary is visible to the animal during this trial type.
-        /// When True, the boundary marker is displayed in the VR environment at the stimulus location.
+        /// When true, the boundary marker is displayed in the VR environment at the stimulus location.
         /// </summary>
         public bool showStimulusCollisionBoundary = false;
 

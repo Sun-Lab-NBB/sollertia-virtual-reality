@@ -321,7 +321,7 @@ namespace Gimbl
         }
 
         /// <summary>Returns the full hierarchy path name for a GameObject.</summary>
-        /// <param name="gameObject">The GameObject to get the path for.</param>
+        /// <param name="gameObject">The object whose root-to-leaf hierarchy path is resolved.</param>
         /// <returns>The full hierarchy path from root to the GameObject.</returns>
         private static string PathName(GameObject gameObject)
         {

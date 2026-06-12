@@ -294,8 +294,8 @@ namespace Gimbl
         }
 
         /// <summary>Applies brightness adjustment to the rendered image.</summary>
-        /// <param name="source">The source render texture.</param>
-        /// <param name="destination">The destination render texture.</param>
+        /// <param name="source">The unprocessed image to read brightness-adjusted pixels from.</param>
+        /// <param name="destination">The target that receives the brightness-adjusted image.</param>
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
             if (displayObject == null)

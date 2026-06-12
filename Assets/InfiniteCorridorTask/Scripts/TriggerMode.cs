@@ -13,7 +13,9 @@ namespace SL.Tasks
     /// </remarks>
     public enum TriggerMode
     {
-        /// <summary>The animal engages an interaction sensor in the zone, or reaches the guidance zone, to fire.</summary>
+        /// <summary>
+        /// The animal engages an interaction sensor in the zone, or reaches the guidance zone, to fire.
+        /// </summary>
         Interaction,
 
         /// <summary>Crossing the invisible boundary wall fires the stimulus unconditionally.</summary>
@@ -25,7 +27,9 @@ namespace SL.Tasks
         /// <summary>Occupying arms the boundary; collide-while-armed fires (occupy to earn the stimulus).</summary>
         OccupancyArm,
 
-        /// <summary>Occupying for the required duration fires the stimulus immediately, with no boundary collision.</summary>
+        /// <summary>
+        /// Occupying for the required duration fires the stimulus immediately, with no boundary collision.
+        /// </summary>
         OccupancyTrigger,
     }
 }

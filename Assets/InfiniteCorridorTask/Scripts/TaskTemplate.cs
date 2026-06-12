@@ -62,21 +62,21 @@ namespace SL.Config
         private Dictionary<string, float> _trialLengthsUnityCache;
 
         /// <summary>Returns a map of cue name to byte code for MQTT encoding.</summary>
-        /// <returns>A dictionary mapping cue names to their byte codes.</returns>
+        /// <returns>Maps each cue name to its byte code.</returns>
         public Dictionary<string, byte> GetCueNameToCode()
         {
             return _cueNameToCodeCache ??= cues.ToDictionary(cue => cue.name, cue => (byte)cue.code);
         }
 
         /// <summary>Returns a map of cue name to Cue.</summary>
-        /// <returns>A dictionary mapping cue names to their Cue instances.</returns>
+        /// <returns>Maps each cue name to its Cue instance.</returns>
         public Dictionary<string, Cue> GetCueByName()
         {
             return _cueByNameCache ??= cues.ToDictionary(cue => cue.name, cue => cue);
         }
 
         /// <summary>Returns cue lengths in Unity units as an array.</summary>
-        /// <returns>An array of cue lengths in Unity units.</returns>
+        /// <returns>Cue lengths in Unity units, indexed to match the cue order.</returns>
         public float[] GetCueLengthsUnity()
         {
             if (_cueLengthsUnityCache == null)
@@ -92,7 +92,7 @@ namespace SL.Config
         /// iteration order. The returned array indexes positionally match the order of trial names returned by
         /// <see cref="GetTrialNames"/>.
         /// </summary>
-        /// <returns>An array of segment lengths in Unity units, one entry per trial.</returns>
+        /// <returns>Segment lengths in Unity units, one entry per trial.</returns>
         public float[] GetSegmentLengthsUnity()
         {
             if (_segmentLengthsUnityCache == null)
@@ -110,7 +110,7 @@ namespace SL.Config
         /// Returns the trial names in the order they appear in the trial_structures dictionary. Used together
         /// with <see cref="GetSegmentLengthsUnity"/> for positional indexing of trials.
         /// </summary>
-        /// <returns>An array of trial names matching the trial_structures iteration order.</returns>
+        /// <returns>Trial names in the trial_structures iteration order.</returns>
         public string[] GetTrialNames()
         {
             return _trialNamesCache ??= trialStructures.Keys.ToArray();

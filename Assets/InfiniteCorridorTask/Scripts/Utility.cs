@@ -6,7 +6,7 @@ using UnityEngine;
 namespace SL.Tasks
 {
     /// <summary>
-    /// Static utility class for prefab measurements.
+    /// Provides static utility functions for measuring prefab dimensions.
     /// </summary>
     public static class Utility
     {

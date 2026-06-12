@@ -19,14 +19,14 @@ namespace SL.Tasks
         public bool inZone = false;
 
         /// <summary>Sets the zone state to active when the animal enters the guidance zone collider.</summary>
-        /// <param name="other">The collider that entered the trigger zone.</param>
+        /// <param name="other">The object that entered the trigger zone.</param>
         private void OnTriggerEnter(Collider other)
         {
             inZone = true;
         }
 
         /// <summary>Sets the zone state to inactive when the animal exits the guidance zone collider.</summary>
-        /// <param name="other">The collider that exited the trigger zone.</param>
+        /// <param name="other">The object that exited the trigger zone.</param>
         private void OnTriggerExit(Collider other)
         {
             inZone = false;

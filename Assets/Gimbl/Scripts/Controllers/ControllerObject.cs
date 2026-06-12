@@ -12,7 +12,7 @@ using UnityEditor;
 namespace Gimbl
 {
     /// <summary>
-    /// Abstract base class for all input controllers.
+    /// Represents the abstract base class for all input controllers.
     /// </summary>
     public abstract class ControllerObject : MonoBehaviour
     {

@@ -55,7 +55,7 @@ namespace SL.Tasks
         }
 
         /// <summary>Sets the zone state to active when the animal enters the guidance zone collider.</summary>
-        /// <param name="other">The collider that entered the trigger zone.</param>
+        /// <param name="other">The object that entered the trigger zone.</param>
         private void OnTriggerEnter(Collider other)
         {
             inZone = true;
@@ -69,7 +69,7 @@ namespace SL.Tasks
         }
 
         /// <summary>Sets the zone state to inactive when the animal exits the guidance zone collider.</summary>
-        /// <param name="other">The collider that exited the trigger zone.</param>
+        /// <param name="other">The object that exited the trigger zone.</param>
         private void OnTriggerExit(Collider other)
         {
             inZone = false;
@@ -86,7 +86,7 @@ namespace SL.Tasks
         /// <summary>Sends the TriggerDelay message with remaining occupancy duration to activate the brake.</summary>
         private void TriggerBrakeActivation()
         {
-            // Calculates remaining duration based on how much time has already elapsed.
+            // Clamps the remaining duration to zero so an overrun never produces a negative delay.
             long elapsedMilliseconds = _parentOccupancyZone.GetElapsedMilliseconds();
             uint remainingMilliseconds = (uint)
                 Mathf.Max(0f, _parentOccupancyZone.occupancyDurationMs - elapsedMilliseconds);

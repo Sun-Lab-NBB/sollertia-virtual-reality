@@ -79,7 +79,6 @@ namespace Gimbl
             Instance = this;
 
 #if UNITY_EDITOR
-            // Loads connection settings from EditorPrefs.
             ipAddress = UnityEditor.EditorPrefs.GetString("SollertiaVR_MQTT_IP");
             port = UnityEditor.EditorPrefs.GetInt("SollertiaVR_MQTT_Port");
 #endif

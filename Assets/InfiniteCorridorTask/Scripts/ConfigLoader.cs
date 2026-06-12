@@ -53,7 +53,6 @@ namespace SL.Config
 
             ValidateTemplate(template, filePath);
 
-            // Derives template name from filename (without extension)
             template.templateName = Path.GetFileNameWithoutExtension(filePath);
 
             return template;
@@ -140,10 +139,10 @@ namespace SL.Config
                 // filesystem layout. Rejects them at load time before any asset path is computed downstream.
                 if (!TrialNamePattern.IsMatch(trialName))
                 {
-                    throw new InvalidDataException(
+                    string message =
                         $"Trial name '{trialName}' is invalid. Trial names must contain only ASCII letters, "
-                            + "digits, and underscores (used in generated segment prefab filenames)."
-                    );
+                        + "digits, and underscores (used in generated segment prefab filenames).";
+                    throw new InvalidDataException(message);
                 }
 
                 if (trial.cueSequence == null || trial.cueSequence.Count == 0)
@@ -172,10 +171,10 @@ namespace SL.Config
                     && !string.Equals(trial.triggerType, "occupancy_trigger", StringComparison.Ordinal)
                 )
                 {
-                    throw new InvalidDataException(
+                    string message =
                         $"Trial '{trialName}' has invalid trigger_type '{trial.triggerType}'. Must be one of "
-                            + "'interaction', 'collision', 'occupancy_disarm', 'occupancy_arm', 'occupancy_trigger'."
-                    );
+                        + "'interaction', 'collision', 'occupancy_disarm', 'occupancy_arm', 'occupancy_trigger'.";
+                    throw new InvalidDataException(message);
                 }
 
                 if (trial.occupancyDurationMs <= 0f)
