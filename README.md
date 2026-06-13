@@ -35,7 +35,7 @@ ___
 - Supports five stimulus trigger modes (interaction, collision, occupancy-disarm, occupancy-arm, occupancy-trigger)
   with optional guidance modes.
 - Supports probabilistic transitions between trial structures within a single task template.
-- Exposes HTTP-based McpBridge that exposes 13 Editor operations to AI agents (task lifecycle, scene management,
+- Exposes HTTP-based McpBridge that exposes 14 Editor operations to AI agents (task lifecycle, scene management,
   asset inspection, Play Mode control, parameter read/write).
 - Maintains bidirectional MQTT 5.0 contract with 
   [sollertia-experiment](https://github.com/Sun-Lab-NBB/sollertia-experiment), centralized in a single `MQTTTopics` 
@@ -375,13 +375,14 @@ operations to AI agents via JSON request/response. The backing MCP server (`slsa
 [sollertia-shared-assets](https://github.com/Sun-Lab-NBB/sollertia-shared-assets)) relays each agent tool call to this
 bridge over HTTP.
 
-The bridge dispatches **13 tools**:
+The bridge dispatches **14 tools**:
 
 | Tool                    | Description                                                                       |
 |-------------------------|-----------------------------------------------------------------------------------|
 | `create_task`           | Builds the task prefab and the matching scene from a YAML template in one call    |
 | `delete_task`           | Removes the scene + companion + task prefab + every segment prefab for a template |
 | `inspect_prefab`        | Returns hierarchy, components, transforms, and collider details                   |
+| `clone_zone_prefab`     | Clones a base zone prefab into a new trigger-zone prefab (script + field swaps)    |
 | `delete_asset`          | Deletes a regenerable non-scene asset (refuses hand-authored protected paths)     |
 | `list_assets`           | Lists Unity assets by type filter within a search path                            |
 | `list_scenes`           | Enumerates every `.unity` asset and reports the active scene                      |

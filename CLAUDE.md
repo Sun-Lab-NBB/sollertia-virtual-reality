@@ -162,7 +162,7 @@ and `localhost:8090` when the Unity Editor loads. The backing MCP server is `sls
 its `interfaces/unity_tools.py` module relays each tool call to the bridge over HTTP and surfaces the JSON response back
 to the agent.
 
-The bridge dispatches **13 tools** in `McpBridge.Dispatch`. Tools are grouped here by concern but live side by side
+The bridge dispatches **14 tools** in `McpBridge.Dispatch`. Tools are grouped here by concern but live side by side
 in the same dispatcher:
 
 | Category          | Tool                    | Description                                                                       |
@@ -170,6 +170,7 @@ in the same dispatcher:
 | Task lifecycle    | `create_task`           | Builds the task prefab and the matching scene from a template in one call         |
 | Task lifecycle    | `delete_task`           | Removes the scene + companion + task prefab + every segment prefab for a template |
 | Asset inspection  | `inspect_prefab`        | Returns hierarchy, components, and BoxCollider details for a prefab               |
+| Asset authoring   | `clone_zone_prefab`     | Clones a base zone prefab into a new trigger-zone prefab (script + field swaps)    |
 | Asset inspection  | `list_assets`           | Lists assets by type filter within a search path                                  |
 | Asset lifecycle   | `delete_asset`          | Deletes a regenerable non-scene asset (refuses scene paths and protected paths)   |
 | Scene management  | `list_scenes`           | Enumerates every `.unity` asset and reports the active scene                      |
@@ -302,7 +303,7 @@ corridors built from prefabricated visual cue segments and driven over MQTT 5.0 
   unreachable, `MQTTClient.Publish` routes messages in-process so keyboard-only test runs still reach local subscribers
   (for example, `LickStimulusSpawner`).
 - **HTTP MCP relay**: `McpBridge` is an `[InitializeOnLoad]` static class that drains an `HttpListener` queue on
-  `EditorApplication.update`, deserializes the JSON request via `MiniJson`, dispatches to one of 13 tool handlers, and
+  `EditorApplication.update`, deserializes the JSON request via `MiniJson`, dispatches to one of 14 tool handlers, and
   returns a JSON response built by `Ok(...)` or `Error(...)`. The relay surface is owned by this repository; the
   Python wrapper lives in `sollertia-shared-assets/src/sollertia_shared_assets/interfaces/unity_tools.py`.
 
