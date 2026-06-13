@@ -443,12 +443,11 @@ namespace SL.Tasks
 
         /// <summary>Clones a canonical zone prefab into a new trigger-zone prefab.</summary>
         /// <remarks>
-        /// Performs the prefab-authoring step of adding a new trigger zone through Unity's serialization layer rather
-        /// than by hand-editing YAML, so fileIDs, script references, and parent-child wiring are assigned by Unity and
-        /// cannot drift. The requested MonoBehaviour scripts must already be authored and compiled. The handler only
-        /// produces the prefab; wiring it into ConfigLoader, CreateTask, the protected-path set, and the Python
-        /// TriggerType registry remains the documented recipe. Unity names the new prefab's root after the
-        /// destination filename.
+        /// Performs the prefab-authoring step of adding a new trigger zone through Unity's serialization layer, so
+        /// fileIDs, script references, and parent-child wiring are assigned by Unity and stay consistent. The
+        /// requested MonoBehaviour scripts must already be authored and compiled. The handler only produces the
+        /// prefab; wiring it into ConfigLoader, CreateTask, the protected-path set, and the Python TriggerType
+        /// registry remains the documented recipe. Unity names the new prefab's root after the destination filename.
         /// </remarks>
         /// <param name="args">
         /// The tool arguments: source_prefab, destination_prefab, and optional root_script, regions, and overwrite.
