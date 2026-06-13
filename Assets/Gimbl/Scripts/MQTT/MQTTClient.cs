@@ -53,6 +53,9 @@ namespace Gimbl
         /// <summary>The list of all subscribed channels for message routing.</summary>
         private List<Channel> _channelList = new List<Channel>();
 
+        /// <summary>The topics already warned about no-broker loopback delivery, to avoid repeating it.</summary>
+        private readonly HashSet<string> _loopbackWarnedTopics = new HashSet<string>();
+
         /// <summary>The channel for broadcasting session start events.</summary>
         private MQTTChannel _startChannel;
 
@@ -289,6 +292,16 @@ namespace Gimbl
             // setups with a real broker reach the IsConnected() branch below and use MQTT as normal.
             if (!IsConnected())
             {
+                if (_loopbackWarnedTopics.Add(topic))
+                {
+                    string warning =
+                        $"MQTTClient: broker unreachable, so '{topic}' is delivered to in-process "
+                        + "subscribers only and will not reach sollertia-experiment. This is expected for "
+                        + "keyboard-only testing, but a topic that works only this way has no wired "
+                        + "experiment-side counterpart.";
+                    Debug.LogWarning(warning);
+                }
+
                 string payloadString = payload == null ? string.Empty : Encoding.UTF8.GetString(payload);
                 lock (_channelList)
                 {
