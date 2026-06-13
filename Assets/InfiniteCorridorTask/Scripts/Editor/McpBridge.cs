@@ -72,6 +72,18 @@ namespace SL.Tasks
             "Assets/Scenes/ExperimentTemplate.unity",
         };
 
+        /// <summary>The canonical hand-authored zone prefabs that may serve as a clone source.</summary>
+        /// <remarks>
+        /// Restricting the source to the two protected base prefabs keeps every generated zone descended from a
+        /// known-good, hand-authored structure, so the handler validates against a fixed shape and the
+        /// hand-authored-versus-generated boundary stays crisp. A third sanctioned base would be added here.
+        /// </remarks>
+        private static readonly HashSet<string> CloneSourcePrefabs = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Assets/InfiniteCorridorTask/Prefabs/StimulusTriggerZone.prefab",
+            "Assets/InfiniteCorridorTask/Prefabs/OccupancyTriggerZone.prefab",
+        };
+
         /// <summary>The HTTP listener instance.</summary>
         private static readonly HttpListener _listener = new HttpListener();
 
@@ -197,6 +209,7 @@ namespace SL.Tasks
                 "create_task" => GenerateTask(args),
                 "delete_task" => DestroyTask(args),
                 "inspect_prefab" => InspectPrefab(args),
+                "clone_zone_prefab" => CloneZonePrefab(args),
                 "delete_asset" => DeleteAsset(args),
                 "list_assets" => ListAssets(args),
                 "list_scenes" => ListScenes(),
@@ -426,6 +439,490 @@ namespace SL.Tasks
             Dictionary<string, object> hierarchy = InspectGameObject(prefab);
 
             return Ok(new Dictionary<string, object> { { "prefab_path", prefabPath }, { "hierarchy", hierarchy } });
+        }
+
+        /// <summary>Clones a canonical zone prefab into a new trigger-zone prefab.</summary>
+        /// <remarks>
+        /// Performs the prefab-authoring step of adding a new trigger zone through Unity's serialization layer rather
+        /// than by hand-editing YAML, so fileIDs, script references, and parent-child wiring are assigned by Unity and
+        /// cannot drift. The requested MonoBehaviour scripts must already be authored and compiled. The handler only
+        /// produces the prefab; wiring it into ConfigLoader, CreateTask, the protected-path set, and the Python
+        /// TriggerType registry remains the documented recipe. Unity names the new prefab's root after the
+        /// destination filename.
+        /// </remarks>
+        /// <param name="args">
+        /// The tool arguments: source_prefab, destination_prefab, and optional root_script, regions, and overwrite.
+        /// </param>
+        /// <returns>A JSON response with the destination path and resulting hierarchy, or an error message.</returns>
+        private static string CloneZonePrefab(Dictionary<string, object> args)
+        {
+            string sourcePrefab = GetString(args, "source_prefab");
+            string destinationPrefab = GetString(args, "destination_prefab");
+            string rootScript = GetString(args, "root_script");
+            bool overwrite = GetBool(args, "overwrite", defaultValue: false);
+
+            if (string.IsNullOrEmpty(sourcePrefab) || string.IsNullOrEmpty(destinationPrefab))
+            {
+                return Error("Missing required arguments: source_prefab and destination_prefab.");
+            }
+
+            if (!CloneSourcePrefabs.Contains(sourcePrefab))
+            {
+                string allowed = string.Join(", ", CloneSourcePrefabs);
+                return Error($"source_prefab must be a canonical base zone prefab ({allowed}).");
+            }
+
+            string destinationError = ValidateCloneDestination(destinationPrefab);
+            if (destinationError != null)
+            {
+                return Error(destinationError);
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(destinationPrefab) != null)
+            {
+                if (!overwrite)
+                {
+                    return Error(
+                        $"A prefab already exists at '{destinationPrefab}'. Pass overwrite=true to replace it."
+                    );
+                }
+
+                AssetDatabase.DeleteAsset(destinationPrefab);
+            }
+
+            // Resolves requested scripts up front so a bad name fails before any asset is written.
+            string resolveError = ResolveCloneScripts(
+                rootScript,
+                GetList(args, "regions"),
+                out Type rootScriptType,
+                out List<(Dictionary<string, object> Spec, Type ScriptType)> regionEdits
+            );
+            if (resolveError != null)
+            {
+                return Error(resolveError);
+            }
+
+            if (!AssetDatabase.CopyAsset(sourcePrefab, destinationPrefab))
+            {
+                return Error($"Failed to copy '{sourcePrefab}' to '{destinationPrefab}'.");
+            }
+
+            string editError = null;
+            GameObject root = PrefabUtility.LoadPrefabContents(destinationPrefab);
+            try
+            {
+                if (rootScriptType != null)
+                {
+                    editError = SwapZoneScript(root, rootScriptType, typeof(StimulusTriggerZone), fields: null);
+                }
+
+                for (int i = 0; editError == null && i < regionEdits.Count; i++)
+                {
+                    editError = ApplyRegionEdit(root, regionEdits[i]);
+                }
+
+                if (editError == null)
+                {
+                    PrefabUtility.SaveAsPrefabAsset(root, destinationPrefab);
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+
+            if (editError != null)
+            {
+                AssetDatabase.DeleteAsset(destinationPrefab);
+                return Error(editError);
+            }
+
+            AssetDatabase.Refresh();
+
+            GameObject saved = AssetDatabase.LoadAssetAtPath<GameObject>(destinationPrefab);
+            Dictionary<string, object> response = new Dictionary<string, object>
+            {
+                { "destination_prefab", destinationPrefab },
+                { "hierarchy", InspectGameObject(saved) },
+                {
+                    "warning",
+                    "Prefab created. Still required to make it usable: add the path to "
+                        + "McpBridge.DeleteProtectedPaths, add a Place...Zone branch in CreateTask, "
+                        + "accept the new trigger_type literal in ConfigLoader, and register the "
+                        + "TriggerType member in sollertia-shared-assets."
+                },
+            };
+            return Ok(response);
+        }
+
+        /// <summary>Resolves the root and region script names to compiled types before any asset is written.</summary>
+        /// <param name="rootScript">The root script type name, or null to keep the source root script.</param>
+        /// <param name="regions">The raw region edit specifications from the request.</param>
+        /// <param name="rootScriptType">The resolved root script type, or null when none was requested.</param>
+        /// <param name="regionEdits">Validated region specs paired with resolved script types.</param>
+        /// <returns>An error message when a name fails to resolve or a region is malformed, otherwise null.</returns>
+        private static string ResolveCloneScripts(
+            string rootScript,
+            List<object> regions,
+            out Type rootScriptType,
+            out List<(Dictionary<string, object> Spec, Type ScriptType)> regionEdits
+        )
+        {
+            rootScriptType = null;
+            regionEdits = new List<(Dictionary<string, object>, Type)>();
+
+            if (!string.IsNullOrEmpty(rootScript))
+            {
+                string error = ResolveMonoBehaviourType(rootScript, out rootScriptType);
+                if (error != null)
+                {
+                    return error;
+                }
+            }
+
+            foreach (object regionObject in regions)
+            {
+                if (regionObject is not Dictionary<string, object> spec)
+                {
+                    return "Each entry in 'regions' must be an object.";
+                }
+
+                if (string.IsNullOrEmpty(GetString(spec, "match")))
+                {
+                    return "Each region edit must specify 'match' (the name of the region to modify).";
+                }
+
+                Type scriptType = null;
+                string scriptName = GetString(spec, "script");
+                if (!string.IsNullOrEmpty(scriptName))
+                {
+                    string error = ResolveMonoBehaviourType(scriptName, out scriptType);
+                    if (error != null)
+                    {
+                        return error;
+                    }
+                }
+
+                regionEdits.Add((spec, scriptType));
+            }
+
+            return null;
+        }
+
+        /// <summary>Resolves a MonoBehaviour type by its simple name across compiled assemblies.</summary>
+        /// <param name="typeName">The simple class name to resolve.</param>
+        /// <param name="resolved">The resolved type on success, otherwise null.</param>
+        /// <returns>An error message when the name is unknown or ambiguous, otherwise null.</returns>
+        private static string ResolveMonoBehaviourType(string typeName, out Type resolved)
+        {
+            resolved = null;
+            List<Type> matches = TypeCache
+                .GetTypesDerivedFrom<MonoBehaviour>()
+                .Where(type => string.Equals(type.Name, typeName, StringComparison.Ordinal))
+                .ToList();
+
+            if (matches.Count == 0)
+            {
+                return $"Script type '{typeName}' not found. Author the script and let the project compile.";
+            }
+
+            if (matches.Count > 1)
+            {
+                return $"Script type '{typeName}' is ambiguous ({matches.Count} matches). Use a unique class name.";
+            }
+
+            resolved = matches[0];
+            return null;
+        }
+
+        /// <summary>Validates that a clone destination is a safe, unprotected path under Prefabs/.</summary>
+        /// <param name="destinationPrefab">The requested destination asset path.</param>
+        /// <returns>An error message when the path is unsafe, misplaced, or protected, otherwise null.</returns>
+        private static string ValidateCloneDestination(string destinationPrefab)
+        {
+            if (destinationPrefab.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(destinationPrefab))
+            {
+                return $"Invalid destination_prefab '{destinationPrefab}': traversal and absolute paths are rejected.";
+            }
+
+            if (!destinationPrefab.StartsWith("Assets/InfiniteCorridorTask/Prefabs/", StringComparison.Ordinal))
+            {
+                return "destination_prefab must be under Assets/InfiniteCorridorTask/Prefabs/.";
+            }
+
+            if (!destinationPrefab.EndsWith(".prefab", StringComparison.Ordinal))
+            {
+                return "destination_prefab must end with .prefab.";
+            }
+
+            if (DeleteProtectedPaths.Contains(destinationPrefab) || CloneSourcePrefabs.Contains(destinationPrefab))
+            {
+                return $"destination_prefab '{destinationPrefab}' is a protected base prefab.";
+            }
+
+            return null;
+        }
+
+        /// <summary>Applies one region edit (rename, script swap, field overrides) to a cloned prefab.</summary>
+        /// <param name="root">The root GameObject of the loaded prefab contents.</param>
+        /// <param name="edit">The validated region specification paired with its resolved script type.</param>
+        /// <returns>An error message when the region cannot be located or edited, otherwise null.</returns>
+        private static string ApplyRegionEdit(GameObject root, (Dictionary<string, object> Spec, Type ScriptType) edit)
+        {
+            GameObject region = FindUniqueDescendant(root, GetString(edit.Spec, "match"), out string findError);
+            if (findError != null)
+            {
+                return findError;
+            }
+
+            string rename = GetString(edit.Spec, "rename");
+            if (!string.IsNullOrEmpty(rename))
+            {
+                region.name = rename;
+            }
+
+            Dictionary<string, object> fields = GetDict(edit.Spec, "fields");
+
+            if (edit.ScriptType != null)
+            {
+                return SwapZoneScript(region, edit.ScriptType, requireBaseType: null, fields: fields);
+            }
+
+            if (fields.Count > 0)
+            {
+                MonoBehaviour modifier = FindSingleZoneModifier(region, out string modifierError);
+                if (modifierError != null)
+                {
+                    return modifierError;
+                }
+
+                return ApplyFieldOverrides(modifier, fields);
+            }
+
+            return null;
+        }
+
+        /// <summary>Replaces a GameObject's single modifier script, preserving shared field values.</summary>
+        /// <param name="target">The GameObject whose modifier script is replaced.</param>
+        /// <param name="scriptType">The replacement MonoBehaviour type.</param>
+        /// <param name="requireBaseType">A base type the replacement must derive from, or null to allow any.</param>
+        /// <param name="fields">Field overrides to apply after the swap, or null to apply none.</param>
+        /// <returns>An error message when the swap or overrides fail, otherwise null.</returns>
+        private static string SwapZoneScript(
+            GameObject target,
+            Type scriptType,
+            Type requireBaseType,
+            Dictionary<string, object> fields
+        )
+        {
+            if (requireBaseType != null && !requireBaseType.IsAssignableFrom(scriptType))
+            {
+                return $"Root script '{scriptType.Name}' must derive from {requireBaseType.Name}.";
+            }
+
+            MonoBehaviour existing = FindSingleZoneModifier(target, out string modifierError);
+            if (modifierError != null)
+            {
+                return modifierError;
+            }
+
+            Component added = target.AddComponent(scriptType);
+            CopyMatchingSerializedFields(existing, added);
+            UnityEngine.Object.DestroyImmediate(existing, allowDestroyingAssets: true);
+
+            if (fields != null && fields.Count > 0)
+            {
+                return ApplyFieldOverrides(added, fields);
+            }
+
+            return null;
+        }
+
+        /// <summary>Finds the single modifier MonoBehaviour on a GameObject.</summary>
+        /// <param name="target">The GameObject to inspect.</param>
+        /// <param name="error">An error message when the modifier count is not exactly one, otherwise null.</param>
+        /// <returns>The single MonoBehaviour, or null when the count is not exactly one.</returns>
+        private static MonoBehaviour FindSingleZoneModifier(GameObject target, out string error)
+        {
+            error = null;
+            MonoBehaviour[] behaviours = target.GetComponents<MonoBehaviour>();
+            if (behaviours.Length != 1)
+            {
+                error = $"Expected exactly one modifier script on '{target.name}', but found {behaviours.Length}.";
+                return null;
+            }
+
+            return behaviours[0];
+        }
+
+        /// <summary>Finds the single named descendant GameObject, rejecting an absent or ambiguous match.</summary>
+        /// <param name="root">The root GameObject to search beneath.</param>
+        /// <param name="name">The descendant name to match.</param>
+        /// <param name="error">An error message when the match count is not exactly one, otherwise null.</param>
+        /// <returns>The matched GameObject, or null when the match count is not exactly one.</returns>
+        private static GameObject FindUniqueDescendant(GameObject root, string name, out string error)
+        {
+            error = null;
+            List<Transform> matches = root.GetComponentsInChildren<Transform>(includeInactive: true)
+                .Where(child => child != root.transform && string.Equals(child.name, name, StringComparison.Ordinal))
+                .ToList();
+
+            if (matches.Count == 0)
+            {
+                error = $"No region named '{name}' was found under the cloned prefab.";
+                return null;
+            }
+
+            if (matches.Count > 1)
+            {
+                error = $"Region name '{name}' is ambiguous ({matches.Count} matches) under the cloned prefab.";
+                return null;
+            }
+
+            return matches[0].gameObject;
+        }
+
+        /// <summary>Copies serialized values between two components for every property they share by path.</summary>
+        /// <param name="from">The component to read values from.</param>
+        /// <param name="to">The component to write matching values to.</param>
+        private static void CopyMatchingSerializedFields(Component from, Component to)
+        {
+            SerializedObject source = new SerializedObject(from);
+            SerializedObject destination = new SerializedObject(to);
+
+            SerializedProperty property = source.GetIterator();
+            bool enterChildren = true;
+            while (property.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (string.Equals(property.name, "m_Script", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (destination.FindProperty(property.propertyPath) != null)
+                {
+                    destination.CopyFromSerializedProperty(property);
+                }
+            }
+
+            destination.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>Applies field overrides onto a component, rejecting unknown or mistyped fields.</summary>
+        /// <param name="target">The component whose serialized fields are overridden.</param>
+        /// <param name="fields">The field-name to value map to apply.</param>
+        /// <returns>An error message when a field is unknown or cannot be assigned, otherwise null.</returns>
+        private static string ApplyFieldOverrides(Component target, Dictionary<string, object> fields)
+        {
+            SerializedObject serialized = new SerializedObject(target);
+            foreach (KeyValuePair<string, object> field in fields)
+            {
+                SerializedProperty property = serialized.FindProperty(field.Key);
+                if (property == null)
+                {
+                    return $"Field '{field.Key}' does not exist on {target.GetType().Name}.";
+                }
+
+                string error = SetSerializedProperty(property, field.Value);
+                if (error != null)
+                {
+                    return error;
+                }
+            }
+
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            return null;
+        }
+
+        /// <summary>Assigns a boxed value to a serialized property, matching its type.</summary>
+        /// <param name="property">The serialized property to assign.</param>
+        /// <param name="value">The boxed value from the request payload.</param>
+        /// <returns>An error message when the type is unsupported or the conversion fails, otherwise null.</returns>
+        private static string SetSerializedProperty(SerializedProperty property, object value)
+        {
+            try
+            {
+                switch (property.propertyType)
+                {
+                    case SerializedPropertyType.Integer:
+                        property.intValue = Convert.ToInt32(value);
+                        return null;
+                    case SerializedPropertyType.Boolean:
+                        property.boolValue = Convert.ToBoolean(value);
+                        return null;
+                    case SerializedPropertyType.Float:
+                        property.floatValue = Convert.ToSingle(value);
+                        return null;
+                    case SerializedPropertyType.String:
+                        property.stringValue = value.ToString();
+                        return null;
+                    case SerializedPropertyType.Enum:
+                        property.intValue = Convert.ToInt32(value);
+                        return null;
+                    default:
+                        return $"Field '{property.name}' has unsupported type {property.propertyType}.";
+                }
+            }
+            catch (Exception exception)
+                when (exception is FormatException
+                    || exception is InvalidCastException
+                    || exception is OverflowException
+                )
+            {
+                return $"Failed to set field '{property.name}': {exception.Message}";
+            }
+        }
+
+        /// <summary>Retrieves a boolean value from the arguments dictionary with an optional default.</summary>
+        /// <param name="args">The arguments dictionary to search.</param>
+        /// <param name="key">The key to look up.</param>
+        /// <param name="defaultValue">The default value when the key is absent or unparseable.</param>
+        /// <returns>The parsed boolean value, or the default.</returns>
+        private static bool GetBool(Dictionary<string, object> args, string key, bool defaultValue = false)
+        {
+            if (args.TryGetValue(key, out object value) && value != null)
+            {
+                if (value is bool boolValue)
+                {
+                    return boolValue;
+                }
+
+                if (bool.TryParse(value.ToString(), out bool parsed))
+                {
+                    return parsed;
+                }
+            }
+
+            return defaultValue;
+        }
+
+        /// <summary>Retrieves a list value from the arguments dictionary, or an empty list when absent.</summary>
+        /// <param name="args">The arguments dictionary to search.</param>
+        /// <param name="key">The key to look up.</param>
+        /// <returns>The list value, or an empty list when the key is absent or not a list.</returns>
+        private static List<object> GetList(Dictionary<string, object> args, string key)
+        {
+            if (args.TryGetValue(key, out object value) && value is List<object> list)
+            {
+                return list;
+            }
+
+            return new List<object>();
+        }
+
+        /// <summary>Retrieves a nested object from the arguments dictionary, or empty when absent.</summary>
+        /// <param name="args">The arguments dictionary to search.</param>
+        /// <param name="key">The key to look up.</param>
+        /// <returns>The dictionary value, or an empty dictionary when the key is absent or not an object.</returns>
+        private static Dictionary<string, object> GetDict(Dictionary<string, object> args, string key)
+        {
+            if (args.TryGetValue(key, out object value) && value is Dictionary<string, object> dict)
+            {
+                return dict;
+            }
+
+            return new Dictionary<string, object>();
         }
 
         /// <summary>Deletes a Unity asset within an allowed directory and refreshes the AssetDatabase.</summary>
