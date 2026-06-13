@@ -294,12 +294,12 @@ namespace Gimbl
             {
                 if (_loopbackWarnedTopics.Add(topic))
                 {
-                    string message =
+                    string warning =
                         $"MQTTClient: broker unreachable, so '{topic}' is delivered to in-process "
                         + "subscribers only and will not reach sollertia-experiment. This is expected for "
                         + "keyboard-only testing, but a topic that works only this way has no wired "
                         + "experiment-side counterpart.";
-                    Debug.LogWarning(message);
+                    Debug.LogWarning(warning);
                 }
 
                 string payloadString = payload == null ? string.Empty : Encoding.UTF8.GetString(payload);
