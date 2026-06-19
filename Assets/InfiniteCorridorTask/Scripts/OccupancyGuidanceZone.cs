@@ -35,6 +35,9 @@ namespace SL.Tasks
         /// <summary>Determines whether the guidance trigger has already fired this lap.</summary>
         private bool _hasTriggered = false;
 
+        /// <summary>Determines whether the brake guidance fired during the current lap.</summary>
+        public bool BrakeTriggered => _hasTriggered;
+
         /// <summary>Initializes references and sets up the MQTT channel.</summary>
         private void Start()
         {
