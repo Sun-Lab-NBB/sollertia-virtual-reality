@@ -1,4 +1,4 @@
-# sollertia-unity-tasks
+# sollertia-virtual-reality
 
 Provides assets for creating and executing Virtual Reality (VR) tasks for Sollertia platform data acquisition systems.
 
@@ -98,7 +98,7 @@ This project is a Unity 6 application that is not distributed via package manage
 1. Install [Unity Hub](https://unity.com/download) and use it to install the required Unity Editor version
    (**6000.3.15f1 LTS**).
 2. Download this repository to the local machine using the preferred method, such as git-cloning. Use one of the
-   [stable releases](https://github.com/Sun-Lab-NBB/sollertia-unity-tasks/tags) when available.
+   [stable releases](https://github.com/Sun-Lab-NBB/sollertia-virtual-reality/tags) when available.
 3. From Unity Hub, select **Add project from disk** and navigate to the local folder containing the downloaded
    repository:
    <br>
@@ -500,7 +500,7 @@ ___
 ## Versioning
 
 This project uses [semantic versioning](https://semver.org/). See the
-[tags on this repository](https://github.com/Sun-Lab-NBB/sollertia-unity-tasks/tags) for the available project
+[tags on this repository](https://github.com/Sun-Lab-NBB/sollertia-virtual-reality/tags) for the available project
 releases.
 
 ___
