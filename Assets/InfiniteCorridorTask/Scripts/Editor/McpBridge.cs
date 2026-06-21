@@ -2,7 +2,7 @@
 /// Provides the McpBridge editor plugin that exposes Unity Editor operations to external MCP relay servers.
 ///
 /// Starts an HTTP listener on localhost when the Editor loads, accepting JSON tool call requests from the
-/// sollertia-unity-tasks MCP relay. Each request specifies a tool name and arguments; the bridge dispatches
+/// sollertia-virtual-reality MCP relay. Each request specifies a tool name and arguments; the bridge dispatches
 /// to the corresponding Unity Editor API and returns a JSON result.
 /// </summary>
 using System;

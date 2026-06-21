@@ -129,7 +129,7 @@ The `unity` plugin depends on the `assets` plugin for the backing `slsa mcp` ser
 | `/assets-mcp-environment-setup` | Diagnose and resolve `slsa mcp` server connectivity issues               |
 
 The `assets` plugin ships further session, project, and data-management skills; only those relevant to
-sollertia-unity-tasks appear above.
+sollertia-virtual-reality appear above.
 
 ### Shared development skills (ataraxis marketplace, `automation` plugin)
 
@@ -228,10 +228,11 @@ of the underscored YAML key (e.g., `cue_offset_cm` becomes `cueOffsetCm`).
 
 ## Project context
 
-This is **sollertia-unity-tasks**, a Unity 6 C# project that produces VR behavioral tasks for the Sollertia mesoscope
-data-acquisition platform. It is part of the Sollertia AI-assisted scientific data acquisition and processing platform,
-built on the Ataraxis framework, and developed in the Sun (NeuroAI) lab at Cornell University. Tasks are infinite linear
-corridors built from prefabricated visual cue segments and driven over MQTT 5.0 by `sollertia-experiment`.
+This is **sollertia-virtual-reality**, a Unity 6 C# project that produces VR behavioral tasks for the Sollertia
+mesoscope data-acquisition platform. It is part of the Sollertia AI-assisted scientific data acquisition and
+processing platform, built on the Ataraxis framework, and developed in the Sun (NeuroAI) lab at Cornell University.
+Tasks are infinite linear corridors built from prefabricated visual cue segments and driven over MQTT 5.0 by
+`sollertia-experiment`.
 
 ### Key areas
 

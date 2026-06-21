@@ -1,6 +1,6 @@
 /// <summary>
 /// Provides the MQTTTopics static class enumerating every MQTT topic literal published or subscribed
-/// to by sollertia-unity-tasks.
+/// to by sollertia-virtual-reality.
 /// </summary>
 /// <remarks>
 /// Centralizing the topic strings here makes the publish/subscribe contract auditable from one

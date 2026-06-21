@@ -13,7 +13,7 @@ PlayerSettings:
   useOnDemandResources: 0
   accelerometerFrequency: 60
   companyName: Sun Lab
-  productName: sollertia-unity-tasks
+  productName: sollertia-virtual-reality
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b: 0.1254902, a: 1}
@@ -985,7 +985,7 @@ PlayerSettings:
   cloudProjectId: 57fa404d-b1d1-482c-89c6-0e88affd1630
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: sollertia-unity-tasks
+  projectName: sollertia-virtual-reality
   organizationId: monster92733
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
