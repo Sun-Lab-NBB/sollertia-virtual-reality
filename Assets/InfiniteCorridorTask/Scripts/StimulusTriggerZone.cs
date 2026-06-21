@@ -3,16 +3,18 @@
 ///
 /// The trigger mechanism is selected by the triggerMode field (set by CreateTask from the trial's
 /// trigger_type), not by what stimulus is delivered. Any stimulus type can be paired with any mode, and
-/// the experiment driver resolves the outcome from the trial name this zone publishes when it fires.
+/// the experiment driver resolves the appetitive-or-aversive valence from the trial name; this zone reports
+/// only the valence-agnostic outcome.
 ///
-/// Interaction mode (GuidanceZone child) fires on a sensor interaction in the zone when requireInteraction
-/// is set; when guidance is enabled it additionally fires on reaching the guidance zone (or on bare zone
-/// entry when no GuidanceZone is present). Collision mode fires unconditionally when the animal crosses the
-/// boundary wall. The
-/// three occupancy modes (OccupancyZone child) gate on whether the animal occupied the zone for the
-/// required duration: OccupancyDisarm fires on a still-armed boundary collision (occupancy not met),
-/// OccupancyArm fires on a newly-armed boundary collision (occupancy met), and OccupancyTrigger fires
-/// immediately when occupancy is met.
+/// Each resolved trial publishes exactly one StimulusMessage carrying delivered (whether the physical
+/// stimulus fired) and cause (the animal's own behavior or the guidance fallback). Interaction mode delivers
+/// on a sensor interaction in the zone; with guidance enabled it also delivers on reaching the guidance zone
+/// (or on bare zone entry when no GuidanceZone is present), and it omits a failure outcome when the animal
+/// leaves the zone without interacting. Collision mode delivers unconditionally on the boundary crossing. The
+/// occupancy modes (OccupancyZone child) resolve on the boundary crossing from whether the animal occupied
+/// the zone for the required duration: OccupancyDisarm delivers when occupancy is not met and omits when it
+/// is, OccupancyArm does the reverse, and OccupancyTrigger delivers immediately when occupancy is met.
+/// Occupancy outcomes report cause guidance when the child OccupancyGuidanceZone fired the brake this lap.
 /// </summary>
 using Gimbl;
 using UnityEngine;
@@ -25,6 +27,12 @@ namespace SL.Tasks
     /// </summary>
     public class StimulusTriggerZone : MonoBehaviour, IResettable
     {
+        /// <summary>The cause value published when the animal's own behavior produced the outcome.</summary>
+        private const string BehaviorCause = "behavior";
+
+        /// <summary>The cause value published when the guidance fallback produced the outcome.</summary>
+        private const string GuidanceCause = "guidance";
+
         /// <summary>
         /// The trigger mechanism this zone uses. Set at task creation time from the trial's trigger_type.
         /// </summary>
@@ -64,6 +72,11 @@ namespace SL.Tasks
         /// </summary>
         private OccupancyZone _occupancyZone;
 
+        /// <summary>
+        /// The child OccupancyGuidanceZone that reports whether the brake fired this lap, if present.
+        /// </summary>
+        private OccupancyGuidanceZone _occupancyGuidanceZone;
+
         /// <summary>The reference to the Task for checking guidance mode state.</summary>
         private Task _task;
 
@@ -90,6 +103,7 @@ namespace SL.Tasks
             // Finds child zones that supply the guidance and occupancy state for the active mode.
             _guidanceZone = GetComponentInChildren<GuidanceZone>();
             _occupancyZone = GetComponentInChildren<OccupancyZone>();
+            _occupancyGuidanceZone = GetComponentInChildren<OccupancyGuidanceZone>();
 
             // Caches the boundary renderer so per-lap and per-trigger toggles avoid TryGetComponent.
             TryGetComponent(out _boundaryRenderer);
@@ -137,6 +151,14 @@ namespace SL.Tasks
         private void OnTriggerExit(Collider other)
         {
             _inZone = false;
+
+            // Resolves an interaction trial the animal left without interacting as a failure (stimulus
+            // omitted, animal's own behavior). The isActive guard ensures this runs only when no delivery
+            // path already resolved the trial this lap, keeping the contract at one message per trial.
+            if (isActive && triggerMode == TriggerMode.Interaction)
+            {
+                TriggerStimulus(delivered: false, cause: BehaviorCause);
+            }
         }
 
         /// <summary>Removes MQTT event listeners when the component is destroyed.</summary>
@@ -177,28 +199,28 @@ namespace SL.Tasks
             {
                 if (_inZone && _interactionDetectedInZone)
                 {
-                    TriggerStimulus();
+                    TriggerStimulus(delivered: true, cause: BehaviorCause);
                 }
             }
             else if (_guidanceZone != null)
             {
-                // Fires when the animal interacts anywhere in the trigger zone.
+                // Delivers when the animal interacts anywhere in the trigger zone.
                 if (_inZone && _interactionDetectedInZone)
                 {
-                    TriggerStimulus();
+                    TriggerStimulus(delivered: true, cause: BehaviorCause);
                 }
-                // Fires when the animal reaches the guidance zone instead.
+                // Delivers via the guidance fallback when the animal reaches the guidance zone instead.
                 else if (_guidanceZone.inZone)
                 {
-                    TriggerStimulus();
+                    TriggerStimulus(delivered: true, cause: GuidanceCause);
                 }
             }
             else
             {
-                // Animal gets stimulus as soon as it enters the stimulus zone.
+                // Delivers via the guidance fallback as soon as the animal enters the stimulus zone.
                 if (_inZone)
                 {
-                    TriggerStimulus();
+                    TriggerStimulus(delivered: true, cause: GuidanceCause);
                 }
             }
         }
@@ -211,15 +233,16 @@ namespace SL.Tasks
         {
             if (_inZone)
             {
-                TriggerStimulus();
+                TriggerStimulus(delivered: true, cause: BehaviorCause);
             }
         }
 
         /// <summary>
         /// Handles the occupancy modes. The child OccupancyZone tracks whether the animal occupied the zone
-        /// for the required duration (occupancyMet). OccupancyDisarm fires on a boundary collision while
-        /// occupancy is not met, OccupancyArm fires on a boundary collision once occupancy is met, and
-        /// OccupancyTrigger fires immediately when occupancy is met, with no boundary collision.
+        /// for the required duration (occupancyMet), and the child OccupancyGuidanceZone reports whether the
+        /// brake fired this lap. OccupancyDisarm and OccupancyArm resolve on the boundary crossing, delivering
+        /// the stimulus for one occupancy outcome and omitting it for the other; OccupancyTrigger delivers
+        /// immediately when occupancy is met and leaves its not-met case for the driver to infer.
         /// </summary>
         private void UpdateOccupancyMode()
         {
@@ -229,24 +252,30 @@ namespace SL.Tasks
             }
 
             bool occupancyMet = _occupancyZone.occupancyMet;
+            bool brakeGuided = _occupancyGuidanceZone != null && _occupancyGuidanceZone.BrakeTriggered;
+            string cause = brakeGuided ? GuidanceCause : BehaviorCause;
             switch (triggerMode)
             {
                 case TriggerMode.OccupancyDisarm:
-                    if (_inZone && !occupancyMet)
+                    // The boundary crossing resolves the trial: a still-armed boundary (occupancy not met)
+                    // delivers the stimulus, a disarmed boundary (occupancy met) omits it.
+                    if (_inZone)
                     {
-                        TriggerStimulus();
+                        TriggerStimulus(delivered: !occupancyMet, cause: cause);
                     }
                     break;
                 case TriggerMode.OccupancyArm:
-                    if (_inZone && occupancyMet)
+                    // The boundary crossing resolves the trial: a newly-armed boundary (occupancy met)
+                    // delivers the stimulus, a still-disarmed boundary (occupancy not met) omits it.
+                    if (_inZone)
                     {
-                        TriggerStimulus();
+                        TriggerStimulus(delivered: occupancyMet, cause: cause);
                     }
                     break;
                 case TriggerMode.OccupancyTrigger:
                     if (occupancyMet)
                     {
-                        TriggerStimulus();
+                        TriggerStimulus(delivered: true, cause: cause);
                     }
                     break;
                 default:
@@ -254,12 +283,23 @@ namespace SL.Tasks
             }
         }
 
-        /// <summary>Triggers the stimulus, hides the boundary, and publishes the trial name over MQTT.</summary>
-        private void TriggerStimulus()
+        /// <summary>Resolves the trial by publishing its outcome over MQTT, then deactivates the zone.</summary>
+        /// <param name="delivered">Determines whether the physical stimulus was delivered or omitted.</param>
+        /// <param name="cause">The outcome cause: the animal's own behavior or the guidance fallback.</param>
+        private void TriggerStimulus(bool delivered, string cause)
         {
-            Debug.Log($"StimulusTriggerZone: Stimulus triggered for trial '{trialName}'.");
+            Debug.Log(
+                $"StimulusTriggerZone: Trial '{trialName}' resolved (delivered={delivered}, cause={cause})."
+            );
             UpdateBoundaryVisibility(false);
-            _stimulusTrigger.Send(new StimulusMessage { trialName = trialName });
+            _stimulusTrigger.Send(
+                new StimulusMessage
+                {
+                    trialName = trialName,
+                    delivered = delivered,
+                    cause = cause,
+                }
+            );
             isActive = false;
             _interactionDetectedInZone = false;
         }
@@ -277,11 +317,17 @@ namespace SL.Tasks
             }
         }
 
-        /// <summary>Wraps the firing trial's name for MQTT transmission on the Stimulus topic.</summary>
+        /// <summary>Wraps a trial's resolved outcome for MQTT transmission on the Stimulus topic.</summary>
         public class StimulusMessage
         {
-            /// <summary>The identifier of the trial whose stimulus trigger zone fired.</summary>
+            /// <summary>The identifier of the trial whose stimulus trigger zone resolved.</summary>
             public string trialName;
+
+            /// <summary>Determines whether the physical stimulus was delivered (true) or omitted (false).</summary>
+            public bool delivered;
+
+            /// <summary>The outcome cause: "behavior" (the animal's action) or "guidance" (the fallback).</summary>
+            public string cause;
         }
     }
 }

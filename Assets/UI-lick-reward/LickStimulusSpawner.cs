@@ -2,6 +2,7 @@
 /// Provides the LickStimulusSpawner class that spawns UI indicators for lick and stimulus MQTT events.
 /// </summary>
 using Gimbl;
+using SL.Tasks;
 using UnityEngine;
 
 namespace SL.UI
@@ -23,8 +24,8 @@ namespace SL.UI
         /// <summary>The MQTT channel for receiving lick detection messages.</summary>
         private MQTTChannel _lick;
 
-        /// <summary>The MQTT channel for receiving stimulus delivery messages.</summary>
-        private MQTTChannel _stimulus;
+        /// <summary>The MQTT channel for receiving stimulus outcome messages.</summary>
+        private MQTTChannel<StimulusTriggerZone.StimulusMessage> _stimulus;
 
         /// <summary>Determines whether a lick indicator should be shown on the next Update.</summary>
         private bool _showLick = false;
@@ -37,7 +38,7 @@ namespace SL.UI
         {
             _lick = new MQTTChannel(MQTTTopics.Interaction, isListener: true);
             _lick.receivedEvent.AddListener(OnLick);
-            _stimulus = new MQTTChannel(MQTTTopics.Stimulus, isListener: true);
+            _stimulus = new MQTTChannel<StimulusTriggerZone.StimulusMessage>(MQTTTopics.Stimulus, isListener: true);
             _stimulus.receivedEvent.AddListener(OnStimulus);
         }
 
@@ -61,10 +62,14 @@ namespace SL.UI
             _showLick = true;
         }
 
-        /// <summary>Flags a stimulus indicator to be shown on the next Update cycle.</summary>
-        private void OnStimulus()
+        /// <summary>Flags a stimulus indicator to be shown on the next Update cycle when one is delivered.</summary>
+        /// <param name="message">The stimulus outcome message reporting whether the stimulus was delivered.</param>
+        private void OnStimulus(StimulusTriggerZone.StimulusMessage message)
         {
-            _showStimulus = true;
+            if (message.delivered)
+            {
+                _showStimulus = true;
+            }
         }
 
         /// <summary>Consumes the pending flag and instantiates the supplied prefab on the canvas.</summary>

@@ -63,13 +63,15 @@ namespace Gimbl
         /// </remarks>
         public const string Interaction = "Interaction";
 
-        /// <summary>Stimulus delivery event published when a stimulus trigger zone fires.</summary>
+        /// <summary>Trial outcome event published when a stimulus trigger zone resolves a trial.</summary>
         /// <remarks>
-        /// Direction: bidirectional. Unity publishes when a trigger zone fires; sollertia-experiment
-        /// subscribes to identify the firing zone by trial name and command the stimulus hardware. The
-        /// UI spawner also subscribes locally to render an on-screen indicator.
+        /// Direction: bidirectional. Unity publishes exactly one message per trial at its resolution;
+        /// sollertia-experiment subscribes to resolve the per-trial outcome and command the stimulus
+        /// hardware. The UI spawner also subscribes locally to render an on-screen indicator when a
+        /// stimulus is delivered.
         /// Payload: <see cref="SL.Tasks.StimulusTriggerZone.StimulusMessage"/> wrapping
-        /// <c>string trialName</c>, the identifier of the trial whose zone fired.
+        /// <c>string trialName</c> (the trial identifier), <c>bool delivered</c> (whether the physical
+        /// stimulus fired or was omitted), and <c>string cause</c> ("behavior" or "guidance").
         /// Callers (publish): <see cref="SL.Tasks.StimulusTriggerZone"/> via <c>TriggerStimulus</c>.
         /// Callers (subscribe): <see cref="SL.UI.LickStimulusSpawner"/>.
         /// </remarks>

@@ -343,20 +343,20 @@ This project communicates with [sollertia-experiment](https://github.com/Sun-Lab
 5.0. All topics are flat PascalCase identifiers (no hierarchical separators), declared as `public const string` values
 in `Assets/Gimbl/Scripts/MQTT/MQTTTopics.cs`.
 
-| Topic                | Direction (Unity)   | Payload                                       |
-|----------------------|---------------------|-----------------------------------------------|
-| `SessionStart`       | Publish             | Empty trigger                                 |
-| `SessionStop`        | Publish             | Empty trigger                                 |
-| `Motion`             | Subscribe           | `{movement: float}`                           |
-| `Interaction`        | Publish + Subscribe | Empty trigger                                 |
-| `Stimulus`           | Publish + Subscribe | `{trialName: string}`                         |
-| `Delay`              | Publish             | `{delayMilliseconds: uint}`                   |
-| `CueSequenceTrigger` | Subscribe           | Empty trigger                                 |
-| `CueSequence`        | Publish             | `{cueSequence: byte[]}`                       |
-| `SceneNameTrigger`   | Subscribe           | Empty trigger                                 |
-| `SceneName`          | Publish             | `{name: string}`                              |
-| `RequireInteraction` | Subscribe           | `{value: bool}`                               |
-| `RequireWait`        | Subscribe           | `{value: bool}`                               |
+| Topic                | Direction (Unity)   | Payload                                               |
+|----------------------|---------------------|-------------------------------------------------------|
+| `SessionStart`       | Publish             | Empty trigger                                         |
+| `SessionStop`        | Publish             | Empty trigger                                         |
+| `Motion`             | Subscribe           | `{movement: float}`                                   |
+| `Interaction`        | Publish + Subscribe | Empty trigger                                         |
+| `Stimulus`           | Publish + Subscribe | `{trialName: string, delivered: bool, cause: string}` |
+| `Delay`              | Publish             | `{delayMilliseconds: uint}`                           |
+| `CueSequenceTrigger` | Subscribe           | Empty trigger                                         |
+| `CueSequence`        | Publish             | `{cueSequence: byte[]}`                               |
+| `SceneNameTrigger`   | Subscribe           | Empty trigger                                         |
+| `SceneName`          | Publish             | `{name: string}`                                      |
+| `RequireInteraction` | Subscribe           | `{value: bool}`                                       |
+| `RequireWait`        | Subscribe           | `{value: bool}`                                       |
 
 When the broker is unreachable, `MQTTClient.Publish` routes messages in-process so keyboard-only test runs still reach
 local subscribers (for example, the on-screen `LickStimulusSpawner` indicator). Only `Interaction` and `Stimulus`
