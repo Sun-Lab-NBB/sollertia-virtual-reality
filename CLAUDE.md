@@ -31,7 +31,7 @@ author-derived recipe even when the firing behavior is genuinely novel: `/zone-p
 examples (a speed-gated interaction reward and a cumulative-occupancy variant), the `/task-generator` pipeline edits,
 and the `/library-extension` Python `TriggerType` registration. The recipe holds as long as the new mode is a zone
 modifier (subclass an existing zone, or a standalone `IResettable` registered in `ResetZone`) on a copied zone prefab
-whose root subclasses `StimulusTriggerZone` and publishes the standard `Stimulus{trialName}` event. This tier authors
+whose root subclasses `StimulusTriggerZone` and publishes the standard `Stimulus` event. This tier authors
 C# and hand-edits prefab YAML (`fileID` / GUID bookkeeping), so it carries friction and MUST be verified with
 `inspect_prefab_tool` — but it is agent-doable, not an escalation.
 
@@ -43,7 +43,7 @@ them as collaborative, human-supervised, generative work and do NOT attempt them
 - Any change to `Task.cs` runtime traversal mechanics, the corridor encoding, or `CreateTask` corridor assembly.
 - A new scene topology or Display rig other than the corridor scene `create_task_tool` copies from
   `ExperimentTemplate.unity`.
-- A trigger behavior that cannot be expressed as a zone modifier publishing the standard `Stimulus{trialName}` event —
+- A trigger behavior that cannot be expressed as a zone modifier publishing the standard `Stimulus` event —
   one that needs a new MQTT topic, new `Task.cs` runtime mechanics, or geometry outside a single corridor segment. (A
   new trigger *mode* that fits the zone-modifier architecture is recipe-covered — see the tier above.)
 - A new `TaskTemplate` / `VREnvironment` field or class — a coordinated two-repo schema change with the Python
@@ -270,10 +270,11 @@ corridors built from prefabricated visual cue segments and driven over MQTT 5.0 
   the segment is traversed.
 - **Zone composition**: `StimulusTriggerZone` carries a `TriggerMode` enum field (`Interaction`, `Collision`,
   `OccupancyDisarm`, `OccupancyArm`, `OccupancyTrigger`) set by `CreateTask` from the trial's `trigger_type`, and
-  dispatches on this enum. It publishes
-  `StimulusMessage { trialName }` on the `Stimulus` topic when it fires (its `trialName` field is set by `CreateTask` at
-  generation, so the stimulus id equals the trial name); every mode publishes the same `Stimulus{trialName}` event and
-  adds no MQTT topics. `collision` crosses an invisible boundary wall (a thin collider at
+  dispatches on this enum. It publishes a `StimulusMessage { trialName, delivered, cause }` on the `Stimulus` topic
+  once per trial at its resolution: `delivered` reports whether the physical stimulus fired or was omitted, and `cause`
+  is `behavior` (the animal's own action) or `guidance` (the fallback). The `trialName` is set by `CreateTask` at
+  generation, so the stimulus id equals the trial name; every mode publishes the same `Stimulus` event and adds no MQTT
+  topics. `collision` crosses an invisible boundary wall (a thin collider at
   `stimulus_location`) and fires unconditionally — no sensor, no occupancy — keeping the
   `showStimulusCollisionBoundary` visibility toggle. `occupancy_disarm` fires on a boundary collision while occupancy is
   NOT met; `occupancy_arm` is its inverse, where occupying the zone ARMS the boundary and colliding with the now-armed
