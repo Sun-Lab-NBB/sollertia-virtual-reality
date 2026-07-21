@@ -329,7 +329,7 @@ namespace SL.Tasks
         /// <summary>
         /// Removes every Unity artifact that <see cref="GenerateTask"/> produces for a given template in a
         /// single call: the scene plus its <c>savedFullScreenViews</c> companion, the task prefab, and
-        /// every segment prefab whose filename begins with the template basename.
+        /// every segment prefab this template owns in the Configurations catalog.
         /// </summary>
         /// <remarks>
         /// Mirrors <c>create_task</c> so the two tools cover the full lifecycle of a task's generated
@@ -380,14 +380,24 @@ namespace SL.Tasks
                 }
             }
 
-            // Sweeps every segment prefab whose filename begins with ``<template>_``. Filenames are owned
-            // outright by the template basename + trial key, so a prefix match is sufficient to identify
-            // segment prefabs without cross-checking the template YAML.
+            // Sweeps every segment prefab this template owns. Segment prefabs are named
+            // ``TemplateName_TrialName``, so a bare ``TemplateName_`` prefix also matches the segments of a
+            // longer-named template whose basename nests this one (for example, ``SSO_Merging`` nesting
+            // ``SSO_Merging_Base``). Ownership is resolved against the whole Configurations catalog so a
+            // segment is removed only when this template is its longest owning prefix, which still reclaims
+            // orphaned segments left behind by trials since removed from the template.
+            HashSet<string> templateBaseNames = GetTemplateBaseNames();
+            templateBaseNames.Add(templateName);
             string[] guids = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/InfiniteCorridorTask/Prefabs" });
             foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (!path.StartsWith(segmentPrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                string segmentFileName = Path.GetFileNameWithoutExtension(path);
+                if (!SegmentBelongsToTemplate(segmentFileName, templateName, templateBaseNames))
                 {
                     continue;
                 }
@@ -416,6 +426,70 @@ namespace SL.Tasks
                 response["companion_deleted"] = companionDeleted;
             }
             return Ok(response);
+        }
+
+        /// <summary>Lists the basename of every task template YAML in the Configurations catalog.</summary>
+        /// <remarks>
+        /// Reads only filenames, never YAML contents, so a malformed or unparseable template still
+        /// contributes its basename to the ownership comparison used by <see cref="DestroyTask"/>. Mirrors
+        /// the ``.yaml`` / ``.yml`` enumeration the CreateTask cue-texture preflight performs.
+        /// </remarks>
+        /// <returns>The set of template basenames, without directory or extension.</returns>
+        private static HashSet<string> GetTemplateBaseNames()
+        {
+            string configurationsDirectory = Path.Combine(
+                Application.dataPath,
+                "InfiniteCorridorTask",
+                "Configurations"
+            );
+            HashSet<string> baseNames = new HashSet<string>(StringComparer.Ordinal);
+            if (!Directory.Exists(configurationsDirectory))
+            {
+                return baseNames;
+            }
+            foreach (
+                string templatePath in Directory
+                    .GetFiles(configurationsDirectory, "*.yaml", SearchOption.TopDirectoryOnly)
+                    .Concat(Directory.GetFiles(configurationsDirectory, "*.yml", SearchOption.TopDirectoryOnly))
+            )
+            {
+                baseNames.Add(Path.GetFileNameWithoutExtension(templatePath));
+            }
+            return baseNames;
+        }
+
+        /// <summary>
+        /// Determines whether a segment prefab is owned by the named template rather than by a longer-named
+        /// template whose basename nests the shorter one.
+        /// </summary>
+        /// <remarks>
+        /// Segment prefabs are named <c>TemplateName_TrialName</c>, so a filename can be prefixed by more than
+        /// one template basename when one nests another. The segment belongs to the longest such basename, so
+        /// ownership is decided by picking the longest template prefix and comparing it against the caller.
+        /// </remarks>
+        /// <param name="segmentFileName">The segment prefab filename without directory or extension.</param>
+        /// <param name="templateName">The template basename whose ownership of the segment is tested.</param>
+        /// <param name="templateBaseNames">Every template basename the ownership comparison may consider.</param>
+        /// <returns>True when the named template is the segment's longest owning template prefix.</returns>
+        private static bool SegmentBelongsToTemplate(
+            string segmentFileName,
+            string templateName,
+            IReadOnlyCollection<string> templateBaseNames
+        )
+        {
+            string owningTemplate = null;
+            foreach (string candidate in templateBaseNames)
+            {
+                if (!segmentFileName.StartsWith($"{candidate}_", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (owningTemplate == null || candidate.Length > owningTemplate.Length)
+                {
+                    owningTemplate = candidate;
+                }
+            }
+            return string.Equals(owningTemplate, templateName, StringComparison.Ordinal);
         }
 
         /// <summary>Reads a prefab and returns its hierarchy, components, and BoxCollider details.</summary>
