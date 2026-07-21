@@ -194,7 +194,9 @@ Project conventions for bridge tools:
   scene cleanup always goes through the companion cascade. Both lists also reject path traversal and absolute
   paths.
 - `delete_task` removes the scene + per-scene `savedFullScreenViews` companion + task prefab + every segment
-  prefab whose filename begins with the template basename in one atomic call. When the deletion target is the
+  prefab the template owns in one atomic call. Segment ownership resolves against the `Configurations/` catalog by
+  the longest matching template basename, so a template whose name prefixes another (for example `SSO_Merging` and
+  `SSO_Merging_Base`) never sweeps the longer template's segments. When the deletion target is the
   active scene, the handler opens `ExperimentTemplate.unity` first so Unity will accept the delete. Cue prefabs
   and cue materials are deliberately preserved because they are shared across templates; use `delete_asset` for
   individual cue cleanup. Add any future per-scene companion to `McpBridge.TryDeleteScenePerSceneCompanions` in
