@@ -1,9 +1,9 @@
 # Project: StateSpaceOdyssey
 # Purpose: Interleaves ABC and ABDC trials. Depending on the chosen base trial, this constitutes either shortcut
-#          (one less cue) or extension (one more cue) modification relative to the base trial.
-# Layout:  Segment ABC with the rewarding stimulus (water) trigger zone in cue C.
-#          Segment ABDC with the rewarding stimulus (water) trigger zone in cue C.
-# Related: SSO_Shared_Base (ABC base training), SSO_Shortcut_Base (ABDC base training)
+#          (one less cue) or extension (one more cue) modification relative to the base trial. 40 cm cue variant.
+# Layout:  Segment ABC (40 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
+#          Segment ABDC (40 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
+# Related: SSO_Extension_Shortcut_30cm (30 cm cue variant), SSO_Shared_Base_40cm (ABC base training), SSO_Shortcut_Base
 
 cues:
   - name: "Gray"

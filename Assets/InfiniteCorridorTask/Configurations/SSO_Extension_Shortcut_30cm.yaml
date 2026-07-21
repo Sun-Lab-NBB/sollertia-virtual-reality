@@ -1,0 +1,58 @@
+# Project: StateSpaceOdyssey
+# Purpose: Interleaves ABC and ABDC trials. Depending on the chosen base trial, this constitutes either shortcut
+#          (one less cue) or extension (one more cue) modification relative to the base trial. 30 cm cue variant.
+# Layout:  Segment ABC (30 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
+#          Segment ABDC (30 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
+# Related: SSO_Extension_Shortcut_40cm (40 cm cue variant), SSO_Shared_Base_30cm (ABC base training)
+
+cues:
+  - name: "Gray"
+    code: 0
+    length_cm: 30.0
+    texture: "Gray Cue 2x1.png"
+  - name: "A"
+    code: 1
+    length_cm: 30.0
+    texture: "Cue 016 - 2x1 repeat.png"
+  - name: "B"
+    code: 2
+    length_cm: 30.0
+    texture: "Cue 001 - 2x1 repeat.png"
+  - name: "C"
+    code: 3
+    length_cm: 30.0
+    texture: "Cue 008 - 2x1 repeat.png"
+  - name: "D"
+    code: 4
+    length_cm: 30.0
+    texture: "Cue 002 - 2x1 repeat.png"
+
+vr_environment:
+  corridor_spacing_cm: 20.0
+  segments_per_corridor: 3
+  padding_prefab_name: "Padding"
+  cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
+
+trial_structures:
+  ABC:
+    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
+    stimulus_trigger_zone_start_cm: 126.0
+    stimulus_trigger_zone_end_cm: 144.0
+    stimulus_location_cm: 141.0
+    show_stimulus_collision_boundary: false
+    trigger_type: "interaction"
+    transitions:
+      ABC: 0.5
+      ABDC: 0.5
+
+  ABDC:
+    cue_sequence: ["A", "Gray", "B", "Gray", "D", "Gray", "C", "Gray"]
+    stimulus_trigger_zone_start_cm: 186.0
+    stimulus_trigger_zone_end_cm: 204.0
+    stimulus_location_cm: 201.0
+    show_stimulus_collision_boundary: false
+    trigger_type: "interaction"
+    transitions:
+      ABC: 0.5
+      ABDC: 0.5
