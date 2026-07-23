@@ -1,7 +1,7 @@
 # Project: StateSpaceOdyssey
 # Purpose: Teaches the ABC segment structure as foundational training for multiple other SSO tasks. 40 cm cue variant.
 # Layout:  Segment ABC (40 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
-# Related: SSO_Shared_Base_30cm (30 cm cue variant), SSO_Extension_Shortcut_40cm (extension only), SSO_Merging, SSO_Connection
+# Related: SSO_Shared_Base_30cm (30 cm cue variant), SSO_Extension_Shortcut_40cm (extension only)
 
 cues:
   - name: "Gray"
