@@ -986,7 +986,8 @@ namespace SL.Tasks
 
         /// <summary>
         /// Instantiates and configures a StimulusTriggerZone (interaction mode) within a segment.
-        /// Positions the root collider to span the trigger zone and the GuidanceRegion at the stimulus location.
+        /// Positions the root collider to span the trigger zone and starts the GuidanceRegion at the stimulus
+        /// location, so entering the region under guidance delivers the stimulus at that exact location.
         /// </summary>
         /// <param name="parent">The parent segment GameObject.</param>
         /// <param name="zonePrefab">The StimulusTriggerZone prefab to instantiate.</param>
@@ -1017,8 +1018,15 @@ namespace SL.Tasks
                 BoxCollider guidanceCollider = guidanceZone.GetComponent<BoxCollider>();
                 if (guidanceCollider != null)
                 {
+                    // Anchors the guidance region's leading edge on the stimulus location, so an animal running
+                    // under guidance receives the stimulus at exactly the location the template declares. The
+                    // region extends forward from there, and its far edge carries no behavioral meaning.
                     guidanceCollider.size = new Vector3(1, 1, GuidanceColliderDepth);
-                    guidanceCollider.center = new Vector3(0, 0, stimulusLocationUnity - zoneCenterUnity);
+                    guidanceCollider.center = new Vector3(
+                        0,
+                        0,
+                        stimulusLocationUnity - zoneCenterUnity + GuidanceColliderDepth / 2f
+                    );
                 }
             }
 
