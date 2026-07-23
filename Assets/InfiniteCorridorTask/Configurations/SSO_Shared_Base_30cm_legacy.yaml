@@ -1,0 +1,48 @@
+# Project: StateSpaceOdyssey
+# Purpose: Reproduces the ABC base task the earliest 30 cm cohort ran, with the reward trigger zone
+#          narrower and centered on cue C and the stimulus delivered at the zone entry.
+# Layout:  Segment ABC (30 cm cues) with a 14 cm reward trigger zone centered on cue C. Under
+#          guidance the stimulus is delivered on entering the zone, at its start.
+# Related: SSO_Shared_Base_30cm (current policy variant, 18 cm zone with delivery toward the zone
+#          end), SSO_Extension_Shortcut_30cm_legacy (extension of this legacy task).
+# History: Reproduces the geometry animals 14 and 26 ran under the hand-authored ChelseaScene. Those
+#          assets used a 14 cm reward box centered on cue C with no separate guidance region, so the
+#          RewardLocation script delivered the stimulus the instant the animal entered the box, at
+#          128 cm. This departs from the current policy, where the zone spans 60 percent of the cue
+#          and guidance delivers 70 percent into the cue.
+
+cues:
+  - name: "Gray"
+    code: 0
+    length_cm: 30.0
+    texture: "Gray Cue 2x1.png"
+  - name: "A"
+    code: 1
+    length_cm: 30.0
+    texture: "Cue 016 - 2x1 repeat.png"
+  - name: "B"
+    code: 2
+    length_cm: 30.0
+    texture: "Cue 001 - 2x1 repeat.png"
+  - name: "C"
+    code: 3
+    length_cm: 30.0
+    texture: "Cue 008 - 2x1 repeat.png"
+
+vr_environment:
+  corridor_spacing_cm: 20.0
+  segments_per_corridor: 3
+  padding_prefab_name: "Padding"
+  cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
+
+trial_structures:
+  ABC:
+    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
+    stimulus_trigger_zone_start_cm: 128.0
+    stimulus_trigger_zone_end_cm: 142.0
+    stimulus_location_cm: 128.0
+    show_stimulus_collision_boundary: false
+    trigger_type: "interaction"
+    occupancy_duration_ms: null
+    transitions: null

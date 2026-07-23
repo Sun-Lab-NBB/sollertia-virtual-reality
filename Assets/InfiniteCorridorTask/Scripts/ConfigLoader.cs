@@ -179,12 +179,28 @@ namespace SL.Config
                     throw new InvalidDataException(message);
                 }
 
-                if (trial.occupancyDurationMs <= 0f)
+                // Occupancy trigger modes read occupancy_duration_ms at runtime, so it is required for them.
+                // Non-occupancy modes ignore the field, so its value there is irrelevant. This mirrors the
+                // sollertia-shared-assets TrialStructure gate so the Python record and the Unity runtime agree.
+                bool isOccupancy =
+                    string.Equals(trial.triggerType, "occupancy_disarm", StringComparison.Ordinal)
+                    || string.Equals(trial.triggerType, "occupancy_arm", StringComparison.Ordinal)
+                    || string.Equals(trial.triggerType, "occupancy_trigger", StringComparison.Ordinal);
+
+                if (isOccupancy && !trial.occupancyDurationMs.HasValue)
                 {
-                    string message =
-                        $"Trial '{trialName}' has invalid occupancy_duration_ms {trial.occupancyDurationMs}. "
-                        + "Must be positive.";
-                    throw new InvalidDataException(message);
+                    throw new InvalidDataException(
+                        $"Trial '{trialName}' has trigger_type '{trial.triggerType}', an occupancy mode, so "
+                        + "occupancy_duration_ms is required, but it is unset."
+                    );
+                }
+
+                if (trial.occupancyDurationMs.HasValue && trial.occupancyDurationMs.Value <= 0f)
+                {
+                    throw new InvalidDataException(
+                        $"Trial '{trialName}' has invalid occupancy_duration_ms {trial.occupancyDurationMs.Value}. "
+                        + "Must be positive."
+                    );
                 }
             }
 

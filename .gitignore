@@ -93,5 +93,23 @@ crashlytics-build.properties
 /Assets/VRSettings/Displays/*
 !/Assets/VRSettings/Displays/Display.asset*
 
-# Scenes, generated task prefabs, generated cue prefabs, and authored segment prefabs are all
-# tracked so a fresh checkout reconstitutes the full asset graph required by every committed scene.
+# Task templates plus the base zone prefabs, cue textures, and the cue shader reference material
+# deterministically regenerate every task, so the generated cue prefabs, cue materials, task
+# prefabs, segment prefabs, and task scenes are not tracked. Only these source assets are kept.
+/Assets/InfiniteCorridorTask/Cues/*
+/Assets/InfiniteCorridorTask/Tasks/*
+/Assets/InfiniteCorridorTask/Materials/Cue_*.mat
+/Assets/InfiniteCorridorTask/Materials/Cue_*.mat.meta
+/Assets/InfiniteCorridorTask/Prefabs/*
+!/Assets/InfiniteCorridorTask/Prefabs/StimulusTriggerZone.prefab
+!/Assets/InfiniteCorridorTask/Prefabs/StimulusTriggerZone.prefab.meta
+!/Assets/InfiniteCorridorTask/Prefabs/OccupancyTriggerZone.prefab
+!/Assets/InfiniteCorridorTask/Prefabs/OccupancyTriggerZone.prefab.meta
+!/Assets/InfiniteCorridorTask/Prefabs/ResetZone.prefab
+!/Assets/InfiniteCorridorTask/Prefabs/ResetZone.prefab.meta
+!/Assets/InfiniteCorridorTask/Prefabs/Padding.prefab
+!/Assets/InfiniteCorridorTask/Prefabs/Padding.prefab.meta
+/Assets/Scenes/*.unity
+/Assets/Scenes/*.unity.meta
+!/Assets/Scenes/ExperimentTemplate.unity
+!/Assets/Scenes/ExperimentTemplate.unity.meta

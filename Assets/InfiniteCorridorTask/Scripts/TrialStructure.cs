@@ -45,9 +45,11 @@ namespace SL.Config
 
         /// <summary>
         /// The duration in milliseconds the animal must occupy the zone for occupancy trigger modes. Applied
-        /// to the OccupancyZone at task creation time and ignored for non-occupancy trigger modes.
+        /// to the OccupancyZone at task creation time and ignored for non-occupancy trigger modes. Null when the
+        /// template omits it, mirroring the sollertia-shared-assets default so a missing value never silently
+        /// resolves to a fabricated duration.
         /// </summary>
-        public float occupancyDurationMs = 1000f;
+        public float? occupancyDurationMs = null;
 
         /// <summary>
         /// The optional probability distribution over the trial names that may follow this trial during corridor
