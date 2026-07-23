@@ -958,7 +958,8 @@ namespace SL.Tasks
                         zoneCenterUnity: zoneCenterUnity,
                         zoneSizeUnity: zoneSizeUnity,
                         stimulusLocationUnity: stimulusLocationUnity,
-                        occupancyDurationMs: trial.occupancyDurationMs,
+                        // Reached only on the occupancy branch, where ConfigLoader has already required a value.
+                        occupancyDurationMs: trial.occupancyDurationMs.Value,
                         showBoundary: trial.showStimulusCollisionBoundary
                     );
                 }

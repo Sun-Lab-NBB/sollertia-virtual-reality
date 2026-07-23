@@ -1,9 +1,8 @@
 # Project: StateSpaceOdyssey
-# Purpose: Interleaves ABC and ABDC trials. Depending on the chosen base trial, this constitutes either shortcut
-#          (one less cue) or extension (one more cue) modification relative to the base trial. 40 cm cue variant.
-# Layout:  Segment ABC (40 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
-#          Segment ABDC (40 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
-# Related: SSO_Extension_Shortcut_30cm (30 cm cue variant), SSO_Shared_Base_40cm (ABC base training), SSO_Shortcut_Base
+# Purpose: Merges ABC and AGFE trial structures by sharing the A cue.
+# Layout:  Segment ABC with the rewarding stimulus (water) trigger zone in cue C.
+#          Segment AGFE with the rewarding stimulus (water) trigger zone in cue E.
+# Related: SSO_Shared_Base_40cm (ABC base training), SSO_Merging_Base (AGFE base training)
 
 cues:
   - name: "Gray"
@@ -26,6 +25,18 @@ cues:
     code: 4
     length_cm: 40.0
     texture: "Cue 002 - 4x1.png"
+  - name: "E"
+    code: 5
+    length_cm: 40.0
+    texture: "Cue 034 - 2x1 repeat.png"
+  - name: "F"
+    code: 6
+    length_cm: 40.0
+    texture: "Cue 035 - 2x1 repeat.png"
+  - name: "G"
+    code: 7
+    length_cm: 40.0
+    texture: "Cue 014 - 4x1.png"
 
 vr_environment:
   corridor_spacing_cm: 20.0
@@ -45,16 +56,16 @@ trial_structures:
     occupancy_duration_ms: null
     transitions:
       ABC: 0.5
-      ABDC: 0.5
+      AGFE: 0.5
 
-  ABDC:
-    cue_sequence: ["A", "Gray", "B", "Gray", "D", "Gray", "C", "Gray"]
-    stimulus_trigger_zone_start_cm: 248.0
-    stimulus_trigger_zone_end_cm: 272.0
-    stimulus_location_cm: 268.0
+  AGFE:
+    cue_sequence: ["A", "Gray", "G", "Gray", "F", "Gray", "E", "Gray"]
+    stimulus_trigger_zone_start_cm: 168.0
+    stimulus_trigger_zone_end_cm: 192.0
+    stimulus_location_cm: 188.0
     show_stimulus_collision_boundary: false
     trigger_type: "interaction"
     occupancy_duration_ms: null
     transitions:
       ABC: 0.5
-      ABDC: 0.5
+      AGFE: 0.5

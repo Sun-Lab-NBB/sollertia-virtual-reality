@@ -1,8 +1,12 @@
 # Project: MaalstroomicFlow
-# Purpose: Defines a cyclic 4-cue corridor with Gray separators and a rewarding stimulus trigger zone in the final Gray.
-# Layout:  Segment A-Gray-B-Gray-C-Gray-D-Gray (8 cues x 30 cm = 240 cm) with reward trigger zone in the last Gray (after D).
-# Related: MF_Reward_Shift (same geometry with the reward trigger zone in the second Gray between
-#          B and C), MF_Reward_Base_r227 (reward at 226.675 cm).
+# Purpose: Defines a cyclic 4-cue corridor with Gray separators and a rewarding stimulus trigger
+#          zone in the final Gray, with the reward 2 cm earlier than MF_Reward_Base.
+# Layout:  Segment A-Gray-B-Gray-C-Gray-D-Gray (8 cues x 30 cm = 240 cm) with the reward trigger
+#          zone in the last Gray (after D).
+# Related: MF_Reward_Base (same corridor with the reward at 228.675 cm).
+# History: Reproduces the geometry the MaalstroomicFlow 300-series animals ran. Their generated
+#          assets centered the guidance region on 228.675 cm, so entering it delivered the
+#          stimulus at 226.675 cm.
 
 cues:
   - name: "Gray"
@@ -38,7 +42,7 @@ trial_structures:
     cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray", "D", "Gray"]
     stimulus_trigger_zone_start_cm: 218.0
     stimulus_trigger_zone_end_cm: 232.0
-    stimulus_location_cm: 228.675
+    stimulus_location_cm: 226.675
     show_stimulus_collision_boundary: false
     trigger_type: "interaction"
     occupancy_duration_ms: null

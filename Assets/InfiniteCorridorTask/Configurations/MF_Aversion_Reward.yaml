@@ -1,0 +1,73 @@
+# Project: MaalstroomicFlow
+# Purpose: Extends the base MF_Reward trial structure to also include an aversive stimulus in the ABCD segment.
+# Layout:  Segment ABCD with occupancy zone at cue C and the aversive stimulus (air puff) trigger zone in cue D.
+#          Segment EFGH with the rewarding stimulus (water) trigger zone in cue H.
+# Related: MF_Reward (the base version of this task that only includes the reward zone)
+
+cues:
+  - name: "Gray" # There isn't actually any gray regions in this task
+    code: 0
+    length_cm: 1.0
+    texture: "Gray Cue 2x1.png"
+  - name: "A"
+    code: 1
+    length_cm: 50.0
+    texture: "Cue 016 - 4x1.png"
+  - name: "B"
+    code: 2
+    length_cm: 50.0
+    texture: "Cue 001 - 4x1.png"
+  - name: "C"
+    code: 3
+    length_cm: 50.0
+    texture: "Cue 008 - 4x1.png"
+  - name: "D"
+    code: 4
+    length_cm: 50.0
+    texture: "Cue 002 - 4x1.png"
+  - name: "E"
+    code: 5
+    length_cm: 50.0
+    texture: "Cue 034 - 2x1 repeat.png"
+  - name: "F"
+    code: 6
+    length_cm: 50.0
+    texture: "Cue 035 - 2x1 repeat.png"
+  - name: "G"
+    code: 7
+    length_cm: 50.0
+    texture: "Cue 014 - 4x1.png"
+  - name: "H"
+    code: 8
+    length_cm: 50.0
+    texture: "Cue 005 - 2x1 repeat.png"
+
+vr_environment:
+  corridor_spacing_cm: 20.0
+  segments_per_corridor: 3
+  padding_prefab_name: "Padding"
+  cm_per_unity_unit: 10.0
+  cue_offset_cm: 10.0
+
+trial_structures:
+  ABCD:
+    cue_sequence: ["A", "B", "C", "D"]
+    stimulus_trigger_zone_start_cm: 107.5
+    stimulus_trigger_zone_end_cm: 142.5
+    stimulus_location_cm: 157.5
+    show_stimulus_collision_boundary: false
+    trigger_type: "occupancy_disarm"
+    occupancy_duration_ms: 1000.0
+    transitions:
+      EFGH: 1.0
+
+  EFGH:
+    cue_sequence: ["E", "F", "G", "H"]
+    stimulus_trigger_zone_start_cm: 157.5
+    stimulus_trigger_zone_end_cm: 192.5
+    stimulus_location_cm: 188.5
+    show_stimulus_collision_boundary: false
+    trigger_type: "interaction"
+    occupancy_duration_ms: null
+    transitions:
+      ABCD: 1.0

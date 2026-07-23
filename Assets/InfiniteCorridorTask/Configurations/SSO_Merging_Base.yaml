@@ -1,7 +1,7 @@
 # Project: StateSpaceOdyssey
-# Purpose: Teaches the ABC segment structure as foundational training for multiple other SSO tasks. 40 cm cue variant.
-# Layout:  Segment ABC (40 cm cues) with the rewarding stimulus (water) trigger zone in cue C.
-# Related: SSO_Shared_Base_30cm (30 cm cue variant), SSO_Extension_Shortcut_40cm (extension only), SSO_Merging, SSO_Connection
+# Purpose: Teaches the AGFE segment structure before merging trials.
+# Layout:  Segment AGFE with the rewarding stimulus (water) trigger zone in cue E.
+# Related: SSO_Shared_Base_40cm (ABC base training), SSO_Merging (combined ABC/AGFE trials)
 
 cues:
   - name: "Gray"
@@ -20,6 +20,22 @@ cues:
     code: 3
     length_cm: 40.0
     texture: "Cue 008 - 2x1 repeat.png"
+  - name: "D"
+    code: 4
+    length_cm: 40.0
+    texture: "Cue 002 - 4x1.png"
+  - name: "E"
+    code: 5
+    length_cm: 40.0
+    texture: "Cue 034 - 2x1 repeat.png"
+  - name: "F"
+    code: 6
+    length_cm: 40.0
+    texture: "Cue 035 - 2x1 repeat.png"
+  - name: "G"
+    code: 7
+    length_cm: 40.0
+    texture: "Cue 014 - 4x1.png"
 
 vr_environment:
   corridor_spacing_cm: 20.0
@@ -29,8 +45,8 @@ vr_environment:
   cue_offset_cm: 10.0
 
 trial_structures:
-  ABC:
-    cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
+  AGFE:
+    cue_sequence: ["A", "Gray", "G", "Gray", "F", "Gray", "E", "Gray"]
     stimulus_trigger_zone_start_cm: 168.0
     stimulus_trigger_zone_end_cm: 192.0
     stimulus_location_cm: 188.0
