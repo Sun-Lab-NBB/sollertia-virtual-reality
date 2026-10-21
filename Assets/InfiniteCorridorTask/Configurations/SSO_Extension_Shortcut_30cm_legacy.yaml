@@ -1,17 +1,25 @@
 # Project: StateSpaceOdyssey
 # Purpose: Reproduces the interleaved ABC and ABDC task the earliest 30 cm cohort ran, with each
-#          reward trigger zone narrower and centered on cue C and the stimulus delivered at the
-#          zone entry.
+#          reward trigger zone narrower and centered on cue C and the guided stimulus delivered 7 cm
+#          into the zone.
 # Layout:  Segment ABC (30 cm cues) with a 14 cm reward trigger zone centered on cue C.
 #          Segment ABDC (30 cm cues) with a 14 cm reward trigger zone centered on cue C. Under
-#          guidance the stimulus is delivered on entering each zone, at its start.
+#          guidance the stimulus is delivered 7 cm past each zone start, at 135 cm (ABC) and 195 cm
+#          (ABDC).
 # Related: SSO_Extension_Shortcut_30cm (current policy variant, 18 cm zone with delivery toward the
 #          zone end), SSO_Shared_Base_30cm_legacy (ABC base training for this legacy task).
-# History: Reproduces the geometry animals 14 and 26 ran under the hand-authored ChelseaSceneExt.
-#          Those assets used a 14 cm reward box centered on cue C with no separate guidance region,
-#          so the RewardLocation script delivered the stimulus the instant the animal entered the
-#          box, at 128 cm (ABC) and 188 cm (ABDC). This departs from the current policy, where the
-#          zone spans 60 percent of the cue and guidance delivers 70 percent into the cue.
+# History: Reproduces the geometry animals 14 and 26 ran under the hand-authored ChelseaSceneExt: a
+#          14 cm reward box (128-142 cm ABC, 188-202 cm ABDC) and guided delivery 7 cm into it, as in
+#          the base task, where animal 26's original 2025 session configurations record
+#          guidance_trigger_location_cm 135. The recorded data of both animals agree: lick-free guided
+#          water lands about 4 cm before the delivery point in tracked position (about 131 cm ABC),
+#          because the animal's collider reaches about 4 cm ahead of the tracked position. This
+#          departs from the current policy, where the zone spans 60 percent of the cue and guidance
+#          delivers 70 percent into the cue.
+# Changed: 2026-10-20: stimulus_location_cm changed from 128.0 to 135.0 (ABC) and from 188.0 to 195.0
+#          (ABDC). The earlier values assumed delivery on entering the reward box, which the original
+#          session configurations and the recorded guided water positions rule out. Session copies of
+#          this file written before this date still say 128.0 and 188.0.
 
 cues:
   - name: "Gray"
@@ -47,7 +55,7 @@ trial_structures:
     cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
     stimulus_trigger_zone_start_cm: 128.0
     stimulus_trigger_zone_end_cm: 142.0
-    stimulus_location_cm: 128.0
+    stimulus_location_cm: 135.0
     show_stimulus_collision_boundary: false
     trigger_type: "interaction"
     occupancy_duration_ms: null
@@ -59,7 +67,7 @@ trial_structures:
     cue_sequence: ["A", "Gray", "B", "Gray", "D", "Gray", "C", "Gray"]
     stimulus_trigger_zone_start_cm: 188.0
     stimulus_trigger_zone_end_cm: 202.0
-    stimulus_location_cm: 188.0
+    stimulus_location_cm: 195.0
     show_stimulus_collision_boundary: false
     trigger_type: "interaction"
     occupancy_duration_ms: null
