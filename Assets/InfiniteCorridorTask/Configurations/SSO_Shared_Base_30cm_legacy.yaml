@@ -1,15 +1,21 @@
 # Project: StateSpaceOdyssey
 # Purpose: Reproduces the ABC base task the earliest 30 cm cohort ran, with the reward trigger zone
-#          narrower and centered on cue C and the stimulus delivered at the zone entry.
+#          narrower and centered on cue C and the guided stimulus delivered 7 cm into the zone.
 # Layout:  Segment ABC (30 cm cues) with a 14 cm reward trigger zone centered on cue C. Under
-#          guidance the stimulus is delivered on entering the zone, at its start.
+#          guidance the stimulus is delivered at 135 cm, 7 cm past the zone start.
 # Related: SSO_Shared_Base_30cm (current policy variant, 18 cm zone with delivery toward the zone
 #          end), SSO_Extension_Shortcut_30cm_legacy (extension of this legacy task).
-# History: Reproduces the geometry animals 14 and 26 ran under the hand-authored ChelseaScene. Those
-#          assets used a 14 cm reward box centered on cue C with no separate guidance region, so the
-#          RewardLocation script delivered the stimulus the instant the animal entered the box, at
-#          128 cm. This departs from the current policy, where the zone spans 60 percent of the cue
-#          and guidance delivers 70 percent into the cue.
+# History: Reproduces the geometry animals 14 and 26 ran under the hand-authored ChelseaScene: a 14 cm
+#          reward box (128-142 cm) and guided delivery at 135 cm, which animal 26's original 2025
+#          session configurations record as guidance_trigger_location_cm 135. The recorded data of
+#          both animals agree: lick-free guided water lands at about 131 cm tracked position, where the
+#          animal's collider, which reaches about 4 cm ahead of the tracked position, meets 135 cm.
+#          This departs from the current policy, where the zone spans 60 percent of the cue and
+#          guidance delivers 70 percent into the cue.
+# Changed: 2026-10-20: stimulus_location_cm changed from 128.0 to 135.0. The earlier value assumed
+#          delivery on entering the reward box, which the original session configurations and the
+#          recorded guided water positions rule out. Session copies of this file written before this
+#          date still say 128.0.
 
 cues:
   - name: "Gray"
@@ -41,7 +47,7 @@ trial_structures:
     cue_sequence: ["A", "Gray", "B", "Gray", "C", "Gray"]
     stimulus_trigger_zone_start_cm: 128.0
     stimulus_trigger_zone_end_cm: 142.0
-    stimulus_location_cm: 128.0
+    stimulus_location_cm: 135.0
     show_stimulus_collision_boundary: false
     trigger_type: "interaction"
     occupancy_duration_ms: null
